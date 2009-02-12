@@ -1,0 +1,229 @@
+#!/usr/bin/env python
+# -*- mode:python; indent-tabs-mode:nil; -*-
+# vim:set expandtab shiftwidth=4 filetype=python:
+
+from __future__ import with_statement
+
+import sys, optparse, re, subprocess
+
+objdump = 'objdump'
+file_magic = 'DAR '
+file_version = 200902060
+
+class Err(Exception):
+    pass
+
+def w2bs(w):
+    '''convert a 32-bit word into four bytes in big-endian order'''
+    assert w >= 0
+    assert w <= (1 << 32)
+    return ''.join([chr((w >> sa) & 0xff) for sa in [24, 16, 8, 0]])
+
+def read_section_headers(file, objdump_cmd='objdump', verbose=False):
+    '''process file and section headers'''
+    entry = None
+    format = None
+    sections = {}
+    try:
+        proc = subprocess.Popen([objdump_cmd, '-fh', file], stdout=subprocess.PIPE)
+        format_pat = re.compile(r'^.*file\s+format\s+(\S+)\s*$')
+        entry_pat = re.compile(r'^\s*start\s+address\s+0x([0-9A-Fa-f]+)\s*$')
+        info_pat = re.compile(r'^\s*\d+\s+(\S+)\s+([0-9A-Fa-f]+)\s+[0-9A-Fa-f]+\s+([0-9A-Fa-f]+)\s+[0-9A-Fa-f]+\s+2\*\*\d+\s*$')
+        while True:
+            l = proc.stdout.next().strip()
+            m = format_pat.match(l)
+            if m:
+                assert(format is None)
+                format = m.group(1)
+                continue
+            m = entry_pat.match(l)
+            if m:
+                assert(entry is None)
+                entry = int(m.group(1), 16)
+            m = info_pat.match(l)
+            if m:
+                name = m.group(1)
+                if name in sections:
+                    raise Err('duplicate section #%s' % name)
+                sections[name] = { 'name': name,
+                                   'size': int(m.group(2), 16),
+                                   'lma': int(m.group(3), 16) }
+                try:
+                    l = proc.stdout.next().strip()
+                except StopIteration:
+                    raise Err('bad section %s header objdump' % name)
+                sections[name]['flags'] = l.split(', ')
+    except StopIteration:
+        pass
+    if verbose:
+        print 'file %s format %s' % (file, format)
+        print '  entry point 0x%08x' % entry
+        for k,v in sections.iteritems():
+            print ('  section %s size %d at 0x%08x flags %s' %
+                   (k, v['size'], v['lma'], ' '.join(v['flags'])))
+    return file, format, entry, sections.values()
+
+def sort_sections(all_secs, verbose=False):
+    loadable = [s for s in all_secs if 'LOAD' in s['flags']]
+    if len(loadable) < 1:
+        raise Err('there are no loadable sections')
+    ordered = sorted(loadable, lambda s, t: cmp(s['lma'], t['lma']))
+    for s in ordered:
+        if 'RELOC' in s['flags']:
+            raise Err('relocatable sections not supported (section %s)' % s)
+    for s1, s2 in zip(ordered, ordered[1:]):
+        if s1['lma'] + s1['size'] > s2['lma']:
+            raise Err('sections %s and %s overlap' % (s1['name'],s2['name']))
+    return ordered
+
+def write_mem_image(out, file, start, size, entry, ordered_sections,
+                    objdump_cmd='objdump', verbose=False):
+    def write_hexs(s):
+        assert len(s) % 2 == 0
+        count = len(s) / 2
+        while s != '':
+            out.write(chr(int(s[:2], 16)))
+            s = s[2:]
+        return count
+    def write_zeros(out, count):
+        if count > 0:
+            z4k = chr(0) * 4096
+            for i in range(0, count / 4096):
+                out.write(z4k)
+            out.write(chr(0) * (count % 4096))
+        return count
+    contents_pat = re.compile(r'^\s*([0-9A-Fa-f]+)\s+([0-9A-Fa-f]+)\s+([0-9A-Fa-f]+)\s+([0-9A-Fa-f]+)\s+([0-9A-Fa-f]+)\s+')
+    sp = start + size - 4  # stack starts on top of memory
+    if verbose:
+        print ('writing image at 0x%08x size 0x%08x entry 0x%08x stack 0x%08x' %
+               (start, size, entry, sp))
+    out.write(w2bs(start)) # memory image start address
+    out.write(w2bs(size))  # memory image size
+    where = start
+    for sec in ordered_sections:
+        if verbose: print 'processing section:', sec['name']
+        assert (sec['lma'] - where) >= 0
+        where += write_zeros(out, sec['lma'] - where)
+        proc = subprocess.Popen([objdump_cmd, '-j', sec['name'], '-s',
+                                 file], stdout=subprocess.PIPE)
+        for l in proc.stdout:
+            m = contents_pat.match(l.strip())
+            if m:
+                addr = int(m.group(1), 16)
+                assert addr >= where
+                where += write_zeros(out, addr - where)
+                where += write_hexs(''.join(m.groups()[1:5]))
+    where += write_zeros(out, start + size - where)
+    out.write(w2bs(entry)) # entry point (initial PC)
+    out.write(w2bs(sp))    # initial stack pointer
+
+def write_header(out, verbose=False):
+    if verbose:
+        print ('writing header: magic \"%s\" version %d' %
+                (file_magic, file_version))
+    out.write(file_magic)
+    out.write(w2bs(file_version))
+
+def write_pe(out, id, mem, img, dmas, bw, qmem, q0, nqs, verbose=False):
+    if verbose:
+        print 'writing PE %d' % id
+    out.write(w2bs(id))
+    # node
+    out.write(w2bs(qmem))
+    # bridge
+    out.write(w2bs(dmas))
+    out.write(w2bs(bw))
+    # node->bridge connection
+    out.write(w2bs(q0))
+    out.write(w2bs(nqs))
+    # memory and CPU
+    file, format, entry, all_sections = \
+            read_section_headers(img, verbose=verbose)
+    sections = sort_sections(all_sections, verbose=verbose)
+    start = sections[0]['lma'] & 0xfffff000
+    addr_past_end = sections[-1]['lma'] + sections[-1]['size']
+    size = ((addr_past_end - start) & 0xfffff000) + 0x1000 + 0x4000
+    write_mem_image(out, file, start, size, entry, sections, verbose=verbose)
+
+def write_cxn(out, src, dst, bw, q0, nqs, verbose=False):
+    if verbose:
+        print (('writing connection %d -> %d with bandwidth %d and %d queues '
+                'starting at %d') % (src, dst, bw, nqs, q0))
+    out.write(w2bs(src))
+    out.write(w2bs(dst))
+    out.write(w2bs(bw))
+    out.write(w2bs(q0))
+    out.write(w2bs(nqs))
+
+def write_route(out, flow, hops, verbose=False):
+    if verbose:
+        print 'writing route for flow %08x' % flow
+    out.write(w2bs(flow))
+    out.write(w2bs(len(hops)))
+    for n, q in hops:
+        out.write(w2bs(n))
+        out.write(w2bs(q))
+
+def write_complete_image(out, sys_cfg, verbose=False):
+    pes, cxns, flows = sys_cfg
+    write_header(out, verbose=verbose)
+    if verbose:
+        print ('writing %d PE%s...' % (len(pes), '' if len(pes) == 1 else 's'))
+    out.write(w2bs(len(pes)))
+    for pe_cfg in pes: write_pe(*([out] + list(pe_cfg) + [verbose]))
+    if verbose:
+        print ('writing %d connection%s...' %
+                (len(cxns), '' if len(cxns) == 1 else 's'))
+    out.write(w2bs(len(cxns)))
+    for cxn_cfg in cxns: write_cxn(*([out] + list(cxn_cfg) + [verbose]))
+    if verbose:
+        print ('writing %d flow%s...' %
+                (len(flows), '' if len(flows) == 1 else 's'))
+    out.write(w2bs(len(flows)))
+    for flow_cfg in flows: write_route(*([out] + list(flow_cfg) + [verbose]))
+
+def new_system_config(img, verbose=False):
+    mem = 16384
+    qmem = 4096
+    dmas = 2
+    dma_bw = 4
+    q0 = 0
+    nqs = 4
+    cxn_bw = 2
+    cxn_nqs = 2
+    pes = [(id, mem, img, dmas, dma_bw, qmem, q0, nqs) for id in [1,2,3,4]]
+    links = [(1,2), (2,4), (4,3), (3,1)]
+    cxns = ([(src, dst, cxn_bw, q0+nqs, cxn_nqs) for src,dst in links] +
+            [(dst, src, cxn_bw, q0+nqs+cxn_nqs, cxn_nqs) for src,dst in links])
+    flows = [(0x010401, [(1, 4), (2, 4), (4, 0)]),
+             (0x010402, [(1, 6), (3, 6), (4, 1)]),
+             (0x020301, [(2, 4), (4, 4), (3, 0)]),
+             (0x020302, [(2, 6), (1, 6), (3, 1)]),
+             (0x040101, [(4, 4), (3, 4), (1, 0)]),
+             (0x040102, [(4, 6), (2, 6), (1, 1)]),
+             (0x030201, [(3, 4), (1, 4), (2, 0)]),
+             (0x030202, [(3, 6), (4, 6), (2, 1)])]
+    return pes, cxns, flows
+
+def main():
+    try:
+        usage = '%prog EXECUTABLE...'
+        opts_p = optparse.OptionParser(usage=usage)
+        opts_p.add_option('-o', '--output', dest='outfile',
+                          help='write memory image to FILE', metavar='FILE')
+        opts_p.add_option('-v', '--verbose', dest='verbose',
+                           action='store_true', default=False,
+                           help='chatter more')
+        opts, args = opts_p.parse_args()
+        if len(args) != 1:
+            opts_p.error('exactly one filename must be given')
+        out_file = opts.outfile if opts.outfile else 'output.mem'
+        sys_cfg = new_system_config(args[0], verbose=opts.verbose)
+        with open(out_file, 'wb') as out:
+            write_complete_image(out, sys_cfg, verbose=opts.verbose)
+    except Err, e:
+        print >>sys.stderr, 'ERROR:', e
+        sys.exit(1)
+
+if __name__ == '__main__': main()
+

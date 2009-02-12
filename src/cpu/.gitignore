@@ -1,0 +1,12 @@
+*~
+.*.swp
+*.o
+*.a
+*.lo
+*.la
+.deps
+Makefile.in
+Makefile
+stamp-h1
+instr_encoding.hpp
+instr_encoding.cpp

@@ -1,0 +1,62 @@
+// -*- mode:c++; c-style:k&r; c-basic-offset:4; indent-tabs-mode: nil; -*-
+// vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
+
+#ifndef __MEM_HPP__
+#define __MEM_HPP__
+
+#include <boost/shared_ptr.hpp>
+#include "cstdint.hpp"
+#include "error.hpp"
+#include "logger.hpp"
+#include "endian.hpp"
+
+using namespace std;
+using namespace boost;
+
+class mem {
+public:
+    explicit mem(uint32_t start, uint32_t size,
+                 shared_ptr<logger> log = shared_ptr<logger>(new logger()))
+        throw(err);
+    virtual ~mem() throw();
+    template<class V> V load(const uint32_t &addr) const throw(err);
+    template<class V>
+        void store(const uint32_t &addr, const V &val) const throw(err);
+    const uint8_t *ptr(const uint32_t &addr) const throw(err);
+    uint8_t *ptr(const uint32_t &addr) throw(err);
+private:
+    mem(const mem &);
+    uint8_t *contents;
+    uint32_t start;
+    uint32_t size;
+    shared_ptr<logger> log;
+};
+
+template <class V>
+inline V mem::load(const uint32_t &addr) const throw(err) {
+    if ((addr < start) || (addr + 4 > start + size))
+        throw exc_bus_err(addr, start, size);
+    return endian(*((V *) (contents + addr - start)));
+}
+
+template<class V>
+inline void mem::store(const uint32_t &addr, const V &val) const throw(err) {
+    if (addr < start || addr + 4 > start + size)
+        throw exc_bus_err(addr, start, size);
+    *((V *) (contents + addr - start)) = endian(val);
+}
+
+inline uint8_t *mem::ptr(const uint32_t &addr) throw(err) {
+    if (addr < start || addr + 4 > start + size)
+        throw exc_bus_err(addr, start, size);
+    return contents + addr - start;
+}
+
+inline const uint8_t *mem::ptr(const uint32_t &addr) const throw(err) {
+    if (addr < start || addr + 4 > start + size)
+        throw exc_bus_err(addr, start, size);
+    return contents + addr - start;
+}
+
+#endif // __MEM_HPP__
+

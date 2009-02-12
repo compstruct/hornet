@@ -1,0 +1,113 @@
+// -*- mode:c++; c-style:k&r; c-basic-offset:4; indent-tabs-mode: nil; -*-
+// vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
+
+#ifndef __CPU_HPP__
+#define __CPU_HPP__
+
+#include <iostream>
+#include <sstream>
+#include <iomanip>
+#include <boost/shared_ptr.hpp>
+#include "logger.hpp"
+#include "reg.hpp"
+#include "mem.hpp"
+#include "bridge.hpp"
+
+using namespace std;
+using namespace boost;
+
+class cpu_id {
+public:
+    cpu_id(uint32_t new_id) throw();
+    bool operator==(const cpu_id &) const throw();
+    bool operator<(const cpu_id &) const throw();
+    uint32_t get_numeric_id() const throw();
+    friend ostream &operator<<(ostream &, const cpu_id &);
+private:
+    explicit cpu_id() throw();
+    const uint32_t id;
+};
+
+inline cpu_id::cpu_id(uint32_t new_id) throw() : id(new_id) { }
+
+inline bool cpu_id::operator==(const cpu_id &o) const throw() {
+    return id == o.id;
+}
+
+inline bool cpu_id::operator<(const cpu_id &o) const throw() {
+    return id < o.id;
+}
+
+inline uint32_t cpu_id::get_numeric_id() const throw() { return id; }
+
+ostream &operator<<(ostream &, const cpu_id &);
+
+class cpu : public clockable {
+public:
+    explicit cpu(const cpu_id &id, shared_ptr<mem> ram,
+                 uint32_t pc, uint32_t stack_pointer,
+                 shared_ptr<logger> log = shared_ptr<logger>()) throw(err);
+    void connect(shared_ptr<bridge> net_bridge) throw();
+    virtual void tick_positive_edge() throw(err);
+    virtual void tick_negative_edge() throw(err);
+
+private:
+    uint32_t get(const gpr &r) const throw();
+    uint32_t get(const hwr &r) const throw(exc_reserved_hw_reg);
+    void set(const gpr &r, uint32_t val) throw();
+    void set_hi_lo(uint64_t val) throw();
+    void execute() throw(err);
+
+private:
+    cpu_id id;
+    uint32_t time; // increments every cycle
+    uint32_t pc;
+    uint32_t gprs[32];
+    uint64_t hi_lo;
+    shared_ptr<mem> ram;
+    shared_ptr<bridge> net;
+    bool jump_active;
+    bool interrupts_enabled;
+    unsigned jump_time;
+    uint32_t jump_target;
+    ostringstream stdout_buffer;
+    shared_ptr<logger> log;
+private:
+    void syscall(uint32_t syscall_no) throw(err);
+    void flush_stdout() throw();
+private:
+    cpu(const cpu &); // not permitted
+};
+
+inline uint32_t cpu::get(const gpr &r) const throw() {
+    return r.get_no() == 0 ? 0 : gprs[r.get_no()];
+}
+
+inline uint32_t cpu::get(const hwr &r) const throw(exc_reserved_hw_reg) {
+    switch (r.get_no()) {
+    case 0: return id.get_numeric_id();
+    case 1: return 0;
+    case 2: return time;
+    case 3: return 1; // spec ambiguous on whether cc_res is 3 or 4
+    case 4: return 1; // spec ambiguous on whether cc_res is 3 or 4
+    case 30: return 0x52697375;
+    case 31: return 0x52697375;
+    }
+}
+
+inline void cpu::set(const gpr &r, uint32_t v) throw() {
+    if (r.get_no() != 0) {
+        log << verbosity(1) << "[cpu " << id << "]    " << r << " <- "
+            << hex << setfill('0') << setw(8) << v << endl;
+        gprs[r.get_no()] = v;
+    }
+}
+
+inline void cpu::set_hi_lo(uint64_t v) throw() {
+    log << verbosity(1) << "[cpu " << id << "]   hi,lo <- "
+        << hex << setfill('0') << setw(16) << v << endl;
+    hi_lo = v;
+}
+
+#endif // __CPU_HPP__
+

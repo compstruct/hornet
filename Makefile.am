@@ -1,0 +1,7 @@
+ACLOCAL_AMFLAGS = -I m4
+AUTOMAKE_OPTIONS = foreign
+
+EXTRA_DIST = bootstrap LICENSE
+
+SUBDIRS = src
+

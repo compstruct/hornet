@@ -1,0 +1,11 @@
+*~
+.*.swp
+*.o
+*.a
+*.lo
+*.la
+.deps
+Makefile.in
+Makefile
+stamp-h1
+darsim

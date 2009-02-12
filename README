@@ -1,0 +1,45 @@
+REQUIREMENTS
+
+You will need the following to build the package:
+
+- a C++ compiler
+- the Boost C++ library
+- Python 2.5
+- Automake/Autoconf/Libtool
+- binutils and GCC for cross-compiling to a MIPS target
+
+
+INSTALLATION
+
+For compiling and running programs for DAR, it's convenient to install the
+package somewhere in a local directory, e.g., $HOME/dar-inst, and add the bin
+subdirectory there to your PATH.  This way you can not only run the tools from
+anywhere, but you can use dar-rts-config to automagically obtain the
+appropriate include and link flags (see the Makefiles for the examples).
+
+The first time:
+
+    ./bootstrap
+    ./configure --prefix=$HOME/dar-inst
+    make
+    make install
+
+Afterwards you only need to make (and possibly make install); the makefiles and
+so on will be regenerated automagically as needed.
+
+You can run
+
+   darsim --version
+
+to make sure it's in your path.
+
+
+EXAMPLES
+
+These are (surprisingly enough) found in the examples directory.  When in a directory containing an example (e.g., examples/hello) you can build and simulate like this (provided you have installed everything as described above):
+
+    make
+    make run
+
+Examine the makefiles for details.
+

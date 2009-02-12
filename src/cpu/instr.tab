@@ -1,0 +1,297 @@
+#instr		format	opcode	bit25	func	rt	rs	rd	sa	bit5	bit6	bit16	b17:16	bit21	bit10	notes 	description
+?		format	31..26	25	5..0	20..16	25..21	15..11	10..6	5	6	16	17..16	21	10	limit	desc
+ABS.D		FP2	010001		000101		10001										Floating Point Absolute Value 
+ABS.PS		FP2	010001		000101		10110										Floating Point Absolute Value 
+ABS.S		FP2	010001		000101		10000										Floating Point Absolute Value 
+ADD		R3	000000		100000												Add Word 
+ADD.D		FP2	010001		000000		10001										Floating Point Add 
+ADD.PS		FP2	010001		000000		10110										Floating Point Add 
+ADD.S		FP2	010001		000000		10000										Floating Point Add 
+ADDI		IMM3	001000														Add Immediate Word 
+ADDIU		IMM3	001001														Add Immediate Unsigned Word 
+ADDU		R3	000000		100001												Add Unsigned Word 
+ALNV.PS		FP4G	010011		011110												Floating Point Align Variable
+AND		R3	000000		100100												And 
+ANDI		IMM3	001100														And Immediate 
+B		B1	000100			00000	00000										Unconditional Branch
+BAL		B1	000001			10001	00000										Branch and Link
+BC1F		BC	010001				01000						00				Branch on FP False 
+BC1FL		BC	010001				01000						10			OBS	Branch on FP False Likely 
+BC1T		BC	010001				01000						01				Branch on FP True 
+BC1TL		BC	010001				01000						11			OBS	Branch on FP True Likely 
+BC2F		BC	010010				01000						00				Branch on COP2 False 
+BC2FL		BC	010010				01000						10			OBS	Branch on COP2 False Likely 
+BC2T		BC	010010				01000						01				Branch on COP2 True 
+BC2TL		BC	010010				01000						11			OBS	Branch on COP2 True Likely 
+BEQ		B3	000100														Branch on Equal 
+BEQL		B3	010100													OBS	Branch on Equal Likely 
+BGEZ		B2	000001			00001											Branch on Greater Than or Equal to Zero 
+BGEZAL		B2	000001			10001											Branch on Greater Than or Equal to Zero and Link 
+BGEZALL		B2	000001			10011										OBS	Branch on Greater Than or Equal to Zero and Link Likely 
+BGEZL		B2	000001			00011										OBS	Branch on Greater Than or Equal to Zero Likely 
+BGTZ		B2	000111														Branch on Greater Than Zero 
+BGTZL		B2	010111													OBS	Branch on Greater Than Zero Likely 
+BLEZ		B2	000110														Branch on Less Than or Equal to Zero 
+BLEZL		B2	010110													OBS	Branch on Less Than or Equal to Zero Likely 
+BLTZ		B2	000001			00000											Branch on Less Than Zero 
+BLTZAL		B2	000001			10000											Branch on Less Than Zero and Link 
+BLTZALL		B2	000001			10010										OBS	Branch on Less Than Zero and Link Likely 
+BLTZL		B2	000001			00010										OBS	Branch on Less Than Zero Likely 
+BNE		B3	000101														Branch on Not Equal 
+BNEL		B3	010101													OBS	Branch on Not Equal Likely 
+BREAK		NOARG	000000		001101		10000										Breakpoint 
+C.EQ.D		FPC	010001		110010		10001										Floating Point Compare 
+C.EQ.PS		FPC	010001		110010		10110										Floating Point Compare 
+C.EQ.S		FPC	010001		110010		10000										Floating Point Compare 
+C.F.D		FPC	010001		110000		10001										Floating Point Compare 
+C.F.PS		FPC	010001		110000		10110										Floating Point Compare 
+C.F.S		FPC	010001		110000		10000										Floating Point Compare 
+C.LE.D		FPC	010001		111110		10001										Floating Point Compare 
+C.LE.PS		FPC	010001		111110		10110										Floating Point Compare 
+C.LE.S		FPC	010001		111110		10000										Floating Point Compare 
+C.LT.D		FPC	010001		111100		10001										Floating Point Compare 
+C.LT.PS		FPC	010001		111100		10110										Floating Point Compare 
+C.LT.S		FPC	010001		111100		10000										Floating Point Compare 
+C.NGE.D		FPC	010001		111101		10001										Floating Point Compare 
+C.NGE.PS		FPC	010001		111101		10110										Floating Point Compare 
+C.NGE.S		FPC	010001		111101		10000										Floating Point Compare 
+C.NGL.D		FPC	010001		111011		10001										Floating Point Compare 
+C.NGL.PS		FPC	010001		111011		10110										Floating Point Compare 
+C.NGL.S		FPC	010001		111011		10000										Floating Point Compare 
+C.NGLE.D		FPC	010001		111001		10001										Floating Point Compare 
+C.NGLE.PS		FPC	010001		111001		10110										Floating Point Compare 
+C.NGLE.S		FPC	010001		111001		10000										Floating Point Compare 
+C.NGT.D		FPC	010001		111111		10001										Floating Point Compare 
+C.NGT.PS		FPC	010001		111111		10110										Floating Point Compare 
+C.NGT.S		FPC	010001		111111		10000										Floating Point Compare 
+C.OLE.D		FPC	010001		110110		10001										Floating Point Compare 
+C.OLE.PS		FPC	010001		110110		10110										Floating Point Compare 
+C.OLE.S		FPC	010001		110110		10000										Floating Point Compare 
+C.OLT.D		FPC	010001		110100		10001										Floating Point Compare 
+C.OLT.PS		FPC	010001		110100		10110										Floating Point Compare 
+C.OLT.S		FPC	010001		110100		10000										Floating Point Compare 
+C.SEQ.D		FPC	010001		111010		10001										Floating Point Compare 
+C.SEQ.PS		FPC	010001		111010		10110										Floating Point Compare 
+C.SEQ.S		FPC	010001		111010		10000										Floating Point Compare 
+C.SF.D		FPC	010001		111000		10001										Floating Point Compare 
+C.SF.PS		FPC	010001		111000		10110										Floating Point Compare 
+C.SF.S		FPC	010001		111000		10000										Floating Point Compare 
+C.UEQ.D		FPC	010001		110011		10001										Floating Point Compare 
+C.UEQ.PS		FPC	010001		110011		10110										Floating Point Compare 
+C.UEQ.S		FPC	010001		110011		10000										Floating Point Compare 
+C.ULE.D		FPC	010001		110111		10001										Floating Point Compare 
+C.ULE.PS		FPC	010001		110111		10110										Floating Point Compare 
+C.ULE.S		FPC	010001		110111		10000										Floating Point Compare 
+C.ULT.D		FPC	010001		110101		10001										Floating Point Compare 
+C.ULT.PS		FPC	010001		110101		10110										Floating Point Compare 
+C.ULT.S		FPC	010001		110101		10000										Floating Point Compare 
+C.UN.D		FPC	010001		110001		10001										Floating Point Compare 
+C.UN.PS		FPC	010001		110001		10110										Floating Point Compare 
+C.UN.S		FPC	010001		110001		10000										Floating Point Compare 
+CACHE		CACHE	101111														Perform Cache Operation
+CEIL.L.D		FP2	010001		001010		10001										Floating Point Ceiling Convert to Long Fixed Point 
+CEIL.L.S		FP2	010001		001010		10000										Floating Point Ceiling Convert to Long Fixed Point 
+CEIL.W.D		FP2	010001		001110		10001										Floating Point Ceiling Convert to Word Fixed Point 
+CEIL.W.S		FP2	010001		001110		10000										Floating Point Ceiling Convert to Word Fixed Point 
+CFC1		FPMV	010001				00010										Move Control Word from Floating Point 
+CFC2		C2MV	010010				00010										Move Control Word from Coprocessor 2 
+CLO		COUNT	011100		100001												Count Leading Ones in Word 
+CLZ		COUNT	011100		100000												Count Leading Zeros in Word 
+COP2		C2OP	010010	1													Coprocessor Operation to Coprocessor 2 
+CTC1		FPMV	010001				00110										Move Control Word to Floating Point 
+CTC2		C2MV	010010				00110										Move Control Word to Coprocessor 2 
+CVT.D.L		FP2	010001		100001		10101										Floating Point Convert to Double Floating Point 
+CVT.D.S		FP2	010001		100001		10000										Floating Point Convert to Double Floating Point 
+CVT.D.W		FP2	010001		100001		10100										Floating Point Convert to Double Floating Point 
+CVT.L.D		FP2	010001		100101		10001										Floating Point Convert to Long Fixed Point 
+CVT.L.S		FP2	010001		100101		10000										Floating Point Convert to Long Fixed Point 
+CVT.PS.S		FP3	010001		100110		10000										Floating Point Convert Pair to Paired Single 
+CVT.S.D		FP2	010001		100000		10001										Floating Point Convert to Single Floating Point 
+CVT.S.L		FP2	010001		100000		10101										Floating Point Convert to Single Floating Point 
+CVT.S.PL		FP2	010001		101000		10110										Floating Point Convert Pair Lower to Single Floating Point 
+CVT.S.PU		FP2	010001		100000		10110										Floating Point Convert Pair Upper to Single Floating Point 
+CVT.S.W		FP2	010001		100000		10100										Floating Point Convert to Single Floating Point 
+CVT.W.D		FP2	010001		100100		10001										Floating Point Convert to Word Fixed Point 
+CVT.W.S		FP2	010001		100100		10000										Floating Point Convert to Word Fixed Point 
+DERET		NOARG	010000	1	011111												Debug Exception Return 
+DI		INT	010000				01011			0							Disable Interrupts 
+DIV		R2_	000000		011010												Divide Word 
+DIV.D		FP3	010001		000011		10001										Floating Point Divide 
+DIV.S		FP3	010001		000011		10000										Floating Point Divide 
+DIVU		R2_	000000		011011												Divide Unsigned Word 
+EHB		NOARG	000000		000000	00000		00000	00011								Execution Hazard Barrier 
+EI		INT	010000				01011			1							Enable Interrupts 
+ERET		NOARG	010000	1	011000												Exception Return 
+EXT		EXT	011111		000000												Extract Bit Field 
+FLOOR.L.D		FP2	010001		001011		10001										Floating Point Floor Convert to Long Fixed Point 
+FLOOR.L.S		FP2	010001		001011		10000										Floating Point Floor Convert to Long Fixed Point 
+FLOOR.W.D		FP2	010001		001111		10001										Floating Point Floor Convert to Word Fixed Point 
+FLOOR.W.S		FP2	010001		001111		10000										Floating Point Floor Convert to Word Fixed Point 
+INS		INS	011111		000100												Insert Bit Field 
+J		J	000010														Jump 
+JAL		J	000011														Jump and Link 
+JALR		JALR	000000		001001												Jump and Link Register 
+JALR.HB		JALR	000000		001001										1		Jump and Link Register with Hazard Barrier
+JR		R2_	000000		001000												Jump Register 
+JR.HB		R2_	000000		001000										1		Jump Register with Hazard Barrier
+LB		MEM	100000														Load Byte 
+LBU		MEM	100100														Load Byte Unsigned 
+LDC1		FPMEM	110101														Load Doubleword to Floating Point 
+LDC2		C2MEM	110110														Load Doubleword to Coprocessor 2 
+LDXC1		FPLDX	010011		000001												Load Doubleword Indexed to Floating Point 
+LH		MEM	100001														Load Halfword 
+LHU		MEM	100101														Load Halfword Unsigned 
+LL		MEM	110000														Load Linked Word 
+LUI		IMM2	001111														Load Upper Immediate 
+LUXC1		FPLDX	010011		000101												Load Doubleword Indexed Unaligned to Floating Point 
+LW		MEM	100011														Load Word 
+LWC1		FPMEM	110001														Load Word to Floating Point 
+LWC2		C2MEM	110010														Load Word to Coprocessor 2 
+LWL		MEM	100010														Load Word Left 
+LWR		MEM	100110														Load Word Right 
+LWXC1		FPLDX	010011		000000												Load Word Indexed to Floating Point 
+MADD		R2_	011100		000000												Multiply and Add Word to Hi, Lo 
+MADD.D		FP4	010011		100001												Floating Point Multiply Add 
+MADD.PS		FP4	010011		100110												Floating Point Multiply Add 
+MADD.S		FP4	010011		100000												Floating Point Multiply Add 
+MADDU		R2_	011100		000001												Multiply and Add Unsigned Word to Hi, Lo 
+MFC0		C0MV	010000				00000										Move from Coprocessor 0 
+MFC1		FPMV	010001				00000										Move Word from Floating Point 
+MFC2		C2MV	010010				00000										Move Word from Coprocessor 2 
+MFHC1		FPMV	010001				00011										Move Word from High Half of Floating Point Register 
+MFHC2		C2MV	010010				00101										Move Word from High Half of Coprocessor 2 Register 
+MFHI		R1	000000		010000												Move From HI Register 
+MFLO		R1	000000		010010												Move From LO Register 
+MOV.D		FP2	010001		000110		10001										Floating Point Move 
+MOV.PS		FP2	010001		000110		10110										Floating Point Move 
+MOV.S		FP2	010001		000110		10000										Floating Point Move 
+MOVE		R2Z	000000		100001	00000											Copy Register
+MOVF		MVCFP	000000		000001							0					Move Conditional on Floating Point False 
+MOVF.D		FPMVCFP	010001		010001		10001					0					Floating Point Move Conditional on Floating Point False 
+MOVF.PS		FPMVCFP	010001		010001		10110					0					Floating Point Move Conditional on Floating Point False 
+MOVF.S		FPMVCFP	010001		010001		10000					0					Floating Point Move Conditional on Floating Point False 
+MOVN		R3	000000		001011												Move Conditional on Not Zero 
+MOVN.D		FPMVC	010001		010011		10001										Floating Point Move Conditional on Not Zero 
+MOVN.PS		FPMVC	010001		010011		10110										Floating Point Move Conditional on Not Zero 
+MOVN.S		FPMVC	010001		010011		10000										Floating Point Move Conditional on Not Zero 
+MOVT		MVCFP	000000		000001							1					Move Conditional on Floating Point True 
+MOVT.D		FPMVCFP	010001		010001		10001					1					Floating Point Move Conditional on Floating Point True 
+MOVT.PS		FPMVCFP	010001		010001		10110					1					Floating Point Move Conditional on Floating Point True 
+MOVT.S		FPMVCFP	010001		010001		10000					1					Floating Point Move Conditional on Floating Point True 
+MOVZ		R3	000000		001010												Move Conditional on Zero 
+MOVZ.D		FPMVC	010001		010010		10001										Floating Point Move Conditional on Zero 
+MOVZ.PS		FPMVC	010001		010010		10110										Floating Point Move Conditional on Zero 
+MOVZ.S		FPMVC	010001		010010		10000										Floating Point Move Conditional on Zero 
+MSUB		R2_	011100		000100												Multiply and Subtract Word to Hi, Lo 
+MSUB.D		FP4	010011		101001												Floating Point Multiply Subtract 
+MSUB.PS		FP4	010011		101110												Floating Point Multiply Subtract 
+MSUB.S		FP4	010011		101000												Floating Point Multiply Subtract 
+MSUBU		R2_	011100		000101												Multiply and Subtract Unsigned Word to Hi, Lo 
+MTC0		C0MV	010000				00100										Move to Coprocessor 0 
+MTC1		FPMV	010001				00100										Move Word to Floating Point 
+MTC2		C2MV	010010				00100										Move Word to Coprocessor 2 
+MTHC1		FPMV	010001				00111										Move Word to High Half of Floating Point Register 
+MTHC2		C2MV	010010				00111										Move Word to High Half of Coprocessor 2 Register 
+MTHI		R1	000000		010001												Move To HI Register 
+MTLO		R1	000000		010011												Move To LO Register 
+MUL		R3	011100		000010												Multiply Word to GPR 
+MUL.D		FP3	010001		000010		10001										Floating Point Multiply 
+MUL.PS		FP3	010001		000010		10110										Floating Point Multiply 
+MUL.S		FP3	010001		000010		10000										Floating Point Multiply 
+MULT		R2_	000000		011000												Multiply Word 
+MULTU		R2_	000000		011001												Multiply Unsigned Word 
+NEG.D		FP2	010001		000111		10001										Floating Point Negate 
+NEG.PS		FP2	010001		000111		10110										Floating Point Negate 
+NEG.S		FP2	010001		000111		10000										Floating Point Negate 
+NMADD.D		FP4	010011		110001												Floating Point Negative Multiply Add 
+NMADD.PS		FP4	010011		110110												Floating Point Negative Multiply Add 
+NMADD.S		FP4	010011		110000												Floating Point Negative Multiply Add 
+NMSUB.D		FP4	010011		111001												Floating Point Negative Multiply Subtract 
+NMSUB.PS		FP4	010011		111110												Floating Point Negative Multiply Subtract 
+NMSUB.S		FP4	010011		111000												Floating Point Negative Multiply Subtract 
+NOP		NOARG	000000		000000	00000		00000	00000								No Operation
+NOR		R3	000000		100111												Not Or 
+OR		R3	000000		100101												Or 
+ORI		IMM3	001101														Or Immediate 
+PAUSE		NOARG	000000		000000	00000		00000	00101								Wait for LLBit to Clear Release 2.1 Only 
+PLL.PS		FP3	010001		101100		10110										Pair Lower Lower 
+PLU.PS		FP3	010001		101101		10110										Pair Lower Upper 
+PREF		CACHE	110011														Prefetch 
+PREFX		CACHEX	010011		001111												Prefetch Indexed 
+PUL.PS		FP3	010001		101110		10110										Pair Upper Lower 
+PUU.PS		FP3	010001		101111		10110										Pair Upper Upper 
+RDHWR		RDHW	011111		111011												Read Hardware Register 
+RDPGPR		R2	010000				01010										Read GPR from Previous Shadow Set 
+RECIP.D		FP2	010001		010101		10001										Reciprocal Approximation 
+RECIP.S		FP2	010001		010101		10000										Reciprocal Approximation 
+ROTR		SH	000000		000010									1			Rotate Word Right 
+ROTRV		SHV	000000		000110						1						Rotate Word Right Variable 
+ROUND.L.D		FP2	010001		001000		10001										Floating Point Round to Long Fixed Point 
+ROUND.L.S		FP2	010001		001000		10000										Floating Point Round to Long Fixed Point 
+ROUND.W.D		FP2	010001		001100		10001										Floating Point Round to Word Fixed Point 
+ROUND.W.S		FP2	010001		001100		10000										Floating Point Round to Word Fixed Point 
+RSQRT.D		FP2	010001		010110		10001										Reciprocal Square Root Approximation 
+RSQRT.S		FP2	010001		010110		10000										Reciprocal Square Root Approximation 
+SB		MEM	101000														Store Byte 
+SC		MEM	111000														Store Conditional Word 
+SDBBP		NOARG	011100		111111												Software Debug Breakpoint 
+SDC1		FPMEM	111101														Store Doubleword from Floating Point 
+SDC2		C2MEM	111110														Store Doubleword from Coprocessor 2 
+SDXC1		FPSTX	010011		001001												Store Doubleword Indexed from Floating Point 
+SEB		R2	011111		100000				10000								Sign-Extend Byte 
+SEH		R2	011111		100000				11000								Sign-Extend Halftword
+SH		MEM	101001														Store Halfword 
+SLL		SH	000000		000000												Shift Word Left Logical 
+SLLV		SHV	000000		000100												Shift Word Left Logical Variable 
+SLT		R3	000000		101010												Set on Less Than 
+SLTI		IMM3	001010														Set on Less Than Immediate 
+SLTIU		IMM3	001011														Set on Less Than Immediate Unsigned 
+SLTU		R3	000000		101011												Set on Less Than Unsigned 
+SQRT.D		FP2	010001		000100		10001										Floating Point Square Root 
+SQRT.S		FP2	010001		000100		10000										Floating Point Square Root 
+SRA		SH	000000		000011												Shift Word Right Arithmetic 
+SRAV		SHV	000000		000111												Shift Word Right Arithmetic Variable 
+SRL		SH	000000		000010									0			Shift Word Right Logical 
+SRLV		SHV	000000		000110						0						Shift Word Right Logical Variable 
+SSNOP		NOARG	000000		000000	00000		00000	00001								Superscalar No Operation
+SUB		R3	000000		100010												Subtract Word 
+SUB.D		FP3	010001		000001		10001										Floating Point Subtract 
+SUB.PS		FP3	010001		000001		10110										Floating Point Subtract 
+SUB.S		FP3	010001		000001		10000										Floating Point Subtract 
+SUBU		R3	000000		100011												Subtract Unsigned Word 
+SUXC1		FPSTX	010011		001101												Store Doubleword Indexed Unaligned from Floating Point 
+SW		MEM	101011														Store Word 
+SWC1		FPMEM	111001														Store Word from Floating Point 
+SWC2		C2MEM	111010														Store Word from Coprocessor 2 
+SWL		MEM	101010														Store Word Left 
+SWR		MEM	101110														Store Word Right 
+SWXC1		FPSTX	010011		001000												Store Word Indexed from Floating Point 
+SYNC		SYNC	000000		001111												Synchronize Shared Memory 
+SYNCI		MEM_	000001			11111											Synchronize Caches to Make Instruction Writes Effective 
+SYSCALL		NOARG	000000		001100												System Call 
+TEQ		R2_	000000		110100												Trap if Equal 
+TEQI		IMM2_	000001			01100											Trap if Equal Immediate 
+TGE		R2_	000000		110000												Trap if Greater or Equal 
+TGEI		IMM2_	000001			01000											Trap if Greater of Equal Immediate 
+TGEIU		IMM2_	000001			01001											Trap if Greater or Equal Immediate Unsigned 
+TGEU		R2_	000000		110001												Trap if Greater or Equal Unsigned 
+TLBP		NOARG	010000	1	001000												Probe TLB for Matching Entry 
+TLBR		NOARG	010000	1	000001												Read Indexed TLB Entry 
+TLBWI		NOARG	010000	1	000010												Write Indexed TLB Entry 
+TLBWR		NOARG	010000	1	000110												Write Random TLB Entry 
+TLT		R2_	000000		110010												Trap if Less Than 
+TLTI		IMM2_	000001			01010											Trap if Less Than Immediate 
+TLTIU		IMM2_	000001			01011											Trap if Less Than Immediate Unsigned 
+TLTU		R2_	000000		110011												Trap if Less Than Unsigned 
+TNE		R2_	000000		110110												Trap if Not Equal 
+TNEI		IMM2_	000001			01110											Trap if Not Equal Immediate 
+TRUNC.L.D		FP2	010001		001001		10001										Floating Point Truncate to Long Fixed Point 
+TRUNC.L.S		FP2	010001		001001		10000										Floating Point Truncate to Long Fixed Point 
+TRUNC.W.D		FP2	010001		001101		10001										Floating Point Truncate to Word Fixed Point 
+TRUNC.W.S		FP2	010001		001101		10000										Floating Point Truncate to Word Fixed Point 
+WAIT		NOARG	010000	1	100000												Enter Standby Mode 
+WRPGPR		R2	010000				01110										Write GPR to Previous Shadow Set 
+WSBH		R2	011111		100000				00010								Word Swap Bytes Within Halfwords 
+XOR		R3	000000		100110												Exclusive Or 
+XORI		IMM3	001110														Exclusive Or Immediate 
+
