@@ -12,7 +12,7 @@ PROG=chatter.img
 .PHONY: all
 all: $(PROG)
 
-%.img: %.mips
+%.img: %.cfg %.mips
 	$(DARIMG) -o $@ $<
 
 %.o_mips: %.c

@@ -15,7 +15,7 @@ using namespace boost;
 namespace po = boost::program_options;
 
 static const string magic = "DAR ";
-static const uint32_t version = 200902060;
+static const uint32_t version = 200902150;
 
 shared_ptr<sys> new_system(string file, shared_ptr<logger> log) {
     shared_ptr<ifstream> img(new ifstream(file.c_str(), ios::in | ios::binary));

@@ -53,7 +53,7 @@ public:
     friend ostream &operator<<(ostream &, const virtual_queue_id &);
 private:
     explicit virtual_queue_id() throw();
-    const uint32_t id;
+    uint32_t id;
 };
 
 inline virtual_queue_id::virtual_queue_id(uint32_t new_id) throw() : id(new_id)

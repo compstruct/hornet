@@ -40,9 +40,12 @@ sys::sys(shared_ptr<ifstream> img, shared_ptr<logger> new_log) throw(err)
         shared_ptr<bridge> b(new bridge(node_id(id), bridge_dmas,
                                         bridge_dma_bw, log));
 
-        uint32_t bridge_first_queue = read_word(img);
         uint32_t bridge_num_queues = read_word(img);
-        n->connect(b, bridge_first_queue, bridge_num_queues);
+        vector<virtual_queue_id> bridge_queues;
+        for (uint32_t q = 0; q < bridge_num_queues; ++q) {
+            bridge_queues.push_back(virtual_queue_id(read_word(img)));
+        }
+        n->connect(b, bridge_queues);
         b->connect(n);
 
         uint32_t mem_start = read_word(img);
@@ -67,10 +70,13 @@ sys::sys(shared_ptr<ifstream> img, shared_ptr<logger> new_log) throw(err)
         uint32_t link_src_node = read_word(img);
         uint32_t link_dst_node = read_word(img);
         uint32_t link_bandwidth = read_word(img);
-        uint32_t link_first_queue = read_word(img);
         uint32_t link_num_queues = read_word(img);
+        vector<virtual_queue_id> queues;
+        for (unsigned q = 0; q < link_num_queues; ++q) {
+            queues.push_back(virtual_queue_id(read_word(img)));
+        }
         nodes[link_src_node]->connect(nodes[link_dst_node], link_bandwidth,
-                                      link_first_queue, link_num_queues);
+                                      queues);
     }
     uint32_t num_routes = read_word(img);
     log << verbosity(2) << "network contains " << dec << num_routes

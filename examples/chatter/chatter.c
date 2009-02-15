@@ -19,13 +19,13 @@ const char *messages[] = {
 void send_message() {
     unsigned id = cpu_id();
     /* first message */
-    unsigned flow = (id << 16) | ((5 - id) << 8) | 1;
-    const char *src = messages[2 * (id - 1)];
+    unsigned flow = (id << 16) | ((3 - id) << 8) | 0;
+    const char *src = messages[2 * id];
     unsigned xmit_id = send(flow, src, MSG_LEN);
     while (!transmission_done(xmit_id)); /* spin until xmit done */
     /* second message */
-    flow = (id << 16) | ((5 - id) << 8) | 2;
-    src = messages[2 * (id - 1) + 1];
+    flow = (id << 16) | ((3 - id) << 8) | 1;
+    src = messages[2 * id + 1];
     xmit_id = send(flow, src, MSG_LEN);
     while (!transmission_done(xmit_id)); /* spin until xmit done */
 }

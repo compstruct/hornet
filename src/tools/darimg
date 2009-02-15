@@ -4,11 +4,11 @@
 
 from __future__ import with_statement
 
-import sys, optparse, re, subprocess
+import sys, os, optparse, re, subprocess, ConfigParser
 
 objdump = 'objdump'
 file_magic = 'DAR '
-file_version = 200902060
+file_version = 200902150
 
 class Err(Exception):
     pass
@@ -124,18 +124,18 @@ def write_header(out, verbose=False):
     out.write(file_magic)
     out.write(w2bs(file_version))
 
-def write_pe(out, id, mem, img, dmas, bw, qmem, q0, nqs, verbose=False):
+def write_pe(out, id, img, dmas, bw, mem, queues, verbose=False):
     if verbose:
         print 'writing PE %d' % id
     out.write(w2bs(id))
     # node
-    out.write(w2bs(qmem))
+    out.write(w2bs(mem))
     # bridge
     out.write(w2bs(dmas))
     out.write(w2bs(bw))
     # node->bridge connection
-    out.write(w2bs(q0))
-    out.write(w2bs(nqs))
+    out.write(w2bs(len(queues)))
+    for q in queues: out.write(w2bs(q))
     # memory and CPU
     file, format, entry, all_sections = \
             read_section_headers(img, verbose=verbose)
@@ -145,15 +145,15 @@ def write_pe(out, id, mem, img, dmas, bw, qmem, q0, nqs, verbose=False):
     size = ((addr_past_end - start) & 0xfffff000) + 0x1000 + 0x4000
     write_mem_image(out, file, start, size, entry, sections, verbose=verbose)
 
-def write_cxn(out, src, dst, bw, q0, nqs, verbose=False):
+def write_cxn(out, src, dst, bw, queues, verbose=False):
     if verbose:
         print (('writing connection %d -> %d with bandwidth %d and %d queues '
                 'starting at %d') % (src, dst, bw, nqs, q0))
     out.write(w2bs(src))
     out.write(w2bs(dst))
     out.write(w2bs(bw))
-    out.write(w2bs(q0))
-    out.write(w2bs(nqs))
+    out.write(w2bs(len(queues)))
+    for q in queues: out.write(w2bs(q))
 
 def write_route(out, flow, hops, verbose=False):
     if verbose:
@@ -182,32 +182,81 @@ def write_complete_image(out, sys_cfg, verbose=False):
     out.write(w2bs(len(flows)))
     for flow_cfg in flows: write_route(*([out] + list(flow_cfg) + [verbose]))
 
-def new_system_config(img, verbose=False):
-    mem = 16384
-    qmem = 4096
-    dmas = 2
-    dma_bw = 4
-    q0 = 0
-    nqs = 4
-    cxn_bw = 2
-    cxn_nqs = 2
-    pes = [(id, mem, img, dmas, dma_bw, qmem, q0, nqs) for id in [1,2,3,4]]
-    links = [(1,2), (2,4), (4,3), (3,1)]
-    cxns = ([(src, dst, cxn_bw, q0+nqs, cxn_nqs) for src,dst in links] +
-            [(dst, src, cxn_bw, q0+nqs+cxn_nqs, cxn_nqs) for src,dst in links])
-    flows = [(0x010401, [(1, 4), (2, 4), (4, 0)]),
-             (0x010402, [(1, 6), (3, 6), (4, 1)]),
-             (0x020301, [(2, 4), (4, 4), (3, 0)]),
-             (0x020302, [(2, 6), (1, 6), (3, 1)]),
-             (0x040101, [(4, 4), (3, 4), (1, 0)]),
-             (0x040102, [(4, 6), (2, 6), (1, 1)]),
-             (0x030201, [(3, 4), (1, 4), (2, 0)]),
-             (0x030202, [(3, 6), (4, 6), (2, 1)])]
-    return pes, cxns, flows
+def new_system_config(cfg, verbose=False):
+    def get_links(w, h, n):
+        return (([('north', n - w)] if n / w != 0 else []) +
+                ([('east', n + 1)] if n % w != w - 1 else []) +
+                ([('south', n + w)] if n / w != h - 1 else []) +
+                ([('west', n - 1)] if n % w != 0 else []))
+    def p_nat(s, min=0):
+        try: ans = int(s)
+        except ValueError,e:
+            try: ans = int(s,16)
+            except ValueError: raise Err('not a number: %s' % s)
+        if ans < min: raise Err('value %s must be >= %d' % (s, d))
+        return ans
+    def get_code((progs,dflt), id):
+        if id not in progs and dflt is None:
+            raise Err('no code for CPU %d and no default' % id)
+        code = progs[id] if id in progs else dflt
+        if not os.path.exists(code):
+            raise Err('missing code image file: %s' % code)
+        return code
+    def get_qs(s): return [p_nat(n) for n in cfg.get('queues',s).split()]
+    def get_bw(s): return p_nat(cfg.get('bandwidth',s), 1)
+    def p_flow(s):
+        fs = []
+        try:
+            for f in s.split():
+                n, q = [p_nat(v) for v in f.split(':')]
+                fs.append((n,q))
+        except ValueError:
+            raise Err('bad flows description: %s' % s)
+        return fs
+    def check_qs(dests):
+        for d1 in dests:
+            qs1 = set(get_qs(d1))
+            for d2 in dests:
+                overlap = qs1 & set(get_qs(d2))
+                if d1 != d2 and len(overlap) > 0:
+                    raise Err('queues for %s and %s overlap: %s' %
+                              (d1, d2, ' '.join(map(str,overlap))))
+    def check_flow(id, hops, links):
+        final_n, final_q = hops[-1]
+        if final_q not in get_qs('cpu'):
+            raise Err('flow %s: final queue %02x:%02x does not go to the CPU' %
+                      (id, final_n, final_q))
+        for (n1, q), (n2, _) in zip(hops, hops[1:]):
+            if len([None for (n1, n2, _, qs) in links if q in qs]) == 0:
+                raise Err('flow %s: queue %02x:%02x does not go to node %02x' %
+                          (id, n1, q, n2))
+    try:
+        w = p_nat(cfg.get('geometry', 'width'))
+        h = p_nat(cfg.get('geometry', 'height'))
+        queue_mem = p_nat(cfg.get('node', 'memory'))
+        num_dmas = p_nat(cfg.get('node', 'dma channels'))
+        dma_bw = p_nat(cfg.get('node', 'dma bandwidth'))
+        check_qs(cfg.options('queues'))
+        progs = (dict([(p_nat(n), v) for n, v in cfg.items('code')
+                       if n != 'default']),
+                 cfg.get('code','default') if cfg.has_option('code','default')
+                                           else None)
+        node_ids = range(0, w * h)
+        cpu_qs = get_qs('cpu')
+        nodes = [(id, get_code(progs, id), num_dmas, dma_bw, queue_mem,
+                  get_qs('cpu')) for id in node_ids]
+        links = [(src, dst, get_bw(dir), get_qs(dir))
+                 for src in node_ids for dir, dst in get_links(w, h, src) ]
+        for n, v in cfg.items('flows'):
+            check_flow(n, p_flow(v), links)
+        flows = [(p_nat(n), p_flow(v)) for n, v in cfg.items('flows')]
+    except Exception, e:
+        raise Err('bad config: %s' % e)
+    return nodes, links, flows
 
 def main():
     try:
-        usage = '%prog EXECUTABLE...'
+        usage = '%prog CONFIG...'
         opts_p = optparse.OptionParser(usage=usage)
         opts_p.add_option('-o', '--output', dest='outfile',
                           help='write memory image to FILE', metavar='FILE')
@@ -215,10 +264,13 @@ def main():
                            action='store_true', default=False,
                            help='chatter more')
         opts, args = opts_p.parse_args()
-        if len(args) != 1:
-            opts_p.error('exactly one filename must be given')
         out_file = opts.outfile if opts.outfile else 'output.mem'
-        sys_cfg = new_system_config(args[0], verbose=opts.verbose)
+        cfg = ConfigParser.SafeConfigParser()
+        try:
+            cfg.read(args)
+        except Exception, e:
+            raise Err('bad config: %s' % e)
+        sys_cfg = new_system_config(cfg, verbose=opts.verbose)
         with open(out_file, 'wb') as out:
             write_complete_image(out, sys_cfg, verbose=opts.verbose)
     except Err, e:

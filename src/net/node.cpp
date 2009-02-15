@@ -80,14 +80,14 @@ node::node(node_id new_id, uint32_t memsz, shared_ptr<logger> nlog) throw()
 }
 
 void node::connect(shared_ptr<node> target, unsigned bw,
-                   virtual_queue_id start_vq, unsigned num_vqs) throw(err) {
+                   vector<virtual_queue_id> queues) throw(err) {
     shared_ptr<connection> cxn(new connection(id, target, bw, log));
-    for (unsigned i = 0; i < num_vqs; ++i) {
-        virtual_queue_id qid = start_vq + i;
-        if (vqs.find(qid) != vqs.end())
+    for (vector<virtual_queue_id>::const_iterator i = queues.begin();
+         i != queues.end(); ++i) {
+        if (vqs.find(*i) != vqs.end())
             throw err_duplicate_queue(get_id().get_numeric_id(),
-                                      qid.get_numeric_id());
-        shared_ptr<virtual_queue> q(new virtual_queue(get_id(), qid, alloc,
+                                      i->get_numeric_id());
+        shared_ptr<virtual_queue> q(new virtual_queue(get_id(), *i, alloc,
                                                       log));
         vqs[q->get_id().second] = q;
         cxn->add_queue(q);
@@ -99,13 +99,13 @@ void node::connect(shared_ptr<node> target, unsigned bw,
 }
 
 void node::connect(shared_ptr<bridge> target,
-                   virtual_queue_id start_vq, unsigned num_vqs) throw(err) {
-    for (unsigned i = 0; i < num_vqs; ++i) {
-        virtual_queue_id qid = start_vq + i;
-        if (vqs.find(qid) != vqs.end())
+                   vector<virtual_queue_id> queues) throw(err) {
+    for (vector<virtual_queue_id>::const_iterator i = queues.begin();
+         i != queues.end(); ++i) {
+        if (vqs.find(*i) != vqs.end())
             throw err_duplicate_queue(get_id().get_numeric_id(),
-                                      qid.get_numeric_id());
-        shared_ptr<virtual_queue> q(new virtual_queue(get_id(), qid, alloc,
+                                      i->get_numeric_id());
+        shared_ptr<virtual_queue> q(new virtual_queue(get_id(), *i, alloc,
                                                       log));
         vqs[q->get_id().second] = q;
         target->add_queue(q);

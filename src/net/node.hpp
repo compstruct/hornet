@@ -44,11 +44,9 @@ public:
                   shared_ptr<logger> log =
                       shared_ptr<logger>(new logger())) throw();
     void connect(shared_ptr<node> target, unsigned bandwidth,
-                 virtual_queue_id lowest_virtual_queue,
-                 unsigned num_vqs) throw(err);
+                 vector<virtual_queue_id> queues) throw(err);
     void connect(shared_ptr<bridge> target,
-                 virtual_queue_id lowest_virtual_queue,
-                 unsigned num_vqs) throw(err);
+                 vector<virtual_queue_id> queues) throw(err);
     void add_route(flow_id flow, node_id neighbor_id,
                    virtual_queue_id neighbor_queue_id) throw(err);
     const shared_ptr<virtual_queue> get_virtual_queue(virtual_queue_id id)
