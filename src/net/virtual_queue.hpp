@@ -87,6 +87,8 @@ public:
     void dealloc(unsigned num_slots = 1) throw(err);
 private:
     unsigned size;
+    common_alloc();
+    common_alloc(const common_alloc &);
 };
 
 inline bool common_alloc::full() const throw() { return size == 0; }
@@ -96,7 +98,7 @@ inline void common_alloc::alloc(unsigned n) throw(err) { size -= n; } // XXX exc
 inline void common_alloc::dealloc(unsigned n) throw(err) { size += n; } // XXX exc
 
 // virtual queues support one flow at a time
-class virtual_queue : public queue<flit> {
+class virtual_queue : protected queue<flit> {
 public:
     explicit virtual_queue(node_id parent_id, virtual_queue_id queue_id,
                            shared_ptr<common_alloc> alloc,
@@ -104,13 +106,18 @@ public:
                                shared_ptr<logger>(new logger()))
         throw();
     const pair<node_id, virtual_queue_id> &get_id() const throw();
-    void push(const flit &);
-    void pop();
-    bool full() const throw();
+    void push(const flit &) throw(err); // does not update stale size
+    void pop() throw(err); // updates stale size
+    bool empty() const throw(); // uses stale size
+    bool full() const throw();  // uses real size only
+    const flit &front() const throw(err);
+    flit &front() throw(err);
     bool ingress_new_flow() const throw(); // can accept new flit sequence
     bool egress_new_flow() const throw();  // next flit is a head flit
     flow_id get_egress_flow_id() const throw(err);
     uint32_t get_egress_flow_length() const throw(err);
+    void tick_positive_edge() throw(err);
+    void tick_negative_edge() throw(err);
     void claim(const node_id &target) throw(err);
 private:
     const pair<node_id, virtual_queue_id> id;
@@ -121,6 +128,7 @@ private:
     const shared_ptr<common_alloc> alloc;
     shared_ptr<logger> log;
     bool claimed;
+    unsigned stale_size; // resynchronized at negative clock edge
 };
 
 ostream &operator<<(ostream &, const pair<node_id, virtual_queue_id> &);
@@ -136,7 +144,7 @@ inline bool virtual_queue::ingress_new_flow() const throw () {
     return !full() && ingress_remaining == 0;
 }
 
-inline void virtual_queue::push(const flit &f) {
+inline void virtual_queue::push(const flit &f) throw(err) {
     if (ingress_new_flow()) {
         log << verbosity(3) << "[queue " << id << "] ingress: "
             << reinterpret_cast<const head_flit &>(f) << endl;
@@ -155,7 +163,7 @@ inline void virtual_queue::push(const flit &f) {
     queue<flit>::push(f);
 }
 
-inline void virtual_queue::pop() {
+inline void virtual_queue::pop() throw(err) {
     assert(!empty());
     flit &f = front();
     if (egress_new_flow()) {
@@ -172,6 +180,7 @@ inline void virtual_queue::pop() {
     } else {
         --egress_remaining;
     }
+    --stale_size;
     queue<flit>::pop();
 }
 
@@ -198,6 +207,24 @@ inline uint32_t virtual_queue::get_egress_flow_length() const throw (err) {
 }
 
 inline bool virtual_queue::full() const throw() { return alloc->full(); }
+
+inline bool virtual_queue::empty() const throw() {
+    return stale_size == 0;
+}
+
+inline const flit &virtual_queue::front() const throw(err) {
+    return queue<flit>::front();
+}
+
+inline flit &virtual_queue::front() throw(err) {
+    return queue<flit>::front();
+}
+
+inline void virtual_queue::tick_positive_edge() throw(err) { }
+
+inline void virtual_queue::tick_negative_edge() throw(err) {
+    stale_size = queue<flit>::size();
+}
 
 #endif // __VIRTUAL_QUEUE_HPP__
 

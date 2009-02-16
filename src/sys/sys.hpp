@@ -9,6 +9,7 @@
 #include <utility>
 #include <fstream>
 #include <boost/shared_ptr.hpp>
+#include "cstdint.hpp"
 #include "logger.hpp"
 #include "clockable.hpp"
 #include "cpu.hpp"
@@ -33,6 +34,8 @@ private:
     cpus_t cpus;
     bridges_t bridges;
     nodes_t nodes;
+
+    uint64_t time;
 
     shared_ptr<logger> log;
 };

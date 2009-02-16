@@ -26,7 +26,7 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
 }
 
 sys::sys(shared_ptr<ifstream> img, shared_ptr<logger> new_log) throw(err)
-    : cpus(), bridges(), nodes(), log(new_log) {
+    : cpus(), bridges(), nodes(), time(0), log(new_log) {
     uint32_t num_nodes = read_word(img);
     log << verbosity(2) << "creating system with " << num_nodes << " node"
         << (num_nodes == 1 ? "" : "s") << "..." << endl;
@@ -105,6 +105,7 @@ sys::sys(shared_ptr<ifstream> img, shared_ptr<logger> new_log) throw(err)
 }
 
 void sys::tick_positive_edge() throw(err) {
+    log << verbosity(1) << "[system] tick " << dec << time << endl;
     for (cpus_t::iterator i = cpus.begin(); i != cpus.end(); ++i) {
         i->second->tick_positive_edge();
     }
@@ -114,6 +115,7 @@ void sys::tick_positive_edge() throw(err) {
     for (bridges_t::iterator i = bridges.begin(); i != bridges.end(); ++i) {
         i->second->tick_positive_edge();
     }
+    ++time;
 }
 
 void sys::tick_negative_edge() throw(err) {

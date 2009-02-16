@@ -123,6 +123,9 @@ void node::add_route(flow_id flow, node_id neighbor_id,
 }
 
 void node::tick_positive_edge() throw(err) {
+    for (queues_t::iterator n = vqs.begin(); n != vqs.end(); ++n) {
+        n->second->tick_positive_edge();
+    }
     for (links_t::iterator n = links.begin(); n != links.end(); ++n) {
         n->second->tick_positive_edge();
     }
@@ -130,6 +133,9 @@ void node::tick_positive_edge() throw(err) {
 
 void node::tick_negative_edge() throw(err) {
     for (links_t::iterator n = links.begin(); n != links.end(); ++n) {
+        n->second->tick_negative_edge();
+    }
+    for (queues_t::iterator n = vqs.begin(); n != vqs.end(); ++n) {
         n->second->tick_negative_edge();
     }
 }

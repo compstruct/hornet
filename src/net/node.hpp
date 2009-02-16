@@ -38,7 +38,7 @@ private:
     shared_ptr<logger> log;
 };
 
-class node {
+class node : public clockable {
 public:
     explicit node(node_id id, uint32_t mem_size,
                   shared_ptr<logger> log =
