@@ -5,7 +5,8 @@
 #include <cassert>
 #include "virtual_queue.hpp"
 
-common_alloc::common_alloc(unsigned max_slots) throw() : size(max_slots) { }
+common_alloc::common_alloc(unsigned max_slots) throw()
+    : size(max_slots), max_size(max_slots) { }
 
 virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
                              shared_ptr<common_alloc> new_alloc,

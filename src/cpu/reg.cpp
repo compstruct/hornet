@@ -60,7 +60,7 @@ ostream &operator<<(ostream &out, const c2r &r) {
     return out << "c2r" << r.reg_no;
 }
 
-ostream &operator<<(ostream &out, const hwr &r) { // XXX they have names
+ostream &operator<<(ostream &out, const hwr &r) {
     assert(r.reg_no >= 0);
     assert(r.reg_no <= 31);
     switch(r.reg_no) {

@@ -145,6 +145,7 @@ uint32_t bridge::receive(void *dst, uint32_t queue, uint32_t len) throw(err) {
 
 void bridge::connect(shared_ptr<node> new_target) throw(err) {
     target = new_target;
+    target->add_incoming_link(id);
     log << verbosity(3) << "bridge " << id
         << " linked to node " << target->get_id() << endl;
 }

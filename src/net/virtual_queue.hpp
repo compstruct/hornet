@@ -83,19 +83,28 @@ public:
     explicit common_alloc(unsigned max_slots) throw();
     unsigned free_slots() const throw();
     bool full() const throw();
-    void alloc(unsigned num_slots = 1) throw(err);
-    void dealloc(unsigned num_slots = 1) throw(err);
+    void alloc(unsigned num_slots = 1) throw();
+    void dealloc(unsigned num_slots = 1) throw();
 private:
     unsigned size;
+    unsigned max_size;
     common_alloc();
     common_alloc(const common_alloc &);
 };
 
 inline bool common_alloc::full() const throw() { return size == 0; }
 
-inline void common_alloc::alloc(unsigned n) throw(err) { size -= n; } // XXX exc
+inline void common_alloc::alloc(unsigned n) throw() {
+    assert(n <= size);
+    size -= n;
+}
 
-inline void common_alloc::dealloc(unsigned n) throw(err) { size += n; } // XXX exc
+inline void common_alloc::dealloc(unsigned n) throw() {
+    assert(size + n <= max_size);
+    size += n;
+}
+
+inline unsigned common_alloc::free_slots() const throw() { return size; }
 
 // virtual queues support one flow at a time
 class virtual_queue : protected queue<flit> {

@@ -47,11 +47,13 @@ public:
                  vector<virtual_queue_id> queues) throw(err);
     void connect(shared_ptr<bridge> target,
                  vector<virtual_queue_id> queues) throw(err);
+    void add_incoming_link(const node_id &from) throw(err);
     void add_route(flow_id flow, node_id neighbor_id,
                    virtual_queue_id neighbor_queue_id) throw(err);
     const shared_ptr<virtual_queue> get_virtual_queue(virtual_queue_id id)
         throw(err);
     const node_id &get_id() const throw();
+    unsigned get_free_incoming_slots(const node_id &from) const throw();
     virtual void tick_positive_edge() throw(err);
     virtual void tick_negative_edge() throw(err);
 private:
@@ -61,10 +63,14 @@ private:
     shared_ptr<common_alloc> alloc;
     queues_t vqs;
     links_t links;
+    unsigned num_incoming_links;
+    unsigned stale_num_slots; // resynchronized at negative clock edge
     shared_ptr<logger> log;
 };
 
 inline const node_id &node::get_id() const throw() { return id; }
+inline unsigned node::get_free_incoming_slots(const node_id &from) const
+    throw() { return stale_num_slots / num_incoming_links; }
 
 #endif // __NODE_HPP__
 
