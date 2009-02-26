@@ -53,14 +53,13 @@ public:
     const shared_ptr<virtual_queue> get_virtual_queue(virtual_queue_id id)
         throw(err);
     const node_id &get_id() const throw();
-    unsigned get_free_incoming_slots(const node_id &from) const throw();
     virtual void tick_positive_edge() throw(err);
     virtual void tick_negative_edge() throw(err);
 private:
     const node_id id;
     typedef map<virtual_queue_id, shared_ptr<virtual_queue> > queues_t;
     typedef map<node_id, shared_ptr<connection> > links_t;
-    shared_ptr<common_alloc> alloc;
+    unsigned flits_per_queue;
     queues_t vqs;
     links_t links;
     unsigned num_incoming_links;
@@ -69,8 +68,6 @@ private:
 };
 
 inline const node_id &node::get_id() const throw() { return id; }
-inline unsigned node::get_free_incoming_slots(const node_id &from) const
-    throw() { return stale_num_slots / num_incoming_links; }
 
 #endif // __NODE_HPP__
 

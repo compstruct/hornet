@@ -39,9 +39,8 @@ void connection::add_route(flow_id flow, virtual_queue_id nbr_qid) throw(err) {
 
 void connection::tick_positive_edge() throw(err) {
     assert(!vqs.empty());
-    unsigned free_slots = target->get_free_incoming_slots(parent_id);
     queues_t::iterator cur_q = vqs.begin();
-    for (unsigned i = 0; i < bandwidth && free_slots > 0; ++i) {
+    for (unsigned i = 0; i < bandwidth; ++i) {
         // crappy round-robin
         for (; cur_q != vqs.end() && cur_q->second->empty(); ++cur_q);
         if (cur_q == vqs.end()) cur_q = vqs.begin(); // wrap
@@ -58,10 +57,10 @@ void connection::tick_positive_edge() throw(err) {
                                     target->get_id().get_numeric_id(),
                                     flow.get_numeric_id());
         shared_ptr<virtual_queue> dst_q = ri->second;
-        if (src_q->egress_new_flow() && !dst_q->ingress_new_flow()) {
+        if (dst_q->full()
+            || (src_q->egress_new_flow() && !dst_q->ingress_new_flow())) {
             ++cur_q; continue;  // try someone else in the next bw slot
         }
-        --free_slots;
         dst_q->push(src_q->front());
         src_q->pop();
     }
@@ -70,10 +69,8 @@ void connection::tick_positive_edge() throw(err) {
 void connection::tick_negative_edge() throw(err) { }
 
 node::node(node_id new_id, uint32_t memsz, shared_ptr<logger> nlog) throw()
-    : id(new_id), alloc(shared_ptr<common_alloc>(new common_alloc(memsz >> 3))),
-      vqs(), links(), num_incoming_links(0), stale_num_slots(0), log(nlog) {
-    assert(alloc);
-    stale_num_slots = alloc->free_slots();
+    : id(new_id), flits_per_queue(memsz >> 3), vqs(), links(),
+      num_incoming_links(0), log(nlog) {
     log << verbosity(3) << "node " << id << " created with " << dec << memsz
         << " byte" << (memsz == 1 ? "" : "s") << " of queue memory ("
         << dec << (memsz >> 3) << " flit" << ((memsz >> 3) == 1 ? "" : "s")
@@ -88,6 +85,8 @@ void node::connect(shared_ptr<node> target, unsigned bw,
         if (vqs.find(*i) != vqs.end())
             throw err_duplicate_queue(get_id().get_numeric_id(),
                                       i->get_numeric_id());
+        shared_ptr<common_alloc> alloc = 
+            shared_ptr<common_alloc>(new common_alloc(flits_per_queue));
         shared_ptr<virtual_queue> q(new virtual_queue(get_id(), *i, alloc,
                                                       log));
         vqs[q->get_id().second] = q;
@@ -107,6 +106,8 @@ void node::connect(shared_ptr<bridge> target,
         if (vqs.find(*i) != vqs.end())
             throw err_duplicate_queue(get_id().get_numeric_id(),
                                       i->get_numeric_id());
+        shared_ptr<common_alloc> alloc = 
+            shared_ptr<common_alloc>(new common_alloc(flits_per_queue));
         shared_ptr<virtual_queue> q(new virtual_queue(get_id(), *i, alloc,
                                                       log));
         vqs[q->get_id().second] = q;
@@ -144,7 +145,6 @@ void node::tick_negative_edge() throw(err) {
     for (queues_t::iterator n = vqs.begin(); n != vqs.end(); ++n) {
         n->second->tick_negative_edge();
     }
-    stale_num_slots = alloc->free_slots();
 }
 
 const shared_ptr<virtual_queue> node::get_virtual_queue(virtual_queue_id id)
