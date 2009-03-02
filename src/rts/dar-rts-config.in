@@ -13,8 +13,8 @@ case $1 in
     --version) echo "@VERSION@ (@RELEASE@)";;
     --help)    usage;;
     -h)        usage;;
-    --libs)    echo "-L@RTSLIBDIR@ -l@RTSLIB@";;
-    --cflags)  echo "-mno-mips16 -static -mno-shared -mno-abicalls -nostdlib -fno-PIC -I@RTSINCDIR@";;
+    --libs)    echo "@RTSLIBDIR@/crt0.o -L@RTSLIBDIR@ -l@RTSLIB@";;
+    --cflags)  echo "-fno-PIC -march=mips32r2 -mno-mips16 -static -mno-shared -mno-abicalls -nostdlib -I@RTSINCDIR@";;
     *)         echo "ERROR: unknown option: $1"; usage; exit 1;;
 esac
 
