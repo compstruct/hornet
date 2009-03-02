@@ -9,6 +9,12 @@
 /* returns the ID of the CPU on which the program is executing */
 extern unsigned cpu_id() __attribute__((const));
 
+/* returns the CPU cycle counter (see also resolution below) */
+extern unsigned cpu_cycle_counter();
+
+/* returns n s.t. the CPU cycle counter is incremented every n real cycles */
+extern unsigned cpu_cycle_counter_resolution() __attribute__((const));
+
 
 /* NETWORK INTERFACE */
 

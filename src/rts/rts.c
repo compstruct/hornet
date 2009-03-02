@@ -9,6 +9,18 @@ unsigned cpu_id() {
     return result;
 }
 
+unsigned cpu_cycle_counter() {
+    unsigned result;
+    asm ("rdhwr %0, $2;" : "=r"(result));
+    return result;
+}
+
+unsigned cpu_cycle_counter_resolution() {
+    unsigned result;
+    asm ("rdhwr %0, $4;" : "=r"(result));
+    return result;
+}
+
 extern unsigned send(unsigned flow_id, const void *src, unsigned length) {
     unsigned result;
     asm volatile ("move $a0, %1; move $a1, %2; move $a2, %3;"

@@ -19,7 +19,7 @@ ostream &operator<<(ostream &out, const cpu_id &id) {
 cpu::cpu(const cpu_id &new_id, shared_ptr<mem> new_ram, uint32_t entry_point,
          uint32_t stack_ptr, shared_ptr<logger> new_log) throw(err)
     : id(new_id), pc(entry_point), ram(new_ram), net(), jump_active(false),
-      interrupts_enabled(false), stdout_buffer(), log(new_log) {
+      interrupts_enabled(false), time(0), stdout_buffer(), log(new_log) {
     assert(ram);
 
     pc = entry_point;
