@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <cassert>
+#include <cstddef>
 #include <utility>
 #include <queue>
 #include <boost/shared_ptr.hpp>
@@ -117,6 +118,7 @@ public:
     const pair<node_id, virtual_queue_id> &get_id() const throw();
     void push(const flit &) throw(err); // does not update stale size
     void pop() throw(err); // updates stale size
+    size_t size() const throw(); // reports stale size
     bool empty() const throw(); // uses stale size
     bool full() const throw();  // uses real size only
     const flit &front() const throw(err);
@@ -137,7 +139,7 @@ private:
     const shared_ptr<common_alloc> alloc;
     shared_ptr<logger> log;
     bool claimed;
-    unsigned stale_size; // resynchronized at negative clock edge
+    size_t stale_size; // resynchronized at negative clock edge
 };
 
 ostream &operator<<(ostream &, const pair<node_id, virtual_queue_id> &);
@@ -217,9 +219,9 @@ inline uint32_t virtual_queue::get_egress_flow_length() const throw (err) {
 
 inline bool virtual_queue::full() const throw() { return alloc->full(); }
 
-inline bool virtual_queue::empty() const throw() {
-    return stale_size == 0;
-}
+inline size_t virtual_queue::size() const throw() { return stale_size; }
+
+inline bool virtual_queue::empty() const throw() { return size() == 0; }
 
 inline const flit &virtual_queue::front() const throw(err) {
     return queue<flit>::front();

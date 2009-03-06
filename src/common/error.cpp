@@ -177,6 +177,14 @@ void err_bad_next_hop::show_to(ostream &out) const {
         << ": no connection to node " << setw(2) << next_node;
 }
 
+err_bad_neighbor::err_bad_neighbor(uint32_t new_node, uint32_t new_nbr) throw()
+  : node(new_node), neighbor(new_nbr) { }
+err_bad_neighbor::~err_bad_neighbor() throw() { }
+void err_bad_neighbor::show_to(ostream &out) const {
+    out << "node " << setfill('0') << hex << setw(2) << node
+        << " has no connection to node " << setw(2) << neighbor;
+}
+
 exc_bad_link_flow::exc_bad_link_flow(uint32_t new_node, uint32_t new_target,
                                      uint32_t new_flow) throw()
     : node(new_node), target(new_target), flow(new_flow) { }
@@ -231,3 +239,9 @@ void exc_dma_busy::show_to(ostream &out) const {
         << setw(2) << node << ":" << setw(2) << dma << " busy";
 }
 
+err_bad_arb_scheme::err_bad_arb_scheme(uint32_t new_arb_scheme) throw()
+  : arb_scheme(new_arb_scheme) { }
+err_bad_arb_scheme::~err_bad_arb_scheme() throw() { }
+void err_bad_arb_scheme::show_to(ostream &out) const {
+    out << "invalid arbitration scheme code: " << dec << arb_scheme;
+}

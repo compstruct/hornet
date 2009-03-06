@@ -237,6 +237,16 @@ private:
     virtual void show_to(ostream &out) const;
 };
 
+class err_bad_neighbor : public err {
+public:
+    explicit err_bad_neighbor(uint32_t node, uint32_t neighbor_node) throw();
+    virtual ~err_bad_neighbor() throw();
+private:
+    const uint32_t node;
+    const uint32_t neighbor;
+    virtual void show_to(ostream &out) const;
+};
+
 class exc_bad_link_flow : public err_runtime_exc {
 public:
     explicit exc_bad_link_flow(uint32_t node, uint32_t target,
@@ -297,6 +307,15 @@ public:
 private:
     const uint32_t node;
     const uint32_t dma;
+    virtual void show_to(ostream &out) const;
+};
+
+class err_bad_arb_scheme : public err {
+public:
+    explicit err_bad_arb_scheme(uint32_t scheme) throw();
+    virtual ~err_bad_arb_scheme() throw();
+private:
+    const uint32_t arb_scheme;
     virtual void show_to(ostream &out) const;
 };
 

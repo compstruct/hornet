@@ -14,6 +14,7 @@
 #include "clockable.hpp"
 #include "cpu.hpp"
 #include "node.hpp"
+#include "arbiter.hpp"
 #include "bridge.hpp"
 
 using namespace std;
@@ -29,11 +30,13 @@ private:
     typedef map<unsigned, shared_ptr<cpu> > cpus_t;
     typedef map<unsigned, shared_ptr<bridge> > bridges_t;
     typedef map<unsigned, shared_ptr<node> > nodes_t;
+    typedef map<pair<unsigned, unsigned>, shared_ptr<arbiter> > arbiters_t;
     typedef vector<shared_ptr<clockable> > clockables_t;
 
     cpus_t cpus;
     bridges_t bridges;
     nodes_t nodes;
+    arbiters_t arbiters;
 
     uint64_t time;
 

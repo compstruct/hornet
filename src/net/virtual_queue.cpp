@@ -11,7 +11,7 @@ common_alloc::common_alloc(unsigned max_slots) throw()
 virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
                              shared_ptr<common_alloc> new_alloc,
                              shared_ptr<logger> new_log) throw()
-    : queue<flit>(), id(pair<node_id,virtual_queue_id>(new_node_id, new_vq_id)),
+    : queue<flit>(), id(make_pair(new_node_id, new_vq_id)),
       stale_size(0), ingress_remaining(0), ingress_flow(0),
       egress_remaining(0), egress_flow(0), alloc(new_alloc), log(new_log) { }
 

@@ -15,7 +15,7 @@ using namespace boost;
 namespace po = boost::program_options;
 
 static const string magic = "DAR ";
-static const uint32_t version = 200902150;
+static const uint32_t version = 200903040;
 
 shared_ptr<sys> new_system(string file, shared_ptr<logger> log) {
     shared_ptr<ifstream> img(new ifstream(file.c_str(), ios::in | ios::binary));
@@ -33,8 +33,8 @@ shared_ptr<sys> new_system(string file, shared_ptr<logger> log) {
     img->read((char *) &file_version, 4);
     file_version = endian(file_version);
     if (file_version != version) {
-        cerr << file << ": file format version (" << version << ") "
-             << "does not match simulator (" << file_version << ")" << endl;
+        cerr << file << ": file format version (" << file_version << ") "
+             << "does not match simulator (" << version << ")" << endl;
         exit(1);
     }
     shared_ptr<sys> s = shared_ptr<sys>(new sys(img, log));

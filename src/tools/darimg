@@ -8,7 +8,7 @@ import sys, os, optparse, re, subprocess, ConfigParser
 
 objdump = 'objdump'
 file_magic = 'DAR '
-file_version = 200902150
+file_version = 200903040
 
 class Err(Exception):
     pass
@@ -164,8 +164,15 @@ def write_route(out, flow, hops, verbose=False):
         out.write(w2bs(n))
         out.write(w2bs(q))
 
-def write_complete_image(out, sys_cfg, verbose=False):
-    pes, cxns, flows = sys_cfg
+def write_complete_image(out, cfg, verbose=False):
+    pes, cxns, flows = new_system_config(cfg, verbose=verbose)
+    try:
+        arb = cfg.get('bandwidth', 'arbitration')
+    except Exception, e:
+        arb = None
+    arbs = { None: 0, 'proportional': 1 }
+    if arb not in arbs:
+        raise Error('bad arbitration type: %s' % arbitration)
     write_header(out, verbose=verbose)
     if verbose:
         print ('writing %d PE%s...' % (len(pes), '' if len(pes) == 1 else 's'))
@@ -174,6 +181,7 @@ def write_complete_image(out, sys_cfg, verbose=False):
     if verbose:
         print ('writing %d connection%s...' %
                 (len(cxns), '' if len(cxns) == 1 else 's'))
+    out.write(w2bs(arbs[arb]))
     out.write(w2bs(len(cxns)))
     for cxn_cfg in cxns: write_cxn(*([out] + list(cxn_cfg) + [verbose]))
     if verbose:
@@ -270,9 +278,8 @@ def main():
             cfg.read(args)
         except Exception, e:
             raise Err('bad config: %s' % e)
-        sys_cfg = new_system_config(cfg, verbose=opts.verbose)
         with open(out_file, 'wb') as out:
-            write_complete_image(out, sys_cfg, verbose=opts.verbose)
+            write_complete_image(out, cfg, verbose=opts.verbose)
     except Err, e:
         print >>sys.stderr, 'ERROR:', e
         sys.exit(1)

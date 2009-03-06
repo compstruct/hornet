@@ -2,6 +2,8 @@
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
 #include <string>
+#include <utility>
+#include <set>
 #include <cassert>
 #include "cstdint.hpp"
 #include "endian.hpp"
@@ -63,9 +65,14 @@ sys::sys(shared_ptr<ifstream> img, shared_ptr<logger> new_log) throw(err)
         bridges[id] = b;
         nodes[id] = n;
     }
+    arbitration_t arb_scheme = static_cast<arbitration_t>(read_word(img));
     uint32_t num_cxns = read_word(img);
+    typedef set<pair<uint32_t, uint32_t> > cxns_t;
+    cxns_t cxns;
     log << verbosity(2) << "network fabric has " << dec << num_cxns
-        << " one-way connection" << (num_cxns == 1 ? "" : "s") << endl;
+        << " one-way link" << (num_cxns == 1 ? "" : "s")
+        << " (" << (arb_scheme == AS_NONE ? "no " : "with ")
+        << "bidirectional arbitration)" << endl;
     for (unsigned i  = 0; i < num_cxns; ++i) {
         uint32_t link_src_node = read_word(img);
         uint32_t link_dst_node = read_word(img);
@@ -77,7 +84,20 @@ sys::sys(shared_ptr<ifstream> img, shared_ptr<logger> new_log) throw(err)
         }
         nodes[link_src_node]->connect(nodes[link_dst_node], link_bandwidth,
                                       queues);
+        cxns.insert(make_pair(link_src_node, link_dst_node));
     }
+    if (arb_scheme != AS_NONE) {
+        for (cxns_t::const_iterator i = cxns.begin(); i != cxns.end(); ++i) {
+            if (i->first <= i->second
+                && cxns.count(make_pair(i->second, i->first)) > 0) {
+                arbiters[*i] =
+                    shared_ptr<arbiter>(new arbiter(nodes[i->first],
+                                                    nodes[i->second],
+                                                    arb_scheme, log));
+            }
+        }
+    }
+
     uint32_t num_routes = read_word(img);
     log << verbosity(2) << "network contains " << dec << num_routes
         << " flow" << (num_routes == 1 ? "" : "s") << endl;
@@ -106,6 +126,9 @@ sys::sys(shared_ptr<ifstream> img, shared_ptr<logger> new_log) throw(err)
 
 void sys::tick_positive_edge() throw(err) {
     log << verbosity(1) << "[system] tick " << dec << time << endl;
+    for (arbiters_t::iterator i = arbiters.begin(); i != arbiters.end(); ++i) {
+        i->second->tick_positive_edge();
+    }
     for (cpus_t::iterator i = cpus.begin(); i != cpus.end(); ++i) {
         i->second->tick_positive_edge();
     }
@@ -119,6 +142,9 @@ void sys::tick_positive_edge() throw(err) {
 }
 
 void sys::tick_negative_edge() throw(err) {
+    for (arbiters_t::iterator i = arbiters.begin(); i != arbiters.end(); ++i) {
+        i->second->tick_negative_edge();
+    }
     for (cpus_t::iterator i = cpus.begin(); i != cpus.end(); ++i) {
         i->second->tick_negative_edge();
     }

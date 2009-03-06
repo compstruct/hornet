@@ -16,6 +16,7 @@ using namespace boost;
 
 class node;
 class bridge;
+class arbiter;
 
 class connection : public clockable {
 public:
@@ -25,6 +26,9 @@ public:
                             shared_ptr<logger>(new logger())) throw();
     void add_queue(shared_ptr<virtual_queue> q) throw(err);
     void add_route(flow_id flow, virtual_queue_id neighbor_queue_id) throw(err);
+    void set_bandwidth(unsigned new_bandwidth) throw();
+    unsigned get_bandwidth() const throw();
+    double get_pressure() throw();
     virtual void tick_positive_edge() throw(err);
     virtual void tick_negative_edge() throw(err);
 private:
@@ -38,6 +42,12 @@ private:
     shared_ptr<logger> log;
 };
 
+inline void connection::set_bandwidth(unsigned new_bandwidth) throw() {
+    bandwidth = new_bandwidth;
+}
+
+inline unsigned connection::get_bandwidth() const throw() { return bandwidth; }
+
 class node : public clockable {
 public:
     explicit node(node_id id, uint32_t mem_size,
@@ -47,6 +57,7 @@ public:
                  vector<virtual_queue_id> queues) throw(err);
     void connect(shared_ptr<bridge> target,
                  vector<virtual_queue_id> queues) throw(err);
+    shared_ptr<connection> get_link_to(node_id neighbor) throw(err);
     void add_incoming_link(const node_id &from) throw(err);
     void add_route(flow_id flow, node_id neighbor_id,
                    virtual_queue_id neighbor_queue_id) throw(err);

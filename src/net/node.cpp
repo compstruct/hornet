@@ -37,6 +37,14 @@ void connection::add_route(flow_id flow, virtual_queue_id nbr_qid) throw(err) {
         << target->get_id() << ":" << nbr_qid << endl;
 }
 
+double connection::get_pressure() throw() {
+    double pressure = 0;
+    for (queues_t::iterator i = vqs.begin(); i != vqs.end(); ++i) {
+        pressure += i->second->size();
+    }
+    return pressure;
+}
+
 void connection::tick_positive_edge() throw(err) {
     assert(!vqs.empty());
     queues_t::iterator cur_q = vqs.begin();
@@ -113,6 +121,13 @@ void node::connect(shared_ptr<bridge> target,
         vqs[q->get_id().second] = q;
         target->add_queue(q);
     }
+}
+
+shared_ptr<connection> node::get_link_to(node_id nbr) throw(err) {
+    if (links.find(nbr) == links.end())
+        throw err_bad_neighbor(get_id().get_numeric_id(),
+                               nbr.get_numeric_id());
+    return links[nbr];
 }
 
 void node::add_incoming_link(const node_id &from) throw(err) {
