@@ -300,30 +300,30 @@ void cpu::execute() throw(err) {
     case IC_JALR_HB: set(i.get_rd(), pc + 8); jump(get(i.get_rs())); break;
     case IC_JR:
     case IC_JR_HB: set(i.get_rd(), pc + 8); jump(get(i.get_rs())); break;
-    case IC_LB: set(i.get_rt(), (int32_t) ram->load<int8_t>(mem_addr())); break;
-    case IC_LBU: set(i.get_rt(), ram->load<uint8_t>(mem_addr())); break;
+    case IC_LB: set(i.get_rt(), (int32_t) load<int8_t>(mem_addr())); break;
+    case IC_LBU: set(i.get_rt(), load<uint8_t>(mem_addr())); break;
     case IC_LDC1: unimplemented_instr(i, pc);
     case IC_LDC2: unimplemented_instr(i, pc);
     case IC_LDXC1: unimplemented_instr(i, pc);
-    case IC_LH: set(i.get_rt(), (int32_t) ram->load<int16_t>(mem_addrh()));
+    case IC_LH: set(i.get_rt(), (int32_t) load<int16_t>(mem_addrh()));
                 break;
-    case IC_LHU: set(i.get_rt(), ram->load<uint16_t>(mem_addrh())); break;
+    case IC_LHU: set(i.get_rt(), load<uint16_t>(mem_addrh())); break;
     case IC_LL: unimplemented_instr(i, pc);
     case IC_LUI: set(i.get_rt(), i.get_imm() << 16); break;
     case IC_LUXC1: unimplemented_instr(i, pc);
-    case IC_LW: set(i.get_rt(), ram->load<uint32_t>(mem_addrw())); break;
+    case IC_LW: set(i.get_rt(), load<uint32_t>(mem_addrw())); break;
     case IC_LWC1: unimplemented_instr(i, pc);
     case IC_LWC2: unimplemented_instr(i, pc);
     case IC_LWL: {
         uint32_t a = mem_addr();
-        uint32_t w = ram->load<uint32_t>(a);
+        uint32_t w = load<uint32_t>(a);
         uint32_t m = 0xffffffffU << ((a & 0x3) << 3);
         set(i.get_rt(), combine(get(i.get_rt()), w, m));
         break;
     }
     case IC_LWR: {
         uint32_t a = mem_addr();
-        uint32_t w = ram->load<uint32_t>(a - 3);
+        uint32_t w = load<uint32_t>(a - 3);
         uint32_t m = ~(0xffffff00U << ((a & 0x3) << 3));
         set(i.get_rt(), combine(get(i.get_rt()), w, m));
         break;
@@ -431,7 +431,7 @@ void cpu::execute() throw(err) {
     case IC_ROUND_W_S: unimplemented_instr(i, pc);
     case IC_RSQRT_D: unimplemented_instr(i, pc);
     case IC_RSQRT_S: unimplemented_instr(i, pc);
-    case IC_SB: ram->store(mem_addr(), (uint8_t) get(i.get_rt())); break;
+    case IC_SB: store(mem_addr(), (uint8_t) get(i.get_rt())); break;
     case IC_SC: unimplemented_instr(i, pc);
     case IC_SDBBP: unimplemented_instr(i, pc);
     case IC_SDC1: unimplemented_instr(i, pc);
@@ -439,7 +439,7 @@ void cpu::execute() throw(err) {
     case IC_SDXC1: unimplemented_instr(i, pc);
     case IC_SEB: set(i.get_rd(), (int32_t) ((int8_t) get(i.get_rt()))); break;
     case IC_SEH: set(i.get_rd(), (int32_t) ((int16_t) get(i.get_rt()))); break;
-    case IC_SH: ram->store(mem_addrh(), (uint16_t) get(i.get_rt())); break;
+    case IC_SH: store(mem_addrh(), (uint16_t) get(i.get_rt())); break;
     case IC_SLL: set(i.get_rd(), get(i.get_rt()) << i.get_sa()); break;
     case IC_SLLV: set(i.get_rd(), get(i.get_rt()) << get(i.get_rs())); break;
     case IC_SLT: op3sr(<); break;
@@ -462,7 +462,7 @@ void cpu::execute() throw(err) {
     case IC_SUB_PS: unimplemented_instr(i, pc);
     case IC_SUB_S: unimplemented_instr(i, pc);
     case IC_SUXC1: unimplemented_instr(i, pc);
-    case IC_SW: ram->store(mem_addrw(), get(i.get_rt())); break;
+    case IC_SW: store(mem_addrw(), get(i.get_rt())); break;
     case IC_SWC1: unimplemented_instr(i, pc);
     case IC_SWC2: unimplemented_instr(i, pc);
     case IC_SWL: unimplemented_instr(i, pc);

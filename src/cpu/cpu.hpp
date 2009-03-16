@@ -75,6 +75,8 @@ private:
 private:
     void syscall(uint32_t syscall_no) throw(err);
     void flush_stdout() throw();
+    template<class V> V load(const uint32_t &addr) throw(err);
+    template<class V> void store(const uint32_t &addr, const V &val) throw(err);
 private:
     cpu(const cpu &); // not permitted
 };
@@ -107,6 +109,23 @@ inline void cpu::set_hi_lo(uint64_t v) throw() {
     log << verbosity(1) << "[cpu " << id << "]   hi,lo <- "
         << hex << setfill('0') << setw(16) << v << endl;
     hi_lo = v;
+}
+
+template <class V>
+inline V cpu::load(const uint32_t &addr) throw(err) {
+    V result = ram->load<V>(addr);
+    log << verbosity(5) << "[cpu " << id << "]    "
+        << setfill('0') << setw(2 * sizeof(V)) << result << " <- mem["
+        << hex << setfill('0') << setw(8) << addr << "]" << endl;
+    return result;
+}
+
+template<class V>
+inline void cpu::store(const uint32_t &addr, const V &val) throw(err) {
+    log << verbosity(5) << "[cpu " << id << "]    mem["
+        << hex << setfill('0') << setw(8) << addr << "] <- "
+        << setfill('0') << setw(2 * sizeof(V)) << val << endl;
+    ram->store(addr, val);
 }
 
 #endif // __CPU_HPP__

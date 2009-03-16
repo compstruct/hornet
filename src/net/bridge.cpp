@@ -120,27 +120,37 @@ void bridge::tick_negative_edge() throw(err) {
 
 uint32_t bridge::send(uint32_t flow, void *src, uint32_t len) throw(err) {
     log << verbosity(3) << "[bridge " << id << "] sending " << len
-        << " flits on flow " << flow_id(flow) << endl;
+        << " flits on flow " << flow_id(flow);
     routes_t::iterator ri = routes.find(flow);
     if (ri == routes.end())
         throw exc_bad_bridge_flow(id.get_numeric_id(), flow);
     dmas_t::iterator di;
     for (di = dmas.begin(); di != dmas.end(); ++di) if (!(*di)->busy()) break;
-    if (di == dmas.end()) return 0;
+    if (di == dmas.end()) {
+        log << ": blocked (no free DMAs)" << endl;
+        return 0;
+    }
+    uint32_t xmit_id = (*di)->get_id().get_numeric_id() + 1;
+    log << ": transmission ID " << dec << xmit_id << endl;
     (*di)->send(flow_id(flow), ri->second, src, len);
-    return (*di)->get_id().get_numeric_id() + 1;
+    return xmit_id;
 }
 
 uint32_t bridge::receive(void *dst, uint32_t queue, uint32_t len) throw(err) {
     log << verbosity(3) << "[bridge " << id << "] receiving " << len
-        << " flits from queue " << virtual_queue_id(queue) << endl;
+        << " flits from queue " << virtual_queue_id(queue);
     queues_t::iterator vq_p = vqs.find(virtual_queue_id(queue));
     if (vq_p == vqs.end()) throw exc_bad_queue(id.get_numeric_id(), queue);
     dmas_t::iterator di;
     for (di = dmas.begin(); di != dmas.end(); ++di) if (!(*di)->busy()) break;
-    if (di == dmas.end()) return 0;
+    if (di == dmas.end()) {
+        log << ": blocked (no free DMAs)" << endl;
+        return 0;
+    }
+    uint32_t xmit_id = (*di)->get_id().get_numeric_id() + 1;
+    log << ": transmission ID " << dec << xmit_id << endl;
     (*di)->receive(dst, vq_p->second, len);
-    return (*di)->get_id().get_numeric_id() + 1;
+    return xmit_id;
 }
 
 void bridge::connect(shared_ptr<node> new_target) throw(err) {

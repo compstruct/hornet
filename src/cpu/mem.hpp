@@ -19,9 +19,8 @@ public:
                  shared_ptr<logger> log = shared_ptr<logger>(new logger()))
         throw(err);
     virtual ~mem() throw();
-    template<class V> V load(const uint32_t &addr) const throw(err);
-    template<class V>
-        void store(const uint32_t &addr, const V &val) const throw(err);
+    template<class V> V load(const uint32_t &addr) throw(err);
+    template<class V> void store(const uint32_t &addr, const V &val) throw(err);
     const uint8_t *ptr(const uint32_t &addr) const throw(err);
     uint8_t *ptr(const uint32_t &addr) throw(err);
 private:
@@ -33,17 +32,13 @@ private:
 };
 
 template <class V>
-inline V mem::load(const uint32_t &addr) const throw(err) {
-    if ((addr < start) || (addr + 4 > start + size))
-        throw exc_bus_err(addr, start, size);
-    return endian(*((V *) (contents + addr - start)));
+inline V mem::load(const uint32_t &addr) throw(err) {
+    return endian(*((V *) ptr(addr)));
 }
 
 template<class V>
-inline void mem::store(const uint32_t &addr, const V &val) const throw(err) {
-    if (addr < start || addr + 4 > start + size)
-        throw exc_bus_err(addr, start, size);
-    *((V *) (contents + addr - start)) = endian(val);
+inline void mem::store(const uint32_t &addr, const V &val) throw(err) {
+    *((V *) ptr(addr)) = endian(val);
 }
 
 inline uint8_t *mem::ptr(const uint32_t &addr) throw(err) {
