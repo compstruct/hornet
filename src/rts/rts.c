@@ -9,5 +9,6 @@ void halt() {
          :
          :
          : "v0" );
+    halt(); /* bogus recursive call to silence GCC warning */
 }
 

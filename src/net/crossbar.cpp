@@ -1,0 +1,96 @@
+// -*- mode:c++; c-style:k&r; c-basic-offset:4; indent-tabs-mode: nil; -*-
+// vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
+
+#include "crossbar.hpp"
+
+crossbar::crossbar(node_id parent, logger &l) throw()
+    : id(parent), ingresses(), egresses(), log(l) { }
+
+void crossbar::add_ingress(node_id src, shared_ptr<ingress> ing) throw(err) {
+    if (ingresses.find(src) != ingresses.end()) {
+        throw err_duplicate_ingress(get_id().get_numeric_id(),
+                                    src.get_numeric_id());
+    }
+    ingresses[src] = ing;
+    rebuild_queues();
+}
+
+void crossbar::add_egress(node_id dst, shared_ptr<egress> egr) throw(err) {
+    if (egresses.find(dst) != egresses.end()) {
+        throw err_duplicate_egress(get_id().get_numeric_id(),
+                                   dst.get_numeric_id());
+    }
+    egresses[dst] = egr;
+    rebuild_queues();
+}
+
+void crossbar::rebuild_queues() throw() {
+    typedef ingress::queues_t iq_t;
+    typedef iq_t::const_iterator iqi_t;
+    ingress_qs.clear();
+    egress_qs.clear();
+    vector<pair<iqi_t, iqi_t> > iq_iters;
+    vector<pair<iqi_t, iqi_t> > eq_iters;
+    for (ingresses_t::iterator ii = ingresses.begin(); ii != ingresses.end();
+         ++ii) {
+        const iq_t &qs = ii->second->get_queues();
+        iq_iters.push_back(make_pair(qs.begin(), qs.end()));
+    }
+    for (egresses_t::iterator ei = egresses.begin(); ei != egresses.end();
+         ++ei) {
+        const iq_t &qs = ei->second->get_remote_queues();
+        eq_iters.push_back(make_pair(qs.begin(), qs.end()));
+    }
+    bool more_to_do = true;
+    while (more_to_do) {
+        more_to_do = false;
+        for (vector<pair<iqi_t,iqi_t> >::iterator iqii = iq_iters.begin();
+             iqii != iq_iters.end(); ++iqii) {
+            if (iqii->first != iqii->second) {
+                more_to_do = true;
+                ingress_qs.push_back(iqii->first->second);
+                (iqii->first)++;
+            }
+        }
+        for (vector<pair<iqi_t,iqi_t> >::iterator eqii = eq_iters.begin();
+             eqii != eq_iters.end(); ++eqii) {
+            if (eqii->first != eqii->second) {
+                more_to_do = true;
+                egress_qs.push_back(eqii->first->second);
+                (eqii->first)++;
+            }
+        }
+    }
+}
+
+void crossbar::tick_positive_edge() throw(err) {
+    map<node_id, unsigned> bws; // remaining bandwidths for each egress
+    for (egresses_t::iterator i = egresses.begin(); i != egresses.end(); ++i) {
+        bws[i->first] = i->second->get_bandwidth();
+    }
+    for (vqid_queue_t::iterator eqi = egress_qs.begin();
+         eqi != egress_qs.end(); ++eqi) {
+        node_id n; virtual_queue_id q;
+        shared_ptr<virtual_queue> &eq = *eqi;
+        tie(n,q) = eq->get_id();
+        if (bws[n] > 0 && !eq->full()) {
+            for (vqid_queue_t::iterator iqi = ingress_qs.begin();
+                 iqi != ingress_qs.end(); ++iqi) {
+                shared_ptr<virtual_queue> &iq = *iqi;
+                if (iq->egress_ready() && iq->front_node_id() == n
+                    && iq->front_vq_id() == q) {
+                    flit f = iq->front();
+                    iq->pop();
+                    eq->push(f);
+                    --bws[n];
+                    break; // exit ingress_qs loop
+                }
+            }
+        }
+    }
+    // change search order in the next tick
+    ingress_qs.push_back(ingress_qs.front()); ingress_qs.pop_front();
+    egress_qs.push_back(egress_qs.front()); egress_qs.pop_front();
+}
+
+void crossbar::tick_negative_edge() throw(err) { }

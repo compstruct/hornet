@@ -6,7 +6,7 @@
 #include "mem.hpp"
 
 mem::mem(uint32_t new_start, uint32_t new_size,
-        shared_ptr<logger> new_log) throw(err)
+         logger &new_log) throw(err)
     : start(new_start), size(new_size), contents(new uint8_t[new_size]),
       log(new_log) {
     if (contents == NULL) throw err_out_of_mem();
@@ -17,6 +17,6 @@ mem::mem(uint32_t new_start, uint32_t new_size,
 
 mem::~mem() throw() {
     assert(contents != NULL);
-    if (contents != NULL) delete contents;
+    if (contents != NULL) delete[] contents;
 };
 

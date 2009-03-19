@@ -1,6 +1,8 @@
 CPPFLAGS += $(BOOST_CPPFLAGS) -I$(top_srcdir)/src/net
 LDFLAGS += $(BOOST_LDFLAGS)
 
+AM_CXXFLAGS = -Wall -Werror
+
 noinst_LTLIBRARIES = libdarmips.la
 
 libdarmips_la_SOURCES = \

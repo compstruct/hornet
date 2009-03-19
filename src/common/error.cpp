@@ -57,7 +57,6 @@ void exc_reserved_hw_reg::show_to(ostream &out) const {
     out << "reserved hardware register: " << reg_no;
 }
 
-
 exc_bus_err::exc_bus_err(const uint32_t new_addr, const uint32_t new_start,
                          const uint32_t new_size) throw()
     : addr(new_addr), start(new_start), num_bytes(new_size) { }
@@ -111,10 +110,10 @@ void exc_bad_queue::show_to(ostream &out) const {
         << setw(2) << node << ":" << setw(2) << queue << " does not exist";
 }
 
-exc_empty_queue::exc_empty_queue(uint32_t new_node, uint32_t new_queue) throw()
+err_empty_queue::err_empty_queue(uint32_t new_node, uint32_t new_queue) throw()
     : node(new_node), queue(new_queue) { }
-exc_empty_queue::~exc_empty_queue() throw() { }
-void exc_empty_queue::show_to(ostream &out) const {
+err_empty_queue::~err_empty_queue() throw() { }
+void err_empty_queue::show_to(ostream &out) const {
     out << "queue " << setfill('0') << hex
         << setw(2) << node << ":" << setw(2) << queue << " is empty";
 }
@@ -128,8 +127,17 @@ void err_duplicate_queue::show_to(ostream &out) const {
         << setw(2) << node << ":" << setw(2) << queue << " already defined";
 }
 
+err_too_many_bridge_queues::err_too_many_bridge_queues(uint32_t new_node,
+                                                       uint32_t nqs) throw()
+    : node(new_node), num(nqs) { }
+err_too_many_bridge_queues::~err_too_many_bridge_queues() throw() { }
+void err_too_many_bridge_queues::show_to(ostream &out) const {
+    out << "bridge " << setfill('0') << hex << setw(2) << node
+        << " has more than 32 queues (" << dec << num << ")";
+}
+
 err_claimed_queue::err_claimed_queue(uint32_t new_node,
-                                         uint32_t new_queue) throw()
+                                     uint32_t new_queue) throw()
     : node(new_node), queue(new_queue) { }
 err_claimed_queue::~err_claimed_queue() throw() { }
 void err_claimed_queue::show_to(ostream &out) const {
@@ -156,13 +164,22 @@ void err_duplicate_link_queue::show_to(ostream &out) const {
         << setw(2) << target << " already owns queue " << setw(2) << queue;
 }
 
-err_duplicate_link::err_duplicate_link(uint32_t new_node,
-                                       uint32_t new_target) throw()
-    : node(new_node), target(new_target) { }
-err_duplicate_link::~err_duplicate_link() throw() { }
-void err_duplicate_link::show_to(ostream &out) const {
-    out << "node " << setfill('0') << hex << setw(2) << node
-        << " already connected to node " << setw(2) << target;
+err_duplicate_ingress::err_duplicate_ingress(uint32_t new_node,
+                                             uint32_t new_src) throw()
+    : node(new_node), src(new_src) { }
+err_duplicate_ingress::~err_duplicate_ingress() throw() { }
+void err_duplicate_ingress::show_to(ostream &out) const {
+    out << "ingress " << setfill('0') << hex << setw(2) << src
+        << "->" << setw(2) << node << " already exists";
+}
+
+err_duplicate_egress::err_duplicate_egress(uint32_t new_node,
+                                           uint32_t new_dst) throw()
+    : node(new_node), dst(new_dst) { }
+err_duplicate_egress::~err_duplicate_egress() throw() { }
+void err_duplicate_egress::show_to(ostream &out) const {
+    out << "egress " << setfill('0') << hex << setw(2) << node
+        << "->" << setw(2) << dst << " already exists";
 }
 
 err_bad_next_hop::err_bad_next_hop(uint32_t new_node, uint32_t new_flow,
@@ -185,24 +202,28 @@ void err_bad_neighbor::show_to(ostream &out) const {
         << " has no connection to node " << setw(2) << neighbor;
 }
 
-exc_bad_link_flow::exc_bad_link_flow(uint32_t new_node, uint32_t new_target,
-                                     uint32_t new_flow) throw()
-    : node(new_node), target(new_target), flow(new_flow) { }
-exc_bad_link_flow::~exc_bad_link_flow() throw() { }
-void exc_bad_link_flow::show_to(ostream &out) const {
-    out << "link " << setfill('0') << hex << setw(2) << node << "->"
-        << setw(2) << target << " has no route for flow " << setw(8) << flow;
-}
-
-exc_bad_bridge_flow::exc_bad_bridge_flow(uint32_t new_node,
-                                         uint32_t new_flow) throw()
+exc_bad_flow::exc_bad_flow(uint32_t new_node, uint32_t new_flow) throw()
     : node(new_node), flow(new_flow) { }
-exc_bad_bridge_flow::~exc_bad_bridge_flow() throw() { }
-void exc_bad_bridge_flow::show_to(ostream &out) const {
-    out << "bridge " << setfill('0') << hex << setw(2) << node
+exc_bad_flow::~exc_bad_flow() throw() { }
+void exc_bad_flow::show_to(ostream &out) const {
+    out << "node " << setfill('0') << hex << setw(2) << node 
         << " has no route for flow " << setw(8) << flow;
 }
 
+err_route_not_static::err_route_not_static() throw() { }
+err_route_not_static::~err_route_not_static() throw() { }
+void err_route_not_static::show_to(ostream &out) const {
+    out << "attempting to add a route to a dynamically-routed system" << endl;
+}
+
+err_route_not_terminated::err_route_not_terminated(uint32_t f, uint32_t n)
+    throw() : flow(f), node(n) { }
+err_route_not_terminated::~err_route_not_terminated() throw() { }
+void err_route_not_terminated::show_to(ostream &out) const {
+    out << "flow " << hex << setfill('0') << setw(8) << flow
+        << " ends at node " << setw(2) << node
+        << " without specifying a bridge queue" << endl;
+}
 
 err_duplicate_flow::err_duplicate_flow(uint32_t new_node,
                                        uint32_t new_flow) throw()
@@ -210,15 +231,6 @@ err_duplicate_flow::err_duplicate_flow(uint32_t new_node,
 err_duplicate_flow::~err_duplicate_flow() throw() { }
 void err_duplicate_flow::show_to(ostream &out) const {
     out << "node " << setfill('0') << hex << setw(2) << node
-        << " already has a route for flow " << setw(2) << flow;
-}
-
-err_duplicate_bridge_flow::
-err_duplicate_bridge_flow(uint32_t new_node, uint32_t new_flow) throw()
-    : node(new_node), flow(new_flow) { }
-err_duplicate_bridge_flow::~err_duplicate_bridge_flow() throw() { }
-void err_duplicate_bridge_flow::show_to(ostream &out) const {
-    out << "bridge " << setfill('0') << hex << setw(2) << node
         << " already has a route for flow " << setw(2) << flow;
 }
 

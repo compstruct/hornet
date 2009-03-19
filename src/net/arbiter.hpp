@@ -12,21 +12,17 @@ typedef enum {
     NUM_AS
 } arbitration_t;
 
-class arbiter : public clockable {
+class arbiter {
 public:
-    arbiter(shared_ptr<node> src, shared_ptr<node> dst, arbitration_t scheme,
-            shared_ptr<logger> log = shared_ptr<logger>(new logger()))
-        throw(err);
-    virtual ~arbiter() throw();
-    virtual void tick_positive_edge() throw(err);
-    virtual void tick_negative_edge() throw(err);
+    arbiter(shared_ptr<node> src, shared_ptr<node> dst,
+            arbitration_t scheme, logger &log) throw(err);
+    void tick_positive_edge() throw(err);
+    void tick_negative_edge() throw(err);
 private:
     arbitration_t scheme;
-    node_id src_id;
-    node_id dst_id;
-    shared_ptr<connection> src_to_dst;
-    shared_ptr<connection> dst_to_src;
-    shared_ptr<logger> log;
+    shared_ptr<egress> src_to_dst;
+    shared_ptr<egress> dst_to_src;
+    logger &log;
 private:
     arbiter();                // not implemented
     arbiter(const arbiter &); // not implemented

@@ -1,5 +1,7 @@
 *~
 .*.swp
+:2e*.swp
+.AppleDouble
 *.o
 *.a
 *.lo

@@ -1,5 +1,7 @@
 *~
 .*.swp
+:2e*.swp
+.AppleDouble
 *.img
 *.o_mips
 *.s_mips

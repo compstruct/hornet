@@ -24,7 +24,7 @@ all: $(PROG)
 
 .PHONY: run
 run: $(PROG)
-	$(DARSIM) $(PROG)
+	$(DARSIM) $(PROG) --cycles=2000
 
 .PHONY: clean
 clean:

@@ -9,8 +9,19 @@
 #include "endian.hpp"
 #include "node.hpp"
 #include "bridge.hpp"
+#include "static_router.hpp"
+#include "static_channel_alloc.hpp"
 #include "cpu.hpp"
 #include "sys.hpp"
+
+ostream &operator<<(ostream &out, const routing_type_t &r) {
+    switch (r) {
+    case RT_STATIC:
+        return out << "static";
+    default:
+        abort();
+    }
+}
 
 static uint32_t read_word(shared_ptr<ifstream> in) throw(err) {
     uint32_t word = 0xdeadbeef;
@@ -27,29 +38,41 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
     if (in->bad()) throw err_bad_mem_img();
 }
 
-sys::sys(shared_ptr<ifstream> img, shared_ptr<logger> new_log) throw(err)
+sys::sys(shared_ptr<ifstream> img, logger &new_log) throw(err)
     : cpus(), bridges(), nodes(), time(0), log(new_log) {
     uint32_t num_nodes = read_word(img);
     log << verbosity(2) << "creating system with " << num_nodes << " node"
         << (num_nodes == 1 ? "" : "s") << "..." << endl;
+    typedef map<unsigned, shared_ptr<router> > routers_t;
+    routers_t node_rts;
+    typedef map<unsigned, shared_ptr<channel_alloc> > vcas_t;
+    vcas_t br_vcas;
+    vcas_t n_vcas;
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
-        uint32_t node_mem_size = read_word(img);
-        shared_ptr<node> n(new node(node_id(id), node_mem_size, log));
+        shared_ptr<router> n_rt(new static_router(id, log));
+        shared_ptr<channel_alloc> n_vca(new static_channel_alloc(id, log));
+        shared_ptr<channel_alloc> b_vca(new static_channel_alloc(id, log));
 
-        uint32_t bridge_dmas = read_word(img);
-        uint32_t bridge_dma_bw = read_word(img);
-        shared_ptr<bridge> b(new bridge(node_id(id), bridge_dmas,
-                                        bridge_dma_bw, log));
+        uint32_t flits_per_q = read_word(img);
+        shared_ptr<node> n(new node(node_id(id), flits_per_q, n_rt, n_vca,
+                                    log));
 
-        uint32_t bridge_num_queues = read_word(img);
-        vector<virtual_queue_id> bridge_queues;
-        for (uint32_t q = 0; q < bridge_num_queues; ++q) {
-            bridge_queues.push_back(virtual_queue_id(read_word(img)));
+        uint32_t n2b_bw = read_word(img);
+        uint32_t b2n_bw = read_word(img);
+        uint32_t b2n_num_queues = read_word(img);
+        set<virtual_queue_id> b2n_queues;
+        for (uint32_t q = 0; q < b2n_num_queues; ++q) {
+            b2n_queues.insert(virtual_queue_id(read_word(img)));
         }
-        n->connect(b, bridge_queues);
-        b->connect(n);
-
+        uint32_t n2b_num_queues = read_word(img);
+        set<virtual_queue_id> n2b_queues;
+        for (uint32_t q = 0; q < n2b_num_queues; ++q) {
+            n2b_queues.insert(virtual_queue_id(read_word(img)));
+        }
+        shared_ptr<bridge> b(new bridge(n, b_vca,
+                                        n2b_queues, n2b_bw, b2n_queues, b2n_bw,
+                                        flits_per_q, log));
         uint32_t mem_start = read_word(img);
         uint32_t mem_size = read_word(img);
         shared_ptr<mem> m(new mem(mem_start, mem_size, log));
@@ -60,10 +83,12 @@ sys::sys(shared_ptr<ifstream> img, shared_ptr<logger> new_log) throw(err)
         shared_ptr<cpu> c(new cpu(cpu_id(id), m, cpu_entry_point,
                                   cpu_stack_pointer, log));
         c->connect(b);
-
         cpus[id] = c;
         bridges[id] = b;
         nodes[id] = n;
+        br_vcas[id] = b_vca;
+        node_rts[id] = n_rt;
+        n_vcas[id] = n_vca;
     }
     arbitration_t arb_scheme = static_cast<arbitration_t>(read_word(img));
     uint32_t num_cxns = read_word(img);
@@ -75,15 +100,19 @@ sys::sys(shared_ptr<ifstream> img, shared_ptr<logger> new_log) throw(err)
         << "bidirectional arbitration)" << endl;
     for (unsigned i  = 0; i < num_cxns; ++i) {
         uint32_t link_src_node = read_word(img);
+        char link_src_port_name = static_cast<char>(read_word(img));
         uint32_t link_dst_node = read_word(img);
+        char link_dst_port_name = static_cast<char>(read_word(img));
         uint32_t link_bandwidth = read_word(img);
         uint32_t link_num_queues = read_word(img);
-        vector<virtual_queue_id> queues;
+        set<virtual_queue_id> queues;
         for (unsigned q = 0; q < link_num_queues; ++q) {
-            queues.push_back(virtual_queue_id(read_word(img)));
+            queues.insert(virtual_queue_id(read_word(img)));
         }
-        nodes[link_src_node]->connect(nodes[link_dst_node], link_bandwidth,
-                                      queues);
+        nodes[link_dst_node]->connect_from(string(1, link_dst_port_name),
+                                           nodes[link_src_node],
+                                           string(1, link_src_port_name),
+                                           queues, link_bandwidth);
         cxns.insert(make_pair(link_src_node, link_dst_node));
     }
     if (arb_scheme != AS_NONE) {
@@ -106,18 +135,25 @@ sys::sys(shared_ptr<ifstream> img, shared_ptr<logger> new_log) throw(err)
         uint32_t route_len = read_word(img);
         log << verbosity(2) << "flow " << flow_id(flow) << " with " << dec
             << route_len << " hop" << (route_len == 1 ? "" : "s") << endl;
-        uint32_t cur_node;
+        uint32_t cur_n = 0xdeadbeef;
         for (unsigned hop = 0; hop < route_len; ++hop) {
-            uint32_t next_node = read_word(img);
-            uint32_t next_queue = read_word(img);
+            uint32_t next_n = read_word(img);
+            uint32_t next_q = read_word(img);
             if (hop == 0) { // origin: program the bridge
-                bridges[next_node]->add_route(flow_id(flow),
-                                              virtual_queue_id(next_queue));
-                cur_node = next_node;
+                shared_ptr<static_channel_alloc> vca =
+                    static_pointer_cast<static_channel_alloc>(br_vcas[next_n]);
+                vca->add_route(next_n, flow_id(flow), virtual_queue_id(next_q));
+                cur_n = next_n;
             } else { // next hop: program the current node
-                nodes[cur_node]->add_route(flow_id(flow), node_id(next_node),
-                                           virtual_queue_id(next_queue));
-                cur_node = next_node;
+                if ((hop + 1 == route_len) && (next_n != cur_n))
+                    throw err_route_not_terminated(flow, next_n);
+                shared_ptr<static_router> r =
+                    static_pointer_cast<static_router>(node_rts[cur_n]);
+                r->add_route(flow_id(flow), next_n);
+                shared_ptr<static_channel_alloc> vca =
+                    static_pointer_cast<static_channel_alloc>(n_vcas[cur_n]);
+                vca->add_route(next_n, flow_id(flow), virtual_queue_id(next_q));
+                cur_n = next_n;
             }
         }
     }

@@ -6,10 +6,11 @@
 #include "flit.hpp"
 
 ostream &operator<<(ostream &out, const flit &f) {
-    out << "<" << hex << setfill('0') << setw(16) << f.get_data() << '>';
+    return out << "<" << hex << setfill('0') << setw(16) << f.get_data() << '>';
 }
 
 ostream &operator<<(ostream &out, const head_flit &f) {
-    out << "<f:" << hex << f.get_flow_id() << ",l:" << f.get_length() << ">";
+    return out << "<f:" << hex << f.get_flow_id() << ",l:" << f.get_length()
+               << ">";
 }
 

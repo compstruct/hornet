@@ -10,7 +10,7 @@ void logstreambuf::add(streambuf *s, const verbosity &v) throw() {
     streams.push_back(pair<verbosity,streambuf *>(v,s));
 }
 
-logger::logger() throw() : buf(), ostream(&buf) { }
+logger::logger() throw() : ostream(&buf), buf(), owned_streams() { }
 logger::~logger() throw() { }
 
 logger &logger::add(ostream &s, const verbosity &v) throw() {

@@ -8,7 +8,7 @@ import sys, os, optparse, re, subprocess, ConfigParser
 
 objdump = 'objdump'
 file_magic = 'DAR '
-file_version = 200903040
+file_version = 200903140
 
 class Err(Exception):
     pass
@@ -124,18 +124,21 @@ def write_header(out, verbose=False):
     out.write(file_magic)
     out.write(w2bs(file_version))
 
-def write_pe(out, id, img, dmas, bw, mem, queues, verbose=False):
+def write_pe(out, id, img, n2b_bw, b2n_bw, qmem_size,
+             n2b_queues, b2n_queues, verbose=False):
     if verbose:
         print 'writing PE %d' % id
     out.write(w2bs(id))
     # node
-    out.write(w2bs(mem))
+    out.write(w2bs(qmem_size))
     # bridge
-    out.write(w2bs(dmas))
-    out.write(w2bs(bw))
+    out.write(w2bs(n2b_bw))
+    out.write(w2bs(b2n_bw))
     # node->bridge connection
-    out.write(w2bs(len(queues)))
-    for q in queues: out.write(w2bs(q))
+    out.write(w2bs(len(b2n_queues)))
+    for q in b2n_queues: out.write(w2bs(q))
+    out.write(w2bs(len(n2b_queues)))
+    for q in n2b_queues: out.write(w2bs(q))
     # memory and CPU
     file, format, entry, all_sections = \
             read_section_headers(img, verbose=verbose)
@@ -145,12 +148,17 @@ def write_pe(out, id, img, dmas, bw, mem, queues, verbose=False):
     size = ((addr_past_end - start) & 0xfffff000) + 0x1000 + 0x4000
     write_mem_image(out, file, start, size, entry, sections, verbose=verbose)
 
-def write_cxn(out, src, dst, bw, queues, verbose=False):
+def write_cxn(out, src, src_port, dst, dst_port, bw, queues, verbose=False):
     if verbose:
-        print (('writing connection %d -> %d with bandwidth %d and %d queues '
-                'starting at %d') % (src, dst, bw, nqs, q0))
+        print (('writing connection %d:%s -> %d:%s with bandwidth %d '
+                'and %d queues') %
+                (src, src_port, dst, dst_port, bw, len(queues)))
+    assert len(src_port) == 1
+    assert len(dst_port) == 1
     out.write(w2bs(src))
+    out.write(w2bs(ord(src_port)))
     out.write(w2bs(dst))
+    out.write(w2bs(ord(dst_port)))
     out.write(w2bs(bw))
     out.write(w2bs(len(queues)))
     for q in queues: out.write(w2bs(q))
@@ -177,13 +185,14 @@ def write_complete_image(out, cfg, verbose=False):
     if verbose:
         print ('writing %d PE%s...' % (len(pes), '' if len(pes) == 1 else 's'))
     out.write(w2bs(len(pes)))
-    for pe_cfg in pes: write_pe(*([out] + list(pe_cfg) + [verbose]))
+    for pe_cfg in pes:
+        write_pe(out=out, verbose=verbose, **pe_cfg)
     if verbose:
         print ('writing %d connection%s...' %
                 (len(cxns), '' if len(cxns) == 1 else 's'))
     out.write(w2bs(arbs[arb]))
     out.write(w2bs(len(cxns)))
-    for cxn_cfg in cxns: write_cxn(*([out] + list(cxn_cfg) + [verbose]))
+    for cxn_cfg in cxns: write_cxn(out=out, verbose=verbose, **cxn_cfg)
     if verbose:
         print ('writing %d flow%s...' %
                 (len(flows), '' if len(flows) == 1 else 's'))
@@ -192,10 +201,10 @@ def write_complete_image(out, cfg, verbose=False):
 
 def new_system_config(cfg, verbose=False):
     def get_links(w, h, n):
-        return (([('north', n - w)] if n / w != 0 else []) +
-                ([('east', n + 1)] if n % w != w - 1 else []) +
-                ([('south', n + w)] if n / w != h - 1 else []) +
-                ([('west', n - 1)] if n % w != 0 else []))
+        return (([('north', 'N', n - w, 'S')] if n / w != 0 else []) +
+                ([('east', 'E', n + 1, 'W')] if n % w != w - 1 else []) +
+                ([('south', 'S', n + w, 'N')] if n / w != h - 1 else []) +
+                ([('west', 'W', n - 1, 'E')] if n % w != 0 else []))
     def p_nat(s, min=0):
         try: ans = int(s)
         except ValueError,e:
@@ -230,20 +239,26 @@ def new_system_config(cfg, verbose=False):
                     raise Err('queues for %s and %s overlap: %s' %
                               (d1, d2, ' '.join(map(str,overlap))))
     def check_flow(id, hops, links):
-        final_n, final_q = hops[-1]
-        if final_q not in get_qs('cpu'):
-            raise Err('flow %s: final queue %02x:%02x does not go to the CPU' %
-                      (id, final_n, final_q))
-        for (n1, q), (n2, _) in zip(hops, hops[1:]):
-            if len([None for (n1, n2, _, qs) in links if q in qs]) == 0:
-                raise Err('flow %s: queue %02x:%02x does not go to node %02x' %
-                          (id, n1, q, n2))
+        # hops[0] should come from cpu
+        if len(hops) < 1: raise Err('flow %s: empty flow' % id)
+        first_n, first_q = hops[0]
+        if first_q not in get_qs('cpu'):
+            raise Err('flow %s: initial queue %02x:%02x does not exit the CPU' %
+                      (id, first_n, first_q))
+        last_n, last_q = hops[-1]
+        if last_q not in get_qs('net'):
+            raise Err(('flow %s: final queue %02x:%02x does not exit '
+                       'the network') % (id, last_n, last_q))
+        for (src_n, _), (dst_n, dst_q) in zip(hops, hops[1:-1]):
+            if [l for l in links
+                if (l['src'] == src_n and l['dst'] == dst_n
+                    and dst_q in l['queues'])] == []:
+                raise Err(('flow %s: queue %02x:%02x does not come from '
+                           'node %02x') % (id, dst_n, dst_q, src_n))
     try:
         w = p_nat(cfg.get('geometry', 'width'))
         h = p_nat(cfg.get('geometry', 'height'))
-        queue_mem = p_nat(cfg.get('node', 'memory'))
-        num_dmas = p_nat(cfg.get('node', 'dma channels'))
-        dma_bw = p_nat(cfg.get('node', 'dma bandwidth'))
+        pe = {}
         check_qs(cfg.options('queues'))
         progs = (dict([(p_nat(n), v) for n, v in cfg.items('code')
                        if n != 'default']),
@@ -251,14 +266,26 @@ def new_system_config(cfg, verbose=False):
                                            else None)
         node_ids = range(0, w * h)
         cpu_qs = get_qs('cpu')
-        nodes = [(id, get_code(progs, id), num_dmas, dma_bw, queue_mem,
-                  get_qs('cpu')) for id in node_ids]
-        links = [(src, dst, get_bw(dir), get_qs(dir))
-                 for src in node_ids for dir, dst in get_links(w, h, src) ]
+        nodes = [{ 'id': id,
+                   'img': get_code(progs, id),
+                   'n2b_bw': get_bw('cpu'),
+                   'b2n_bw': get_bw('net'),
+                   'qmem_size': p_nat(cfg.get('node', 'queue size')),
+                   'n2b_queues': get_qs('cpu'),
+                   'b2n_queues': get_qs('net') }
+                 for id in node_ids]
+        links = [{ 'src': src,
+                   'src_port': src_port,
+                   'dst': dst,
+                   'dst_port': dst_port,
+                   'bw': get_bw(dir),
+                   'queues': get_qs(dir) }
+                 for dst in node_ids
+                 for dir, dst_port, src, src_port in get_links(w, h, dst)]
         for n, v in cfg.items('flows'):
             check_flow(n, p_flow(v), links)
         flows = [(p_nat(n), p_flow(v)) for n, v in cfg.items('flows')]
-    except Exception, e:
+    except ConfigParser.Error, e:
         raise Err('bad config: %s' % e)
     return nodes, links, flows
 

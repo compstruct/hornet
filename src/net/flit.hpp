@@ -7,7 +7,7 @@
 #include <iostream>
 #include <cassert>
 #include "cstdint.hpp"
-#include "flow.hpp"
+#include "flow_id.hpp"
 
 using namespace std;
 
@@ -32,7 +32,7 @@ public:
 
 inline head_flit::head_flit(flow_id id, uint32_t length) throw()
     : flit((((uint64_t) id.get_numeric_id()) << 32) | length) { 
-    assert(id == id & 0xffffffffUL);
+    assert(id.get_numeric_id() == (id.get_numeric_id() & 0xffffffffUL));
 }
 
 inline flow_id head_flit::get_flow_id() const throw() {

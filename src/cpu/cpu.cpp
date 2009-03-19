@@ -17,9 +17,9 @@ ostream &operator<<(ostream &out, const cpu_id &id) {
 }
 
 cpu::cpu(const cpu_id &new_id, shared_ptr<mem> new_ram, uint32_t entry_point,
-         uint32_t stack_ptr, shared_ptr<logger> new_log) throw(err)
-    : id(new_id), pc(entry_point), ram(new_ram), net(), jump_active(false),
-      interrupts_enabled(false), time(0), stdout_buffer(), log(new_log) {
+         uint32_t stack_ptr, logger &l) throw(err)
+    : id(new_id), time(0), pc(entry_point), ram(new_ram), net(),
+      jump_active(false), interrupts_enabled(false), stdout_buffer(), log(l) {
     assert(ram);
 
     pc = entry_point;
@@ -104,7 +104,7 @@ inline uint32_t check_align(uint32_t addr, uint32_t mask) {
 #define op3sr(op) { set(i.get_rd(), (int32_t) get(i.get_rs()) op \
                                     (int32_t) get(i.get_rt())); }
 #define op3ur(op) { set(i.get_rd(), get(i.get_rs()) op get(i.get_rt())); }
-#define op3si(op) { set(i.get_rt(), get(i.get_rs()) op i.get_simm()); }
+#define op3si(op) { set(i.get_rt(), static_cast<int>(get(i.get_rs())) op i.get_simm()); }
 #define op3ui(op) { set(i.get_rt(), get(i.get_rs()) op i.get_imm()); }
 #define op3ur_of(op) { \
         uint64_t x = get(i.get_rs()); x |= (x & 0x80000000) << 1; \
@@ -186,13 +186,13 @@ void cpu::execute() throw(err) {
     case IC_CFC2: unimplemented_instr(i, pc);
     case IC_CLO: {
         uint32_t r = get(i.get_rs());
-        uint32_t count;
+        uint32_t count = 0;
         for (uint32_t m = 0x80000000; m & r; m >>= 1) ++count;
         set(i.get_rd(), count);
     }
     case IC_CLZ: {
         uint32_t r = get(i.get_rs());
-        uint32_t count;
+        uint32_t count = 0;
         for (uint32_t m = 0x80000000; m & !(m & r); m >>= 1) ++count;
         set(i.get_rd(), count);
     }

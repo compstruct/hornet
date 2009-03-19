@@ -5,22 +5,20 @@
 #include <iomanip>
 #include "arbiter.hpp"
 
-arbiter::arbiter(shared_ptr<node> src, shared_ptr<node> dst, arbitration_t sch,
-                 shared_ptr<logger> new_log) throw(err)
-    : scheme(sch), src_id(src->get_id()), dst_id(dst->get_id()),
-      src_to_dst(src->get_link_to(dst->get_id())),
-      dst_to_src(dst->get_link_to(src->get_id())), log(new_log) {
+arbiter::arbiter(shared_ptr<node> src, shared_ptr<node> dst,
+                 arbitration_t sch, logger &l) throw(err)
+    : scheme(sch), src_to_dst(src->get_egress_to(dst->get_id())),
+      dst_to_src(dst->get_egress_to(src->get_id())), log(l) {
     if (sch != AS_NONE && sch != AS_DUMB)
         throw err_bad_arb_scheme(sch);
     if (sch != AS_NONE) {
         log << verbosity(3) << "arbiter " << hex << setfill('0')
-            << setw(2) << src_id << "<->" << setw(2) << dst_id << " created"
-            << "with bandwidths ->" << dec << src_to_dst->get_bandwidth()
+            << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
+            << " created with bandwidths ->" << dec
+            << src_to_dst->get_bandwidth()
             << " and <-" << dst_to_src->get_bandwidth() << endl;
     }
 }
-
-arbiter::~arbiter() throw() { }
 
 void arbiter::tick_positive_edge() throw(err) {
     double src_to_dst_pressure = src_to_dst->get_pressure();
@@ -44,10 +42,12 @@ void arbiter::tick_positive_edge() throw(err) {
     }
     if (new_src_to_dst_bw != src_to_dst_bw) {
         log << verbosity(3) << "[arbiter " << hex << setfill('0')
-            << setw(2) << src_id << "<->" << setw(2) << dst_id
-            << "] adjusting bandwidths to ->"
-            << new_src_to_dst_bw << " and <-" << new_dst_to_src_bw
-            << " (target ratio: "
+            << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
+            << "] adjusting bandwidths to ->" << dec
+            << new_src_to_dst_bw << " and <-" << new_dst_to_src_bw << "\n"
+            << "[arbiter " << hex << setfill('0')
+            << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
+            << "]     (target ratio: " << dec << fixed << setprecision(4)
             << src_to_dst->get_pressure()/dst_to_src->get_pressure()
             << ", effective ratio: "
             << (static_cast<double>(new_src_to_dst_bw) /

@@ -82,11 +82,5 @@ inline void logstreambuf::set_message_verbosity(const verbosity &v) throw() {
 
 ostream &operator<<(logger &out, const verbosity &v);
 
-template <class V>
-ostream &operator<<(shared_ptr<logger> &out, const V &v) {
-    assert(out);
-    return *out << v;
-}
-
 #endif // __LOGGER_HPP__
 

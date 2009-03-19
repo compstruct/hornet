@@ -15,9 +15,7 @@ using namespace boost;
 
 class mem {
 public:
-    explicit mem(uint32_t start, uint32_t size,
-                 shared_ptr<logger> log = shared_ptr<logger>(new logger()))
-        throw(err);
+    explicit mem(uint32_t start, uint32_t size, logger &log) throw(err);
     virtual ~mem() throw();
     template<class V> V load(const uint32_t &addr) throw(err);
     template<class V> void store(const uint32_t &addr, const V &val) throw(err);
@@ -25,10 +23,10 @@ public:
     uint8_t *ptr(const uint32_t &addr) throw(err);
 private:
     mem(const mem &);
-    uint8_t *contents;
     uint32_t start;
     uint32_t size;
-    shared_ptr<logger> log;
+    uint8_t *contents;
+    logger &log;
 };
 
 template <class V>

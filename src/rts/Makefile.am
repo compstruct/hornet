@@ -3,7 +3,7 @@ AS=@MIPSAS@
 CC=@MIPSCC@
 AR=@MIPSAR@
 RANLIB=@MIPSRANLIB@
-CFLAGS=-std=c99 -fno-PIC -march=mips32r2 -mno-mips16 -static -mno-shared -mno-abicalls -nostdlib
+CFLAGS=-Wall -Werror -std=c99 -fno-PIC -march=mips32r2 -mno-mips16 -static -mno-shared -mno-abicalls -nostdlib
 LDFLAGS=-nostdlib -static -fno-PIC
 
 rtsdir=$(libdir)/rts

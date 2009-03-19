@@ -4,6 +4,8 @@ CPPFLAGS += $(BOOST_CPPFLAGS) \
            -I$(top_srcdir)/src/sys
 LDFLAGS += $(BOOST_LDFLAGS) $(BOOST_PROGRAM_OPTIONS_LIB) @LTLIBOBJS@
 
+AM_CXXFLAGS = -Wall -Werror
+
 bin_PROGRAMS = darsim
 
 darsim_SOURCES = darsim.cpp 

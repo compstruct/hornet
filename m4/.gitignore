@@ -1,5 +1,7 @@
 *~
 .*.swp
+:2e*.swp
+.AppleDouble
 libtool.m4
 ltoptions.m4
 ltsugar.m4

@@ -15,9 +15,9 @@ using namespace boost;
 namespace po = boost::program_options;
 
 static const string magic = "DAR ";
-static const uint32_t version = 200903040;
+static const uint32_t version = 200903140;
 
-shared_ptr<sys> new_system(string file, shared_ptr<logger> log) {
+shared_ptr<sys> new_system(string file, logger &log) {
     shared_ptr<ifstream> img(new ifstream(file.c_str(), ios::in | ios::binary));
     if (img->fail()) {
         cerr << file << ": cannot read file" << endl;
@@ -37,7 +37,7 @@ shared_ptr<sys> new_system(string file, shared_ptr<logger> log) {
              << "does not match simulator (" << version << ")" << endl;
         exit(1);
     }
-    shared_ptr<sys> s = shared_ptr<sys>(new sys(img, log));
+    shared_ptr<sys> s(new sys(img, log));
     img->close();
     return s;
 }
@@ -79,18 +79,18 @@ int main(int argc, char **argv) {
     if (opts.count("version")) cout << dar_full_version << endl;
     if (opts.count("version") || opts.count("help")) exit(0);
     if (opts.count("mem_image") < 1) {
-        cout << "not enough arguments; try -h" << endl;
+        cerr << "not enough arguments; try -h" << endl;
         exit(1);
     }
     if (opts.count("mem_image") > 1) {
-        cout << "too many arguments; try -h" << endl;
+        cerr << "too many arguments; try -h" << endl;
         exit(1);
     }
     string mem_image = opts["mem_image"].as<string>();
-    shared_ptr<logger> log(new logger());
+    logger log;
     unsigned verb = (opts.count("verbosity") ?
                      opts["verbosity"].as<unsigned>() : 0);
-    log->add(cout, verbosity(verb));
+    log.add(cout, verbosity(verb));
     if (opts.count("log")) {
         unsigned log_verb = (opts.count("log-verbosity") ?
                              opts["log-verbosity"].as<unsigned>() : verb);
@@ -102,11 +102,11 @@ int main(int argc, char **argv) {
                 cerr << "failed to write log: " << *fn << endl;
                 exit(1);
             }
-            log->add(f, verbosity(log_verb));
+            log.add(f, verbosity(log_verb));
         }
     }
     bool forever = true;
-    unsigned num_cycles;
+    unsigned num_cycles = 0;
     if (opts.count("cycles")) {
         forever = false;
         num_cycles = opts["cycles"].as<unsigned>();

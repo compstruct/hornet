@@ -8,74 +8,48 @@
 #include <iostream>
 #include <boost/shared_ptr.hpp>
 #include "logger.hpp"
-#include "clockable.hpp"
 #include "virtual_queue.hpp"
+#include "router.hpp"
+#include "ingress.hpp"
+#include "egress.hpp"
+#include "crossbar.hpp"
 
 using namespace std;
 using namespace boost;
 
-class node;
-class bridge;
-class arbiter;
-
-class connection : public clockable {
+class node {
 public:
-    explicit connection(node_id parent_id, shared_ptr<node> target,
-                        unsigned max_bandwidth,
-                        shared_ptr<logger> log =
-                            shared_ptr<logger>(new logger())) throw();
-    void add_queue(shared_ptr<virtual_queue> q) throw(err);
-    void add_route(flow_id flow, virtual_queue_id neighbor_queue_id) throw(err);
-    void set_bandwidth(unsigned new_bandwidth) throw();
-    unsigned get_bandwidth() const throw();
-    double get_pressure() throw();
-    virtual void tick_positive_edge() throw(err);
-    virtual void tick_negative_edge() throw(err);
-private:
-    const node_id parent_id;
-    typedef map<virtual_queue_id, shared_ptr<virtual_queue> > queues_t;
-    typedef map<flow_id, shared_ptr<virtual_queue> > routes_t;
-    unsigned bandwidth; // in flits/tick
-    shared_ptr<node> target;
-    queues_t vqs;
-    routes_t routes; // vqid is next hop's queue id
-    shared_ptr<logger> log;
-};
-
-inline void connection::set_bandwidth(unsigned new_bandwidth) throw() {
-    bandwidth = new_bandwidth;
-}
-
-inline unsigned connection::get_bandwidth() const throw() { return bandwidth; }
-
-class node : public clockable {
-public:
-    explicit node(node_id id, uint32_t mem_size,
-                  shared_ptr<logger> log =
-                      shared_ptr<logger>(new logger())) throw();
-    void connect(shared_ptr<node> target, unsigned bandwidth,
-                 vector<virtual_queue_id> queues) throw(err);
-    void connect(shared_ptr<bridge> target,
-                 vector<virtual_queue_id> queues) throw(err);
-    shared_ptr<connection> get_link_to(node_id neighbor) throw(err);
-    void add_incoming_link(const node_id &from) throw(err);
-    void add_route(flow_id flow, node_id neighbor_id,
-                   virtual_queue_id neighbor_queue_id) throw(err);
-    const shared_ptr<virtual_queue> get_virtual_queue(virtual_queue_id id)
-        throw(err);
+    explicit node(node_id id, uint32_t flits_per_queue,
+                  shared_ptr<router> new_router,
+                  shared_ptr<channel_alloc> new_vc_alloc,
+                  logger &log) throw();
     const node_id &get_id() const throw();
-    virtual void tick_positive_edge() throw(err);
-    virtual void tick_negative_edge() throw(err);
+    void add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err);
+    void add_egress(node_id dst, shared_ptr<egress> egress) throw(err);
+    void add_queue_id(virtual_queue_id id) throw(err);
+    shared_ptr<egress> get_egress_to(node_id dst) throw(err);
+    shared_ptr<router> get_router() throw();
+    shared_ptr<channel_alloc> get_channel_alloc() throw();
+    shared_ptr<pressure_tracker> get_pressures() throw();
+    void connect_from(const string &port_name,
+                      shared_ptr<node> src, const string &src_port_name,
+                      const set<virtual_queue_id> &vq_ids, unsigned bw)
+        throw(err);
+    void tick_positive_edge() throw(err);
+    void tick_negative_edge() throw(err);
 private:
     const node_id id;
-    typedef map<virtual_queue_id, shared_ptr<virtual_queue> > queues_t;
-    typedef map<node_id, shared_ptr<connection> > links_t;
     unsigned flits_per_queue;
-    queues_t vqs;
-    links_t links;
-    unsigned num_incoming_links;
-    unsigned stale_num_slots; // resynchronized at negative clock edge
-    shared_ptr<logger> log;
+    typedef map<node_id, shared_ptr<ingress> > ingresses_t;
+    typedef map<node_id, shared_ptr<egress> > egresses_t;
+    shared_ptr<router> rt;
+    shared_ptr<channel_alloc> vc_alloc;
+    shared_ptr<pressure_tracker> pressures;
+    ingresses_t ingresses;
+    egresses_t egresses;
+    crossbar xbar;
+    set<virtual_queue_id> queue_ids;
+    logger &log;
 };
 
 inline const node_id &node::get_id() const throw() { return id; }

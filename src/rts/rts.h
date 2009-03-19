@@ -67,7 +67,7 @@ static void print_int(int);
 static void print_string(const char *);
 
 /* effects: halts the processor */
-extern void halt() __attribute__((noreturn));
+extern void halt() __attribute__((__noreturn__));
 
 
 

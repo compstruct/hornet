@@ -11,10 +11,9 @@
 using namespace std;
 
 class err {
-public:
-    virtual ~err() throw();
 protected:
     err() throw();
+    virtual ~err() throw();
     friend ostream &operator<<(ostream &, const err &);
 private:
     virtual void show_to(ostream &out) const = 0;
@@ -66,10 +65,9 @@ private:
 
 // an exception while executing user program
 class err_runtime_exc : public err {
-public:
-    virtual ~err_runtime_exc() throw();
 protected:
     err_runtime_exc() throw();
+    virtual ~err_runtime_exc() throw();
 private:
     virtual void show_to(ostream &out) const = 0;
 };
@@ -161,13 +159,23 @@ private:
     virtual void show_to(ostream &out) const;
 };
 
-class exc_empty_queue : public err_runtime_exc {
+class err_empty_queue : public err {
 public:
-    explicit exc_empty_queue(uint32_t node, uint32_t queue) throw();
-    virtual ~exc_empty_queue() throw();
+    explicit err_empty_queue(uint32_t node, uint32_t queue) throw();
+    virtual ~err_empty_queue() throw();
 private:
     const uint32_t node;
     const uint32_t queue;
+    virtual void show_to(ostream &out) const;
+};
+
+class err_too_many_bridge_queues : public err {
+public:
+    explicit err_too_many_bridge_queues(uint32_t node, uint32_t num) throw();
+    virtual ~err_too_many_bridge_queues() throw();
+private:
+    const uint32_t node;
+    const uint32_t num;
     virtual void show_to(ostream &out) const;
 };
 
@@ -214,13 +222,23 @@ private:
     virtual void show_to(ostream &out) const;
 };
 
-class err_duplicate_link : public err {
+class err_duplicate_ingress : public err {
 public:
-    explicit err_duplicate_link(uint32_t node, uint32_t target) throw();
-    virtual ~err_duplicate_link() throw();
+    explicit err_duplicate_ingress(uint32_t node, uint32_t src) throw();
+    virtual ~err_duplicate_ingress() throw();
 private:
     const uint32_t node;
-    const uint32_t target;
+    const uint32_t src;
+    virtual void show_to(ostream &out) const;
+};
+
+class err_duplicate_egress : public err {
+public:
+    explicit err_duplicate_egress(uint32_t node, uint32_t dst) throw();
+    virtual ~err_duplicate_egress() throw();
+private:
+    const uint32_t node;
+    const uint32_t dst;
     virtual void show_to(ostream &out) const;
 };
 
@@ -247,43 +265,39 @@ private:
     virtual void show_to(ostream &out) const;
 };
 
-class exc_bad_link_flow : public err_runtime_exc {
+class exc_bad_flow : public err_runtime_exc {
 public:
-    explicit exc_bad_link_flow(uint32_t node, uint32_t target,
-                               uint32_t flow) throw();
-    virtual ~exc_bad_link_flow() throw();
-private:
-    const uint32_t node;
-    const uint32_t target;
-    const uint32_t flow;
-    virtual void show_to(ostream &out) const;
-};
-
-class exc_bad_bridge_flow : public err_runtime_exc {
-public:
-    explicit exc_bad_bridge_flow(uint32_t node, uint32_t flow) throw();
-    virtual ~exc_bad_bridge_flow() throw();
+    explicit exc_bad_flow(uint32_t node, uint32_t flow) throw();
+    virtual ~exc_bad_flow() throw();
 private:
     const uint32_t node;
     const uint32_t flow;
     virtual void show_to(ostream &out) const;
 };
 
+class err_route_not_static : public err {
+public:
+    explicit err_route_not_static() throw();
+    virtual ~err_route_not_static() throw();
+private:
+    virtual void show_to(ostream &out) const;
+};
+
+class err_route_not_terminated : public err {
+public:
+    explicit err_route_not_terminated(uint32_t flow, uint32_t node) throw();
+    virtual ~err_route_not_terminated() throw();
+private:
+    const uint32_t flow;
+    const uint32_t node;
+private:
+    virtual void show_to(ostream &out) const;
+};
 
 class err_duplicate_flow : public err {
 public:
     explicit err_duplicate_flow(uint32_t node, uint32_t flow) throw();
     virtual ~err_duplicate_flow() throw();
-private:
-    const uint32_t node;
-    const uint32_t flow;
-    virtual void show_to(ostream &out) const;
-};
-
-class err_duplicate_bridge_flow : public err {
-public:
-    explicit err_duplicate_bridge_flow(uint32_t node, uint32_t flow) throw();
-    virtual ~err_duplicate_bridge_flow() throw();
 private:
     const uint32_t node;
     const uint32_t flow;

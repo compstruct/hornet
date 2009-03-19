@@ -42,14 +42,13 @@ inline uint32_t cpu_id::get_numeric_id() const throw() { return id; }
 
 ostream &operator<<(ostream &, const cpu_id &);
 
-class cpu : public clockable {
+class cpu {
 public:
     explicit cpu(const cpu_id &id, shared_ptr<mem> ram,
-                 uint32_t pc, uint32_t stack_pointer,
-                 shared_ptr<logger> log = shared_ptr<logger>()) throw(err);
+                 uint32_t pc, uint32_t stack_pointer, logger &log) throw(err);
     void connect(shared_ptr<bridge> net_bridge) throw();
-    virtual void tick_positive_edge() throw(err);
-    virtual void tick_negative_edge() throw(err);
+    void tick_positive_edge() throw(err);
+    void tick_negative_edge() throw(err);
 
 private:
     uint32_t get(const gpr &r) const throw();
@@ -71,7 +70,7 @@ private:
     unsigned jump_time;
     uint32_t jump_target;
     ostringstream stdout_buffer;
-    shared_ptr<logger> log;
+    logger &log;
 private:
     void syscall(uint32_t syscall_no) throw(err);
     void flush_stdout() throw();
@@ -94,6 +93,7 @@ inline uint32_t cpu::get(const hwr &r) const throw(exc_reserved_hw_reg) {
     case 4: return 1; // spec ambiguous on whether cc_res is 3 or 4
     case 30: return 0x52697375;
     case 31: return 0x52697375;
+    default: throw exc_reserved_hw_reg(r.get_no());
     }
 }
 
