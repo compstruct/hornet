@@ -6,10 +6,11 @@
 
 #include <iostream>
 #include <boost/shared_ptr.hpp>
+#include "cstdint.hpp"
 #include "virtual_queue.hpp"
 #include "channel_alloc.hpp"
 #include "logger.hpp"
-#include "cstdint.hpp"
+#include "statistics.hpp"
 
 using namespace std;
 using namespace boost;
@@ -43,10 +44,12 @@ protected:
     flow_id flow;
     uint32_t remaining_flits;
     void *mem;
+    shared_ptr<statistics> stats;
     logger &log;
 protected:
     dma_channel(node_id n_id, dma_channel_id d_id, unsigned bw,
-                shared_ptr<virtual_queue> vq, logger &log) throw();
+                shared_ptr<virtual_queue> vq, shared_ptr<statistics> stats,
+                logger &log) throw();
 private:
     dma_channel(); // not defined
     dma_channel(const dma_channel &); // not defined
@@ -55,7 +58,8 @@ private:
 class ingress_dma_channel : public dma_channel {
 public:
     ingress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned bw,
-                        shared_ptr<virtual_queue> vq, logger &log) throw();
+                        shared_ptr<virtual_queue> vq,
+                        shared_ptr<statistics> stats, logger &log) throw();
     virtual ~ingress_dma_channel();
     void receive(void *dst, uint32_t num_flits) throw(err);
     bool has_waiting_flow() const throw();
@@ -73,7 +77,7 @@ public:
     egress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned bw,
                        shared_ptr<virtual_queue> vq,
                        shared_ptr<channel_alloc> vca,
-                       logger &log) throw();
+                       shared_ptr<statistics> stats, logger &log) throw();
     virtual ~egress_dma_channel();
     void send(flow_id flow, void *src, uint32_t num_flits) throw(err);
     void tick_positive_edge() throw(err);

@@ -12,6 +12,7 @@
 #include <boost/shared_ptr.hpp>
 #include "error.hpp"
 #include "logger.hpp"
+#include "statistics.hpp"
 #include "virtual_queue.hpp"
 #include "router.hpp"
 #include "node.hpp"
@@ -28,7 +29,8 @@ public:
                     shared_ptr<channel_alloc> bridge_vca,
                     const set<virtual_queue_id> &node_vq_ids, unsigned n2b_bw,
                     const set<virtual_queue_id> &bridge_vq_ids, unsigned b2n_bw,
-                    unsigned flits_per_queue, logger &new_log) throw(err);
+                    unsigned flits_per_queue, shared_ptr<statistics> stats,
+                    logger &new_log) throw(err);
     uint32_t get_transmission_done(uint32_t transmission) throw();
     uint32_t get_waiting_queues() throw();
     uint32_t get_queue_flow_id(uint32_t queue) throw(err);
@@ -61,6 +63,7 @@ private:
     egress_dmas_t egress_dmas;
     vector<virtual_queue_id> vqids; // [0..31] queue index -> real queue id
     
+    shared_ptr<statistics> stats;
     logger &log;
 private:
     bridge(); // not defined

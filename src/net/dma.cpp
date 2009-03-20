@@ -10,17 +10,19 @@ ostream &operator<<(ostream &out, const dma_channel_id &id) {
 }
 
 dma_channel::dma_channel(node_id n_id, dma_channel_id d_id, uint32_t new_bw,
-                         shared_ptr<virtual_queue> q, logger &l) throw()
+                         shared_ptr<virtual_queue> q,
+                         shared_ptr<statistics> new_stats, logger &l) throw()
     : id(make_pair(n_id, d_id)), bandwidth(new_bw), vq(q), 
       started(false), flow(0xdeadbeef), remaining_flits(0),
-      mem(NULL), log(l) { }
+      mem(NULL), stats(new_stats), log(l) { }
 
 dma_channel::~dma_channel() { }
 
 ingress_dma_channel::
 ingress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned new_bw,
-                    shared_ptr<virtual_queue> q, logger &l) throw()
-    : dma_channel(n_id, d_id, new_bw, q, l) { }
+                    shared_ptr<virtual_queue> q,
+                    shared_ptr<statistics> s, logger &l) throw()
+    : dma_channel(n_id, d_id, new_bw, q, s, l) { }
 
 ingress_dma_channel::~ingress_dma_channel() { }
 
@@ -59,6 +61,7 @@ void ingress_dma_channel::tick_positive_edge() throw(err) {
             --remaining_flits;
         }
         vq->pop();
+        stats->receive_flit(flow);
         started = true;
     }
 }
@@ -68,8 +71,9 @@ void ingress_dma_channel::tick_negative_edge() throw(err) { }
 egress_dma_channel::
 egress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned new_bw,
                    shared_ptr<virtual_queue> q,
-                   shared_ptr<channel_alloc> vca, logger &l) throw()
-    : dma_channel(n_id, d_id, new_bw, q, l), vc_alloc(vca) { }
+                   shared_ptr<channel_alloc> vca,
+                   shared_ptr<statistics> s, logger &l) throw()
+    : dma_channel(n_id, d_id, new_bw, q, s, l), vc_alloc(vca) { }
 
 egress_dma_channel::~egress_dma_channel() { }
 
@@ -94,6 +98,7 @@ void egress_dma_channel::tick_positive_edge() throw(err) {
             --remaining_flits;
             if (remaining_flits == 0) vc_alloc->release(vq->get_id().second);
         }
+        stats->send_flit(flow);
         started = true;
     }
 }

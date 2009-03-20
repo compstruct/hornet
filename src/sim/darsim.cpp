@@ -4,10 +4,12 @@
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
+#include <csignal>
 #include <boost/shared_ptr.hpp>
 #include <boost/program_options.hpp>
 #include "version.hpp"
 #include "logger.hpp"
+#include "statistics.hpp"
 #include "sys.hpp"
 
 using namespace std;
@@ -17,7 +19,20 @@ namespace po = boost::program_options;
 static const string magic = "DAR ";
 static const uint32_t version = 200903140;
 
-shared_ptr<sys> new_system(string file, logger &log) {
+typedef void (*custom_signal_handler_t)(int);
+
+static logger syslog;
+static shared_ptr<statistics> stats;
+
+void sig_int_handler(int signo) {
+    stats->end_sim();
+    syslog << verbosity(0) << endl;
+    syslog << verbosity(0) << "simulation ended on keyboard interrupt" << endl;
+    syslog << verbosity(0) << endl << *stats << endl;
+    exit(1);
+}
+
+shared_ptr<sys> new_system(string file, uint64_t stats_start) {
     shared_ptr<ifstream> img(new ifstream(file.c_str(), ios::in | ios::binary));
     if (img->fail()) {
         cerr << file << ": cannot read file" << endl;
@@ -37,7 +52,7 @@ shared_ptr<sys> new_system(string file, logger &log) {
              << "does not match simulator (" << version << ")" << endl;
         exit(1);
     }
-    shared_ptr<sys> s(new sys(img, log));
+    shared_ptr<sys> s(new sys(img, stats_start, syslog));
     img->close();
     return s;
 }
@@ -49,8 +64,10 @@ int main(int argc, char **argv) {
     po::positional_options_description args_desc;
     po::options_description all_opts_desc;
     opts_desc.add_options()
-        ("cycles", po::value<unsigned>(),
+        ("cycles", po::value<uint64_t>(),
          "simulate for arg cycles (default: forever)")
+        ("stats-start", po::value<uint64_t>(),
+         "start statistics after cycle arg (default: 0)")
         ("log", po::value<vector<string> >()->composing(),
          "write a log to the given file")
         ("verbosity", po::value<unsigned>(), "set console verbosity")
@@ -87,10 +104,9 @@ int main(int argc, char **argv) {
         exit(1);
     }
     string mem_image = opts["mem_image"].as<string>();
-    logger log;
     unsigned verb = (opts.count("verbosity") ?
                      opts["verbosity"].as<unsigned>() : 0);
-    log.add(cout, verbosity(verb));
+    syslog.add(cout, verbosity(verb));
     if (opts.count("log")) {
         unsigned log_verb = (opts.count("log-verbosity") ?
                              opts["log-verbosity"].as<unsigned>() : verb);
@@ -102,39 +118,64 @@ int main(int argc, char **argv) {
                 cerr << "failed to write log: " << *fn << endl;
                 exit(1);
             }
-            log.add(f, verbosity(log_verb));
+            syslog.add(f, verbosity(log_verb));
         }
     }
     bool forever = true;
-    unsigned num_cycles = 0;
+    uint64_t num_cycles = 0;
+    uint64_t stats_start = 0;
     if (opts.count("cycles")) {
         forever = false;
-        num_cycles = opts["cycles"].as<unsigned>();
+        num_cycles = opts["cycles"].as<uint64_t>();
     }
-    log << verbosity(1) << dar_full_version << endl;
+    if (opts.count("stats-start")) {
+        stats_start = opts["stats-start"].as<uint64_t>();
+        if (num_cycles != 0 && stats_start >= num_cycles) {
+            cerr << "ERROR: statistics start (cycle " << stats_start
+                 << ") after the simulation ends (cycle " << num_cycles
+                 << ")" << endl;
+            exit(1);
+        }
+    }
+    syslog << verbosity(0) << dar_full_version << endl << endl;
     shared_ptr<sys> s;
     try {
-        s = new_system(mem_image, log);
+        s = new_system(mem_image, stats_start);
     } catch (const err &e) {
         cerr << "ERROR: " << e << endl;
         exit(1);
     }
+    stats = s->get_statistics();
+    custom_signal_handler_t prev_sig_int_handler =
+        signal(SIGINT, sig_int_handler);
+    if (prev_sig_int_handler == SIG_IGN) signal(SIGINT, prev_sig_int_handler);
+    stats->start_sim();
     try {
         if (forever) {
-            log << "simulating forever..." << endl;
+            syslog << verbosity(0) << "simulating forever" << endl;
         } else {
-            log << "simulating for " << dec << num_cycles << " cycles..."
-                << endl;
+            syslog << verbosity(0) << "simulating for "
+                << dec << num_cycles << " cycles" << endl;
         }
+        syslog << verbosity(0) << endl;
         for (unsigned cycle = 0; forever || cycle < num_cycles; ++cycle) {
             s->tick_positive_edge();
             s->tick_negative_edge();
         }
+        stats->end_sim();
+        syslog << verbosity(0) << endl;
+        syslog << verbosity(0) << "simulation ended successfully" << endl;
+        syslog << verbosity(0) << endl << *stats << endl;
     } catch (const exc_syscall_exit &e) {
+        stats->end_sim();
+        syslog << verbosity(0) << endl;
+        syslog << verbosity(0) << "simulation ended on CPU exit()" << endl;
+        syslog << verbosity(0) << endl << *stats << endl;
         exit(e.exit_code);
     } catch (const err &e) {
         cerr << "ERROR: " << e << endl;
         exit(2);
     }
+    signal(SIGINT, prev_sig_int_handler);
 }
 

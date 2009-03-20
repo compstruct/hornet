@@ -11,6 +11,7 @@
 #include <boost/shared_ptr.hpp>
 #include "cstdint.hpp"
 #include "logger.hpp"
+#include "statistics.hpp"
 #include "cpu.hpp"
 #include "node.hpp"
 #include "arbiter.hpp"
@@ -28,7 +29,8 @@ ostream &operator<<(ostream &, const routing_type_t &);
 
 class sys {
 public:
-    sys(shared_ptr<ifstream> image, logger &log) throw(err);
+    sys(shared_ptr<ifstream> image, uint64_t stats_t0, logger &log) throw(err);
+    shared_ptr<statistics> get_statistics() throw();
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
 private:
@@ -43,7 +45,7 @@ private:
     arbiters_t arbiters;
 
     uint64_t time;
-
+    shared_ptr<statistics> stats;
     logger &log;
 };
 

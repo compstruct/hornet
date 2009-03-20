@@ -46,9 +46,10 @@ bridge::bridge(shared_ptr<node> n,
                shared_ptr<channel_alloc> bridge_vca,
                const set<virtual_queue_id> &node_vq_ids, unsigned n2b_bw,
                const set<virtual_queue_id> &bridge_vq_ids, unsigned b2n_bw,
-               unsigned flits_per_queue, logger &l) throw(err)
+               unsigned flits_per_queue, shared_ptr<statistics> st,
+               logger &l) throw(err)
     : id(n->get_id()), target(n), vc_alloc(bridge_vca), incoming(), outgoing(),
-      ingress_dmas(), egress_dmas(), vqids(), log(l) {
+      ingress_dmas(), egress_dmas(), vqids(), stats(st), log(l) {
     unsigned dma_no = 1;
     if (bridge_vq_ids.size() > 32)
         throw err_too_many_bridge_queues(id.get_numeric_id(),
@@ -73,7 +74,7 @@ bridge::bridge(shared_ptr<node> n,
          i != node_ingress_queues.end(); ++i, ++dma_no) {
         egress_dma_channel *p =
             new egress_dma_channel(id, dma_no, b2n_bw, i->second, vc_alloc,
-                                   log);
+                                   st, log);
         shared_ptr<egress_dma_channel> d = shared_ptr<egress_dma_channel>(p);
         egress_dmas[i->first] = d;
     }
@@ -100,7 +101,7 @@ bridge::bridge(shared_ptr<node> n,
     for (ingress::queues_t::const_iterator i = bridge_ingress_queues.begin();
          i != bridge_ingress_queues.end(); ++i, ++dma_no) {
         ingress_dma_channel *p =
-            new ingress_dma_channel(id, dma_no, n2b_bw, i->second, log);
+            new ingress_dma_channel(id, dma_no, n2b_bw, i->second, st, log);
         shared_ptr<ingress_dma_channel> d = shared_ptr<ingress_dma_channel>(p);
         ingress_dmas[i->first] = d;
     }

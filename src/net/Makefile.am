@@ -22,5 +22,6 @@ libdarnet_la_SOURCES = \
     bridge.hpp bridge.cpp \
     arbiter.hpp arbiter.cpp \
     static_router.hpp static_router.cpp \
-    static_channel_alloc.hpp static_channel_alloc.cpp
+    static_channel_alloc.hpp static_channel_alloc.cpp \
+    statistics.hpp statistics.cpp
 

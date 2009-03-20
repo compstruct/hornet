@@ -38,8 +38,9 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
     if (in->bad()) throw err_bad_mem_img();
 }
 
-sys::sys(shared_ptr<ifstream> img, logger &new_log) throw(err)
-    : cpus(), bridges(), nodes(), time(0), log(new_log) {
+sys::sys(shared_ptr<ifstream> img, uint64_t stats_start, logger &new_log)
+    throw(err) : cpus(), bridges(), nodes(), time(0),
+                 stats(new statistics(time, stats_start)), log(new_log) {
     uint32_t num_nodes = read_word(img);
     log << verbosity(2) << "creating system with " << num_nodes << " node"
         << (num_nodes == 1 ? "" : "s") << "..." << endl;
@@ -72,7 +73,7 @@ sys::sys(shared_ptr<ifstream> img, logger &new_log) throw(err)
         }
         shared_ptr<bridge> b(new bridge(n, b_vca,
                                         n2b_queues, n2b_bw, b2n_queues, b2n_bw,
-                                        flits_per_q, log));
+                                        flits_per_q, stats, log));
         uint32_t mem_start = read_word(img);
         uint32_t mem_size = read_word(img);
         shared_ptr<mem> m(new mem(mem_start, mem_size, log));
@@ -159,6 +160,8 @@ sys::sys(shared_ptr<ifstream> img, logger &new_log) throw(err)
     }
     log << verbosity(2) << "system created" << endl;
 }
+
+shared_ptr<statistics> sys::get_statistics() throw() { return stats; }
 
 void sys::tick_positive_edge() throw(err) {
     log << verbosity(1) << "[system] tick " << dec << time << endl;
