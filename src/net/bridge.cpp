@@ -167,7 +167,7 @@ uint32_t bridge::get_queue_length(uint32_t queue) throw(err) {
 }
 
 uint32_t bridge::send(uint32_t flow, void *src, uint32_t len) throw(err) {
-    log << verbosity(3) << "[bridge " << id << "] sending " << len
+    log << verbosity(3) << "[bridge " << id << "] sending " << dec << len
         << " flits on flow " << flow_id(flow);
     virtual_queue_id q = vc_alloc->request(id, flow);
     if (!q.is_valid()) {
@@ -187,7 +187,7 @@ uint32_t bridge::receive(void *dst, uint32_t queue, uint32_t len) throw(err) {
     assert(vqids.size() <= 32);
     if (queue >= vqids.size())
         throw exc_bad_queue(id.get_numeric_id(), queue);
-    log << verbosity(3) << "[bridge " << id << "] receiving " << len
+    log << verbosity(3) << "[bridge " << id << "] receiving " << dec << len
         << " flits from queue " << virtual_queue_id(queue);
     virtual_queue_id vq_id = vqids[queue];
     assert(ingress_dmas.find(vq_id) != ingress_dmas.end());
