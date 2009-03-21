@@ -31,6 +31,8 @@ inline uint32_t dma_channel_id::get_numeric_id() const throw() { return id; }
 
 ostream &operator<<(ostream &, const dma_channel_id &);
 
+ostream &operator<<(ostream &, const pair<node_id, dma_channel_id> &);
+
 class dma_channel {
 public:
     virtual ~dma_channel();

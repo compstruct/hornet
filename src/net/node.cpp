@@ -11,7 +11,7 @@ node::node(node_id new_id, uint32_t memsz, shared_ptr<router> new_rt,
     : id(new_id), flits_per_queue(memsz), rt(new_rt), vc_alloc(new_vca),
       pressures(new pressure_tracker(new_id, l)), ingresses(), egresses(),
       xbar(new_id, l), queue_ids(), log(l) {
-    log << verbosity(3) << "node " << id << " created with " << dec << memsz
+    LOG(log,3) << "node " << id << " created with " << dec << memsz
         << " flit" << (memsz == 1 ? "" : "s") << " per queue" << endl;
 }
 

@@ -9,6 +9,10 @@ ostream &operator<<(ostream &out, const dma_channel_id &id) {
     return out << hex << setfill('0') << setw(2) << id.id;
 }
 
+ostream &operator<<(ostream &out, const pair<node_id, dma_channel_id> &id) {
+    return out << id.first << ":" << id.second;
+}
+
 dma_channel::dma_channel(node_id n_id, dma_channel_id d_id, uint32_t new_bw,
                          shared_ptr<virtual_queue> q,
                          shared_ptr<statistics> new_stats, logger &l) throw()
@@ -47,7 +51,8 @@ flow_id ingress_dma_channel::get_flow_id() const throw(err) {
 }
 
 void ingress_dma_channel::tick_positive_edge() throw(err) {
-    for (unsigned i = 0; ((bandwidth == 0 || i < bandwidth)
+    unsigned i;
+    for (i = 0; ((bandwidth == 0 || i < bandwidth)
                           && remaining_flits > 0 && vq->egress_ready()); ++i) {
         if (vq->egress_new_flow()) {
             flow = vq->get_egress_flow_id();
@@ -63,6 +68,10 @@ void ingress_dma_channel::tick_positive_edge() throw(err) {
         vq->pop();
         stats->receive_flit(flow);
         started = true;
+    }
+    if (i > 0) {
+        LOG(log,3) << "[dma " << id << "] received "
+            << dec << i << " flit" << (i == 1 ? "" : "s") << endl;
     }
 }
 
@@ -87,9 +96,15 @@ void egress_dma_channel::send(flow_id f, void *src, uint32_t len) throw(err) {
 }
 
 void egress_dma_channel::tick_positive_edge() throw(err) {
-    for (unsigned i = 0; ((bandwidth == 0 || i < bandwidth)
-                          && remaining_flits > 0 && !vq->full()
-                          && (started || vq->ingress_new_flow())); ++i) {
+    unsigned i;
+    LOG(log,3) << "[dma " << id << "] status: " << dec
+        << "bw " << bandwidth << "  started " << started
+        << "  remaining " << remaining_flits
+        << "  queue " << vq->get_id() << "  full " << vq->full()
+        << "  new_flow " << vq->ingress_new_flow() << endl;
+    for (i = 0; ((bandwidth == 0 || i < bandwidth)
+                 && remaining_flits > 0 && !vq->full()
+                 && (started || vq->ingress_new_flow())); ++i) {
         if (!started) {
             vq->push(head_flit(flow, remaining_flits));
         } else {
@@ -100,6 +115,10 @@ void egress_dma_channel::tick_positive_edge() throw(err) {
         }
         stats->send_flit(flow);
         started = true;
+    }
+    if (i > 0) {
+        LOG(log,3) << "[dma " << id << "] sent "
+            << dec << i << " flit" << (i == 1 ? "" : "s") << endl;
     }
 }
 

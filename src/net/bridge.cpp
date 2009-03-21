@@ -54,7 +54,7 @@ bridge::bridge(shared_ptr<node> n,
     if (bridge_vq_ids.size() > 32)
         throw err_too_many_bridge_queues(id.get_numeric_id(),
                                          bridge_vq_ids.size());
-    log << verbosity(3) << "bridge " << id << " created" << endl;
+    LOG(log,3) << "bridge " << id << " created" << endl;
 
     // bridge -> node: bridge egress and node ingress
     ingress_id node_ingress_id(n->get_id(), "B");
@@ -121,7 +121,7 @@ uint32_t bridge::get_transmission_done(uint32_t xmit_id) throw() {
     } else {
         throw exc_bad_transmission(id.get_numeric_id(), xmit_id);
     }
-    log << verbosity(3) << "[bridge " << id << "] reporting transmission "
+    LOG(log,3) << "[bridge " << id << "] reporting transmission "
         << hex << setfill('0') << setw(2) << xmit_id << " as "
         << (result ? "done" : "not done") << endl;
     return result;
@@ -135,7 +135,7 @@ uint32_t bridge::get_waiting_queues() throw() {
         assert(ingress_dmas.find(vqid) != ingress_dmas.end());
         waiting |= (ingress_dmas[vqid]->has_waiting_flow() ? 1 : 0) << i;
     }
-    log << verbosity(3) << "[bridge " << id << "] reporting waiting queues as "
+    LOG(log,3) << "[bridge " << id << "] reporting waiting queues as "
         << hex << setfill('0') << setw(8) << waiting << endl;
     return waiting;
 }
@@ -147,7 +147,7 @@ uint32_t bridge::get_queue_flow_id(uint32_t queue) throw(err) {
     virtual_queue_id vq_id = vqids[queue];
     assert(ingress_dmas.find(vq_id) != ingress_dmas.end());
     flow_id flow = ingress_dmas[vq_id]->get_flow_id();
-    log << verbosity(3) << "[bridge " << id
+    LOG(log,3) << "[bridge " << id
         << "] reporting head packet flow on queue "
         << virtual_queue_id(queue) << " as " << flow << endl;
     return flow.get_numeric_id();
@@ -160,25 +160,26 @@ uint32_t bridge::get_queue_length(uint32_t queue) throw(err) {
     virtual_queue_id vq_id = vqids[queue];
     assert(ingress_dmas.find(vq_id) != ingress_dmas.end());
     uint32_t len = ingress_dmas[vq_id]->get_flow_length();
-    log << verbosity(3) << "[bridge " << id
+    LOG(log,3) << "[bridge " << id
         << "] reporting head packet length on queue "
-        << virtual_queue_id(queue) << " as " << len << " flits" << endl;
+        << virtual_queue_id(queue) << " as " << dec << len << " flits" << endl;
     return len;
 }
 
 uint32_t bridge::send(uint32_t flow, void *src, uint32_t len) throw(err) {
-    log << verbosity(3) << "[bridge " << id << "] sending " << dec << len
+    LOG(log,3) << "[bridge " << id << "] sending " << dec << len
         << " flits on flow " << flow_id(flow);
     virtual_queue_id q = vc_alloc->request(id, flow);
     if (!q.is_valid()) {
-        log << ": blocked (channel busy)" << endl;
+        LOG(log,3) << ": blocked (channel busy)" << endl;
         return 0;
     }
     egress_dmas_t::iterator di = egress_dmas.find(q);
     assert(di != egress_dmas.end());
     assert(!di->second->busy()); // otherwise VC alloc should have failed
     uint32_t xmit_id = q.get_numeric_id() + 1;
-    log << ": started (transmission ID " << dec << xmit_id << ")" << endl;
+    LOG(log,3) << ": started (transmission ID " << dec << xmit_id << ")"
+        << endl;
     di->second->send(flow, src, len);
     return xmit_id;
 }
@@ -187,17 +188,18 @@ uint32_t bridge::receive(void *dst, uint32_t queue, uint32_t len) throw(err) {
     assert(vqids.size() <= 32);
     if (queue >= vqids.size())
         throw exc_bad_queue(id.get_numeric_id(), queue);
-    log << verbosity(3) << "[bridge " << id << "] receiving " << dec << len
+    LOG(log,3) << "[bridge " << id << "] receiving " << dec << len
         << " flits from queue " << virtual_queue_id(queue);
     virtual_queue_id vq_id = vqids[queue];
     assert(ingress_dmas.find(vq_id) != ingress_dmas.end());
     shared_ptr<ingress_dma_channel> dma = ingress_dmas[vq_id];
     if (dma->busy()) {
-        log << ": blocked (channel busy)" << endl;
+        LOG(log,3) << ": blocked (channel busy)" << endl;
         return 0;
     }
     uint32_t xmit_id = vq_id.get_numeric_id() + 1;
-    log << ": started (transmission ID " << dec << xmit_id << ")" << endl;
+    LOG(log,3) << ": started (transmission ID " << dec << xmit_id << ")"
+        << endl;
     ingress_dmas[vq_id]->receive(dst, len);
     return xmit_id;
 }

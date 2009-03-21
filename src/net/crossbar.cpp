@@ -1,6 +1,7 @@
 // -*- mode:c++; c-style:k&r; c-basic-offset:4; indent-tabs-mode: nil; -*-
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
+#include <algorithm>
 #include "crossbar.hpp"
 
 crossbar::crossbar(node_id parent, logger &l) throw()
@@ -63,22 +64,39 @@ void crossbar::rebuild_queues() throw() {
     }
 }
 
+static int random_range(int max) throw() {
+    double uniform_random = random()/(static_cast<double>(RAND_MAX)+1.0);
+    return static_cast<int>(max * uniform_random);
+}
+
 void crossbar::tick_positive_edge() throw(err) {
     map<node_id, unsigned> bws; // remaining bandwidths for each egress
     for (egresses_t::iterator i = egresses.begin(); i != egresses.end(); ++i) {
         bws[i->first] = i->second->get_bandwidth();
     }
-    for (vqid_queue_t::iterator eqi = egress_qs.begin();
+    random_shuffle(egress_qs.begin(), egress_qs.end(), random_range);
+    random_shuffle(ingress_qs.begin(), ingress_qs.end(), random_range);
+    LOG(log,12) << "[xbar " << id << "] arbitration" << endl;
+    for (vqids_t::iterator eqi = egress_qs.begin();
          eqi != egress_qs.end(); ++eqi) {
         node_id n; virtual_queue_id q;
         shared_ptr<virtual_queue> &eq = *eqi;
         tie(n,q) = eq->get_id();
+        LOG(log,12) << "[xbar " << id << "]     egress queue "
+            << eq->get_id() << endl;
         if (bws[n] > 0 && !eq->full()) {
-            for (vqid_queue_t::iterator iqi = ingress_qs.begin();
+            for (vqids_t::iterator iqi = ingress_qs.begin();
                  iqi != ingress_qs.end(); ++iqi) {
                 shared_ptr<virtual_queue> &iq = *iqi;
+                bool iq_ready = iq->egress_ready();
+                LOG(log,12) << "[xbar " << id
+                    << "]         considering ingress queue " << iq->get_id()
+                    << ": " << (iq_ready ? "" : "not ") << "ready" << endl;
                 if (iq->egress_ready() && iq->front_node_id() == n
                     && iq->front_vq_id() == q) {
+                    LOG(log,12) << "[xbar " << id
+                        << "]         queue " << iq->get_id()
+                        << " wins arbitration" << endl;
                     flit f = iq->front();
                     iq->pop();
                     eq->push(f);
@@ -88,9 +106,7 @@ void crossbar::tick_positive_edge() throw(err) {
             }
         }
     }
-    // change search order in the next tick
-    ingress_qs.push_back(ingress_qs.front()); ingress_qs.pop_front();
-    egress_qs.push_back(egress_qs.front()); egress_qs.pop_front();
 }
 
 void crossbar::tick_negative_edge() throw(err) { }
+

@@ -108,12 +108,6 @@ inline bool virtual_queue::ingress_new_flow() const throw () {
 }
 
 inline void virtual_queue::push(const flit &f) throw(err) {
-    if (ingress_remaining == 0) {
-        log << verbosity(3) << "[queue " << id << "] ingress: "
-            << reinterpret_cast<const head_flit &>(f) << endl;
-    } else {
-        log << verbosity(3) << "[queue " << id << "] ingress: " << f << endl;
-    }
     assert(!full());
     alloc->alloc();
     if (ingress_remaining == 0) {
@@ -121,8 +115,12 @@ inline void virtual_queue::push(const flit &f) throw(err) {
         ingress_flow = head.get_flow_id();
         ingress_remaining = head.get_length();
         next_node = rt->route(ingress_flow);
+        LOG(log,3) << "[queue " << id << "] ingress: " << head
+            << " (flow " << ingress_flow << ")" << endl;
     } else {
         --ingress_remaining;
+        LOG(log,3) << "[queue " << id << "] ingress: " << f
+            << " (flow " << ingress_flow << ")" << endl;
     }
     q.push(make_pair(f, next_node));
     pressures->inc(next_node);
@@ -131,19 +129,17 @@ inline void virtual_queue::push(const flit &f) throw(err) {
 inline void virtual_queue::pop() throw(err) {
     assert(!empty());
     flit f(0); node_id n; tie(f,n) = q.front();
-    if (egress_remaining == 0) {
-        log << verbosity(3) << "[queue " << id << "] egress: "
-            << reinterpret_cast<const head_flit &>(f) << endl;
-    } else {
-        log << verbosity(3) << "[queue " << id << "] egress: " << f << endl;
-    }
     alloc->dealloc();
     if (egress_remaining == 0) {
         const head_flit &head = reinterpret_cast<const head_flit &>(f);
         egress_flow = head.get_flow_id();
         egress_remaining = head.get_length();
+        LOG(log,3) << "[queue " << id << "] egress:  " << head
+            << " (flow " << egress_flow << ")" << endl;
     } else {
         --egress_remaining;
+        LOG(log,3) << "[queue " << id << "] egress:  " << f
+            << " (flow " << egress_flow << ")" << endl;
     }
     if (egress_remaining == 0) {
         vc_alloc->release(egress_vq);

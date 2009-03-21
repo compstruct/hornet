@@ -99,14 +99,14 @@ inline uint32_t cpu::get(const hwr &r) const throw(exc_reserved_hw_reg) {
 
 inline void cpu::set(const gpr &r, uint32_t v) throw() {
     if (r.get_no() != 0) {
-        log << verbosity(1) << "[cpu " << id << "]    " << r << " <- "
+        LOG(log,5) << "[cpu " << id << "]    " << r << " <- "
             << hex << setfill('0') << setw(8) << v << endl;
         gprs[r.get_no()] = v;
     }
 }
 
 inline void cpu::set_hi_lo(uint64_t v) throw() {
-    log << verbosity(1) << "[cpu " << id << "]   hi,lo <- "
+    LOG(log,5) << "[cpu " << id << "]   hi,lo <- "
         << hex << setfill('0') << setw(16) << v << endl;
     hi_lo = v;
 }
@@ -114,7 +114,7 @@ inline void cpu::set_hi_lo(uint64_t v) throw() {
 template <class V>
 inline V cpu::load(const uint32_t &addr) throw(err) {
     V result = ram->load<V>(addr);
-    log << verbosity(5) << "[cpu " << id << "]    "
+    LOG(log,5) << "[cpu " << id << "]    "
         << setfill('0') << setw(2 * sizeof(V)) << result << " <- mem["
         << hex << setfill('0') << setw(8) << addr << "]" << endl;
     return result;
@@ -122,7 +122,7 @@ inline V cpu::load(const uint32_t &addr) throw(err) {
 
 template<class V>
 inline void cpu::store(const uint32_t &addr, const V &val) throw(err) {
-    log << verbosity(5) << "[cpu " << id << "]    mem["
+    LOG(log,5) << "[cpu " << id << "]    mem["
         << hex << setfill('0') << setw(8) << addr << "] <- "
         << setfill('0') << setw(2 * sizeof(V)) << val << endl;
     ram->store(addr, val);

@@ -12,7 +12,7 @@ arbiter::arbiter(shared_ptr<node> src, shared_ptr<node> dst,
     if (sch != AS_NONE && sch != AS_DUMB)
         throw err_bad_arb_scheme(sch);
     if (sch != AS_NONE) {
-        log << verbosity(3) << "arbiter " << hex << setfill('0')
+        LOG(log,3) << "arbiter " << hex << setfill('0')
             << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
             << " created with bandwidths ->" << dec
             << src_to_dst->get_bandwidth()
@@ -41,7 +41,7 @@ void arbiter::tick_positive_edge() throw(err) {
         new_dst_to_src_bw = total_bw - new_src_to_dst_bw;
     }
     if (new_src_to_dst_bw != src_to_dst_bw) {
-        log << verbosity(3) << "[arbiter " << hex << setfill('0')
+        LOG(log,2) << "[arbiter " << hex << setfill('0')
             << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
             << "] adjusting bandwidths to ->" << dec
             << new_src_to_dst_bw << " and <-" << new_dst_to_src_bw << "\n"

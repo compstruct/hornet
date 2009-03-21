@@ -42,7 +42,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start, logger &new_log)
     throw(err) : cpus(), bridges(), nodes(), time(0),
                  stats(new statistics(time, stats_start)), log(new_log) {
     uint32_t num_nodes = read_word(img);
-    log << verbosity(2) << "creating system with " << num_nodes << " node"
+    LOG(log,2) << "creating system with " << num_nodes << " node"
         << (num_nodes == 1 ? "" : "s") << "..." << endl;
     typedef map<unsigned, shared_ptr<router> > routers_t;
     routers_t node_rts;
@@ -95,7 +95,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start, logger &new_log)
     uint32_t num_cxns = read_word(img);
     typedef set<pair<uint32_t, uint32_t> > cxns_t;
     cxns_t cxns;
-    log << verbosity(2) << "network fabric has " << dec << num_cxns
+    LOG(log,2) << "network fabric has " << dec << num_cxns
         << " one-way link" << (num_cxns == 1 ? "" : "s")
         << " (" << (arb_scheme == AS_NONE ? "no " : "with ")
         << "bidirectional arbitration)" << endl;
@@ -129,12 +129,12 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start, logger &new_log)
     }
 
     uint32_t num_routes = read_word(img);
-    log << verbosity(2) << "network contains " << dec << num_routes
+    LOG(log,2) << "network contains " << dec << num_routes
         << " flow" << (num_routes == 1 ? "" : "s") << endl;
     for (unsigned i = 0; i < num_routes; ++i) {
         uint32_t flow = read_word(img);
         uint32_t route_len = read_word(img);
-        log << verbosity(2) << "flow " << flow_id(flow) << " with " << dec
+        LOG(log,2) << "flow " << flow_id(flow) << " with " << dec
             << route_len << " hop" << (route_len == 1 ? "" : "s") << endl;
         uint32_t cur_n = 0xdeadbeef;
         for (unsigned hop = 0; hop < route_len; ++hop) {
@@ -158,13 +158,13 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start, logger &new_log)
             }
         }
     }
-    log << verbosity(2) << "system created" << endl;
+    LOG(log,1) << "system created" << endl;
 }
 
 shared_ptr<statistics> sys::get_statistics() throw() { return stats; }
 
 void sys::tick_positive_edge() throw(err) {
-    log << verbosity(1) << "[system] tick " << dec << time << endl;
+    LOG(log,1) << "[system] tick " << dec << time << endl;
     for (arbiters_t::iterator i = arbiters.begin(); i != arbiters.end(); ++i) {
         i->second->tick_positive_edge();
     }

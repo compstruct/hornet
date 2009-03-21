@@ -63,17 +63,20 @@ ostream &instr::show_to(ostream &out) const {
     // branches and jumps
     case IF_B3:      // e.g.: BEQ
         out << get_rs() << ", " << get_rt() << ", "
-            << showpos << (get_simm() << 2);
+            << showpos << (get_simm() << 2) << noshowpos;
         break;
     case IF_B2:      // e.g.: BGEZ
-        out << get_rs() << ", " << showpos << (get_simm() << 2);
+        out << get_rs() << ", " << showpos << (get_simm() << 2) << noshowpos;
         break;
     case IF_B1:      // e.g.: B
-        out << showpos << (get_simm() << 2);
+        out << showpos << (get_simm() << 2) << noshowpos;
         break;
     case IF_BC:      // e.g.: BC1F
-        if (get_cc() == 0) out << showpos << (get_simm() << 2);
-        else out << get_cc() << ", " << showpos << (get_simm() << 2);
+        if (get_cc() == 0)
+            out << showpos << (get_simm() << 2) << noshowpos;
+        else
+            out << get_cc() << ", " << showpos << (get_simm() << 2)
+                << noshowpos;
         break;
     case IF_J:       // e.g.: J
         out << hex << setw(8) << (get_j_tgt() << 2) << dec;

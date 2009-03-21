@@ -24,7 +24,7 @@ cpu::cpu(const cpu_id &new_id, shared_ptr<mem> new_ram, uint32_t entry_point,
 
     pc = entry_point;
     gprs[29] = stack_ptr;
-    log << verbosity(3) << "cpu " << id << " created with entry point at "
+    LOG(log,3) << "cpu " << id << " created with entry point at "
         << hex << setfill('0') << setw(8) << pc << " and stack pointer at "
         << setw(8) << stack_ptr << endl;
 }
@@ -43,7 +43,7 @@ void cpu::tick_negative_edge() throw(err) {
 
 void cpu::flush_stdout() throw() {
     if (!stdout_buffer.str().empty()) {
-        log << verbosity(0) << "[cpu " << id << " out] " << stdout_buffer.str()
+        LOG(log,0) << "[cpu " << id << " out] " << stdout_buffer.str()
             << flush;
         stdout_buffer.str("");
     }
@@ -132,7 +132,7 @@ inline uint32_t check_align(uint32_t addr, uint32_t mask) {
 void cpu::execute() throw(err) {
     assert(ram);
     instr i = instr(ram->load<uint32_t>(pc));
-    log << verbosity(2) << "[cpu " << id << "] "
+    LOG(log,5) << "[cpu " << id << "] "
         << hex << setfill('0') << setw(8) << pc << ": "
         << i << endl;
     instr_code code = i.get_opcode();

@@ -26,10 +26,17 @@ static shared_ptr<statistics> stats;
 
 void sig_int_handler(int signo) {
     stats->end_sim();
-    syslog << verbosity(0) << endl;
-    syslog << verbosity(0) << "simulation ended on keyboard interrupt" << endl;
-    syslog << verbosity(0) << endl << *stats << endl;
+    LOG(syslog,0) << endl << "simulation ended on keyboard interrupt" << endl
+        << endl << *stats << endl;
     exit(1);
+}
+
+static uint32_t fresh_random_seed() {
+    uint32_t random_seed = 0xdeadbeef;
+    std::ifstream urandom("/dev/urandom", std::ios::binary);
+    urandom.read(reinterpret_cast<char *>(&random_seed), sizeof(random_seed));
+    if (urandom.fail()) random_seed = time(NULL);
+    return random_seed;
 }
 
 shared_ptr<sys> new_system(string file, uint64_t stats_start) {
@@ -72,6 +79,8 @@ int main(int argc, char **argv) {
          "write a log to the given file")
         ("verbosity", po::value<unsigned>(), "set console verbosity")
         ("log-verbosity", po::value<unsigned>(), "set log verbosity")
+        ("random-seed", po::value<uint32_t>(),
+         "set random seed (default: use system entropy)")
         ("version", po::value<vector<bool> >()->zero_tokens()->composing(),
          "show program version and exit")
         ("help,h", po::value<vector<bool> >()->zero_tokens()->composing(),
@@ -106,7 +115,7 @@ int main(int argc, char **argv) {
     string mem_image = opts["mem_image"].as<string>();
     unsigned verb = (opts.count("verbosity") ?
                      opts["verbosity"].as<unsigned>() : 0);
-    syslog.add(cout, verbosity(verb));
+    syslog.add(cout, verb);
     if (opts.count("log")) {
         unsigned log_verb = (opts.count("log-verbosity") ?
                              opts["log-verbosity"].as<unsigned>() : verb);
@@ -118,7 +127,7 @@ int main(int argc, char **argv) {
                 cerr << "failed to write log: " << *fn << endl;
                 exit(1);
             }
-            syslog.add(f, verbosity(log_verb));
+            syslog.add(f, log_verb);
         }
     }
     bool forever = true;
@@ -137,7 +146,12 @@ int main(int argc, char **argv) {
             exit(1);
         }
     }
-    syslog << verbosity(0) << dar_full_version << endl << endl;
+    if (opts.count("random-seed")) {
+        srandom(opts["random-seed"].as<uint32_t>());
+    } else {
+        srandom(fresh_random_seed());
+    }
+    LOG(syslog,0) << dar_full_version << endl << endl;
     shared_ptr<sys> s;
     try {
         s = new_system(mem_image, stats_start);
@@ -152,25 +166,23 @@ int main(int argc, char **argv) {
     stats->start_sim();
     try {
         if (forever) {
-            syslog << verbosity(0) << "simulating forever" << endl;
+            LOG(syslog,0) << "simulating forever" << endl;
         } else {
-            syslog << verbosity(0) << "simulating for "
-                << dec << num_cycles << " cycles" << endl;
+            LOG(syslog,0) << "simulating for " << dec << num_cycles
+                << " cycle" << (num_cycles == 1 ? "" : "s") << endl;
         }
-        syslog << verbosity(0) << endl;
+        LOG(syslog,0) << endl;
         for (unsigned cycle = 0; forever || cycle < num_cycles; ++cycle) {
             s->tick_positive_edge();
             s->tick_negative_edge();
         }
         stats->end_sim();
-        syslog << verbosity(0) << endl;
-        syslog << verbosity(0) << "simulation ended successfully" << endl;
-        syslog << verbosity(0) << endl << *stats << endl;
+        LOG(syslog,0) << endl << "simulation ended successfully" << endl
+            << endl << *stats << endl;
     } catch (const exc_syscall_exit &e) {
         stats->end_sim();
-        syslog << verbosity(0) << endl;
-        syslog << verbosity(0) << "simulation ended on CPU exit()" << endl;
-        syslog << verbosity(0) << endl << *stats << endl;
+        LOG(syslog,0) << endl << "simulation ended on CPU exit()" << endl
+            << endl << *stats << endl;
         exit(e.exit_code);
     } catch (const err &e) {
         cerr << "ERROR: " << e << endl;

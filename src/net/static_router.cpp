@@ -21,7 +21,7 @@ void static_router::add_route(flow_id f, node_id n) throw(err) {
         throw err_duplicate_flow(get_id().get_numeric_id(),
                                  f.get_numeric_id());
     }
-    log << verbosity(4) << "router " << get_id() << " routing flow " << f
+    LOG(log,4) << "router " << get_id() << " routing flow " << f
         << " to node " << n << endl;
     routes[f] = n;
 }

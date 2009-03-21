@@ -11,76 +11,54 @@
 using namespace std;
 using namespace boost;
 
-class verbosity {
-public:
-    explicit verbosity(unsigned) throw();
-    ~verbosity() throw();
-    bool operator<(const verbosity &) throw();
-    bool operator<=(const verbosity &) throw();
-    bool operator==(const verbosity &) throw();
-    bool operator>=(const verbosity &) throw();
-    bool operator>(const verbosity &) throw();
-private:
-    unsigned verb;
-};
-
 class logstreambuf : public streambuf {
 public:
     logstreambuf() throw();
     virtual ~logstreambuf() throw();
-    void add(streambuf *, const verbosity &v) throw();
-    void set_message_verbosity(const verbosity &) throw();
+    void add(streambuf *, unsigned verbosity) throw();
+    void set_message_verbosity(unsigned verbosity) throw();
 protected:
     virtual int overflow(int);
 private:
-    vector<pair<verbosity, streambuf *> > streams;
-    verbosity msg_verb; // current message verbosity
+    vector<pair<unsigned, streambuf *> > streams;
+    unsigned msg_verb; // current message verbosity
 };
 
 class logger : public ostream {
 public:
     logger() throw();
     virtual ~logger() throw();
-    logger &add(ostream &, const verbosity &) throw();
-    logger &add(shared_ptr<ostream>, const verbosity &) throw();
-    friend ostream &operator<<(logger &, const verbosity &);
+    void add(ostream &, unsigned) throw();
+    void add(shared_ptr<ostream>, unsigned) throw();
+    void set_message_verbosity(unsigned) throw();
+    unsigned get_max_verbosity() const throw();
 private:
+    unsigned max_verbosity;
     logstreambuf buf;
     vector<shared_ptr<ostream> > owned_streams;
 };
 
-inline verbosity::verbosity(unsigned v) throw() : verb(v) { }
-
-inline verbosity::~verbosity() throw() { }
-
-inline
-bool verbosity::operator<(const verbosity &v) throw() { return verb<v.verb; }
-
-inline
-bool verbosity::operator<=(const verbosity &v) throw() { return verb<=v.verb; }
-
-inline
-bool verbosity::operator==(const verbosity &v) throw() { return verb==v.verb; }
-
-inline
-bool verbosity::operator>(const verbosity &v) throw() { return verb>v.verb; }
-
-inline
-bool verbosity::operator>=(const verbosity &v) throw() { return verb>=v.verb; }
-
 inline int logstreambuf::overflow(int ch) {
-    for (vector<pair<verbosity, streambuf *> >::iterator si = streams.begin();
+    for (vector<pair<unsigned, streambuf *> >::iterator si = streams.begin();
          si != streams.end(); ++si) {
         if (msg_verb <= si->first) si->second->sputc(ch);
     }
     return 0;
 }
 
-inline void logstreambuf::set_message_verbosity(const verbosity &v) throw() {
+inline void logstreambuf::set_message_verbosity(unsigned v) throw() {
     msg_verb = v;
 }
 
-ostream &operator<<(logger &out, const verbosity &v);
+inline void logger::set_message_verbosity(unsigned verb) throw() {
+    buf.set_message_verbosity(verb);
+}
+
+inline unsigned logger::get_max_verbosity() const throw() {
+    return max_verbosity;
+}
+
+#define LOG(l,v) if ((v) <= ((l)).get_max_verbosity()) (l).set_message_verbosity((v)), (l)
 
 #endif // __LOGGER_HPP__
 

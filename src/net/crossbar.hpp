@@ -4,7 +4,7 @@
 #ifndef __CROSSBAR_HPP__
 #define __CROSSBAR_HPP__
 
-#include <deque>
+#include <vector>
 #include "node_id.hpp"
 #include "virtual_queue.hpp"
 #include "ingress.hpp"
@@ -28,9 +28,9 @@ private:
     typedef map<node_id, shared_ptr<egress> > egresses_t;
     ingresses_t ingresses;
     egresses_t egresses;
-    typedef deque<shared_ptr<virtual_queue> > vqid_queue_t;
-    vqid_queue_t ingress_qs;
-    vqid_queue_t egress_qs;
+    typedef vector<shared_ptr<virtual_queue> > vqids_t;
+    vqids_t ingress_qs;
+    vqids_t egress_qs;
     logger &log;
 };
 

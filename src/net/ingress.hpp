@@ -62,6 +62,7 @@ public:
     void tick_negative_edge() throw(err);
     const queues_t &get_queues() const throw();
     const ingress_id &get_id() const throw();
+    friend ostream &operator<<(ostream &out, const ingress &v);
 private:
     typedef map<virtual_queue_id, pair<node_id, virtual_queue_id> > next_hops_t;
     const ingress_id id;
@@ -78,6 +79,8 @@ inline const ingress_id &ingress::get_id() const throw() { return id; }
 inline const ingress::queues_t &ingress::get_queues() const throw() {
     return vqs;
 }
+
+ostream &operator<<(ostream &out, const ingress &v);
 
 #endif // __INGRESS_HPP__
 

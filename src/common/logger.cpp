@@ -6,26 +6,23 @@
 logstreambuf::logstreambuf() throw() : streams(), msg_verb(0) { }
 logstreambuf::~logstreambuf() throw() { }
 
-void logstreambuf::add(streambuf *s, const verbosity &v) throw() {
-    streams.push_back(pair<verbosity,streambuf *>(v,s));
+void logstreambuf::add(streambuf *s, unsigned v) throw() {
+    streams.push_back(pair<unsigned,streambuf *>(v,s));
 }
 
-logger::logger() throw() : ostream(&buf), buf(), owned_streams() { }
+logger::logger() throw()
+    : ostream(&buf), max_verbosity(0), buf(), owned_streams() { }
+
 logger::~logger() throw() { }
 
-logger &logger::add(ostream &s, const verbosity &v) throw() {
+void logger::add(ostream &s, unsigned v) throw() {
+    if (v > max_verbosity) max_verbosity = v;
     buf.add(s.rdbuf(), v);
-    return *this;
 }
 
-logger &logger::add(const shared_ptr<ostream> s, const verbosity &v) throw() {
+void logger::add(const shared_ptr<ostream> s, unsigned v) throw() {
+    if (v > max_verbosity) max_verbosity = v;
     owned_streams.push_back(s);
     buf.add(s->rdbuf(), v);
-    return *this;
-}
-
-ostream &operator<<(logger &out, const verbosity &v) {
-    out.buf.set_message_verbosity(v);
-    return out;
 }
 

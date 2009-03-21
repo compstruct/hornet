@@ -35,7 +35,7 @@ void static_channel_alloc::add_route(node_id dst, flow_id f,
     map<flow_id, virtual_queue_id> &f2vq = routes[dst];
     if (f2vq.find(f) != f2vq.end())
         throw err_duplicate_flow(get_id().get_numeric_id(), f.get_numeric_id());
-    log << verbosity(4) << "channel alloc " << get_id() << " routing flow " << f
+    LOG(log,4) << "channel alloc " << get_id() << " routing flow " << f
         << " on node " << dst << " to queue " << q << endl;
     f2vq[f] = q;
 }

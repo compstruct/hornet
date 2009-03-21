@@ -12,10 +12,10 @@ ingress::ingress(const ingress_id &new_id, const set<virtual_queue_id> &vq_ids,
                  shared_ptr<channel_alloc> vca, shared_ptr<pressure_tracker> pt,
                  logger &l) throw(err) : id(new_id), vqs(), log(l) {
     const node_id &parent_id = id.get_node_id().get_numeric_id();
-    shared_ptr<common_alloc> alloc = 
-        shared_ptr<common_alloc>(new common_alloc(flits_per_queue));
     for (set<virtual_queue_id>::const_iterator i = vq_ids.begin();
          i != vq_ids.end(); ++i) {
+        shared_ptr<common_alloc> alloc = 
+            shared_ptr<common_alloc>(new common_alloc(flits_per_queue));
         if (vqs.find(*i) != vqs.end())
             throw err_duplicate_queue(parent_id.get_numeric_id(),
                                       i->get_numeric_id());
@@ -38,11 +38,22 @@ void ingress::tick_positive_edge() throw(err) {
     for (queues_t::iterator qi = vqs.begin(); qi != vqs.end(); ++qi) {
         qi->second->tick_positive_edge();
     }
+    LOG(log,11) << *this;
 }
 
 void ingress::tick_negative_edge() throw(err) {
     for (queues_t::iterator qi = vqs.begin(); qi != vqs.end(); ++qi) {
         qi->second->tick_negative_edge();
     }
+}
+
+ostream &operator<<(ostream &out, const ingress &i) {
+    out << "[port " << i.get_id() << "] ingress " << endl;
+    for (ingress::queues_t::const_iterator qi = i.vqs.begin();
+         qi != i.vqs.end(); ++qi) {
+        out << "[port " << i.get_id() << "]     queue "
+            << qi->first << " has length " << qi->second->size() << endl;
+    }
+    return out;
 }
 

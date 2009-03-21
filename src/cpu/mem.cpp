@@ -10,7 +10,7 @@ mem::mem(uint32_t new_start, uint32_t new_size,
     : start(new_start), size(new_size), contents(new uint8_t[new_size]),
       log(new_log) {
     if (contents == NULL) throw err_out_of_mem();
-    log << verbosity(3) << "memory segment created starting at "
+    LOG(log,3) << "memory segment created starting at "
         << hex << setfill('0') << setw(8) << start << " and containing "
         << dec << size << " bytes" << endl;
 };

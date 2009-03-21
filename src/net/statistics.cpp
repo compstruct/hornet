@@ -91,12 +91,13 @@ ostream &operator<<(ostream &out, statistics &stats) {
         }
         out << "    flow " << f << ": " << dec << sent
             << " sent and " << dec << received
-            << " received (" << dec << (received - sent)
+            << " received (" << dec << (sent >= received ? sent - received : 0)
             << " in flight)" << endl;
     }
     out << "    all flows: " << dec << total_sent
         << " sent and " << dec << total_received
-        << " received (" << dec << (total_received - total_sent)
+        << " received (" << dec
+        << (total_sent >= total_received ? total_sent - total_received : 0)
         << " in flight)" << endl;
     return out;
 }
