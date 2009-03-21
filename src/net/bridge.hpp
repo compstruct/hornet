@@ -43,6 +43,8 @@ public:
 
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
+    shared_ptr<egress> get_egress() throw();
+    shared_ptr<ingress> get_ingress() throw();
 private:
     const shared_ptr<ingress_dma_channel> &get_ingress_dma(uint32_t) const
         throw(err);
@@ -69,7 +71,6 @@ private:
     bridge(); // not defined
     bridge(const bridge &); // not defined
 };
-
 
 #endif // __BRIDGE_HPP__
 

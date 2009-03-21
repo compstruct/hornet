@@ -20,13 +20,6 @@
 using namespace std;
 using namespace boost;
 
-typedef enum {
-    RT_STATIC = 0,
-    NUM_RTS
-} routing_type_t;
-
-ostream &operator<<(ostream &, const routing_type_t &);
-
 class sys {
 public:
     sys(shared_ptr<ifstream> image, uint64_t stats_t0, logger &log) throw(err);

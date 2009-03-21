@@ -230,3 +230,7 @@ void bridge::tick_negative_edge() throw(err) {
     }
 }
 
+shared_ptr<egress> bridge::get_egress() throw() { return outgoing; }
+
+shared_ptr<ingress> bridge::get_ingress() throw() { return incoming; }
+
