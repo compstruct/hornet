@@ -64,7 +64,7 @@ public:
     const ingress_id &get_id() const throw();
     friend ostream &operator<<(ostream &out, const ingress &v);
 private:
-    typedef map<virtual_queue_id, pair<node_id, virtual_queue_id> > next_hops_t;
+    typedef map<virtual_queue_id, tuple<node_id, virtual_queue_id> > next_hops_t;
     const ingress_id id;
     queues_t vqs;
     next_hops_t next_hops;

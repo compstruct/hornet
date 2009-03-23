@@ -61,7 +61,7 @@ public:
                            shared_ptr<channel_alloc> vc_alloc,
                            shared_ptr<pressure_tracker> pressures,
                            shared_ptr<common_alloc> alloc, logger &log) throw();
-    const pair<node_id, virtual_queue_id> &get_id() const throw();
+    const tuple<node_id, virtual_queue_id> &get_id() const throw();
     void push(const flit &) throw(err); // does not update stale size
     void pop() throw(err); // updates stale size
     size_t size() const throw(); // reports stale size
@@ -78,8 +78,8 @@ public:
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
 private:
-    const pair<node_id, virtual_queue_id> id;
-    queue<pair<flit, node_id> > q;
+    const tuple<node_id, virtual_queue_id> id;
+    queue<tuple<flit, node_id> > q;
     shared_ptr<router> rt;
     shared_ptr<channel_alloc> vc_alloc;
     shared_ptr<pressure_tracker> pressures;
@@ -94,9 +94,9 @@ private:
     logger &log;
 };
 
-ostream &operator<<(ostream &, const pair<node_id, virtual_queue_id> &);
+ostream &operator<<(ostream &, const tuple<node_id, virtual_queue_id> &);
 
-inline const pair<node_id,virtual_queue_id>
+inline const tuple<node_id,virtual_queue_id>
 &virtual_queue::get_id() const throw() { return id; }
 
 inline bool virtual_queue::egress_new_flow() const throw () {
@@ -122,7 +122,7 @@ inline void virtual_queue::push(const flit &f) throw(err) {
         LOG(log,3) << "[queue " << id << "] ingress: " << f
             << " (flow " << ingress_flow << ")" << endl;
     }
-    q.push(make_pair(f, next_node));
+    q.push(make_tuple(f, next_node));
     pressures->inc(next_node);
 }
 
@@ -151,8 +151,8 @@ inline void virtual_queue::pop() throw(err) {
 }
 
 inline flow_id virtual_queue::get_egress_flow_id() const throw (err) {
-    if (empty()) throw err_empty_queue(id.first.get_numeric_id(),
-                                       id.second.get_numeric_id());
+    if (empty()) throw err_empty_queue(id.get<0>().get_numeric_id(),
+                                       id.get<1>().get_numeric_id());
     if (egress_remaining == 0) {
         const head_flit &head = reinterpret_cast<const head_flit &>(q.front());
         return head.get_flow_id();
@@ -162,8 +162,8 @@ inline flow_id virtual_queue::get_egress_flow_id() const throw (err) {
 }
 
 inline uint32_t virtual_queue::get_egress_flow_length() const throw (err) {
-    if (empty()) throw err_empty_queue(id.first.get_numeric_id(),
-                                       id.second.get_numeric_id());
+    if (empty()) throw err_empty_queue(id.get<0>().get_numeric_id(),
+                                       id.get<1>().get_numeric_id());
     if (egress_remaining == 0) {
         const head_flit &head = reinterpret_cast<const head_flit &>(q.front());
         return head.get_length();
@@ -183,20 +183,20 @@ inline bool virtual_queue::egress_ready() throw(err) {
 }
 
 inline flit virtual_queue::front() const throw(err) {
-    if (empty()) throw err_empty_queue(id.first.get_numeric_id(),
-                                       id.second.get_numeric_id());
-    return q.front().first;
+    if (empty()) throw err_empty_queue(id.get<0>().get_numeric_id(),
+                                       id.get<1>().get_numeric_id());
+    return q.front().get<0>();
 }
 
 inline node_id virtual_queue::front_node_id() const throw(err) {
-    if (empty()) throw err_empty_queue(id.first.get_numeric_id(),
-                                       id.second.get_numeric_id());
-    return q.front().second;
+    if (empty()) throw err_empty_queue(id.get<0>().get_numeric_id(),
+                                       id.get<1>().get_numeric_id());
+    return q.front().get<1>();
 }
 
 inline virtual_queue_id virtual_queue::front_vq_id() throw(err) {
-    if (empty()) throw err_empty_queue(id.first.get_numeric_id(),
-                                       id.second.get_numeric_id());
+    if (empty()) throw err_empty_queue(id.get<0>().get_numeric_id(),
+                                       id.get<1>().get_numeric_id());
     flit f(0); node_id n; tie(f,n) = q.front();
     if (!egress_vq.is_valid()) {
         egress_vq = vc_alloc->request(n, get_egress_flow_id());

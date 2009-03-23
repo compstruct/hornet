@@ -1,0 +1,12 @@
+*~
+.*.swp
+:2e*.swp
+.AppleDouble
+*.o
+*.a
+*.lo
+*.la
+.deps
+Makefile.in
+Makefile
+stamp-h1

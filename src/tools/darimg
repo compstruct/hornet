@@ -8,7 +8,7 @@ import sys, os, optparse, re, subprocess, ConfigParser
 
 objdump = 'objdump'
 file_magic = 'DAR '
-file_version = 200903190
+file_version = 200903220
 
 class Err(Exception):
     pass
@@ -139,14 +139,17 @@ def write_pe(out, id, img, n2b_bw, b2n_bw, qmem_size,
     for q in b2n_queues: out.write(w2bs(q))
     out.write(w2bs(len(n2b_queues)))
     for q in n2b_queues: out.write(w2bs(q))
-    # memory and CPU
-    file, format, entry, all_sections = \
-            read_section_headers(img, verbose=verbose)
-    sections = sort_sections(all_sections, verbose=verbose)
-    start = sections[0]['lma'] & 0xfffff000
-    addr_past_end = sections[-1]['lma'] + sections[-1]['size']
-    size = ((addr_past_end - start) & 0xfffff000) + 0x1000 + 0x4000
-    write_mem_image(out, file, start, size, entry, sections, verbose=verbose)
+    if img is not None: # memory and CPU
+        out.write(w2bs(0))
+        file, format, entry, all_sections = \
+                read_section_headers(img, verbose=verbose)
+        sections = sort_sections(all_sections, verbose=verbose)
+        start = sections[0]['lma'] & 0xfffff000
+        addr_past_end = sections[-1]['lma'] + sections[-1]['size']
+        size = ((addr_past_end - start) & 0xfffff000) + 0x1000 + 0x4000
+        write_mem_image(out, file, start, size, entry, sections, verbose=verbose)
+    else: # injector
+        out.write(w2bs(1))
 
 def write_cxn(out, src, src_port, dst, dst_port, bw, queues, verbose=False):
     if verbose:
@@ -225,7 +228,8 @@ def new_system_config(cfg, verbose=False):
         if id not in progs and dflt is None:
             raise Err('no code for CPU %d and no default' % id)
         code = progs[id] if id in progs else dflt
-        if not os.path.exists(code):
+        if code == 'injector': code = None
+        if code is not None and not os.path.exists(code):
             raise Err('missing code image file: %s' % code)
         return code
     def get_qs(s): return [p_nat(n) for n in cfg.get('queues',s).split()]

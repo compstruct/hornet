@@ -30,35 +30,35 @@ void crossbar::rebuild_queues() throw() {
     typedef iq_t::const_iterator iqi_t;
     ingress_qs.clear();
     egress_qs.clear();
-    vector<pair<iqi_t, iqi_t> > iq_iters;
-    vector<pair<iqi_t, iqi_t> > eq_iters;
+    vector<tuple<iqi_t, iqi_t> > iq_iters;
+    vector<tuple<iqi_t, iqi_t> > eq_iters;
     for (ingresses_t::iterator ii = ingresses.begin(); ii != ingresses.end();
          ++ii) {
         const iq_t &qs = ii->second->get_queues();
-        iq_iters.push_back(make_pair(qs.begin(), qs.end()));
+        iq_iters.push_back(make_tuple(qs.begin(), qs.end()));
     }
     for (egresses_t::iterator ei = egresses.begin(); ei != egresses.end();
          ++ei) {
         const iq_t &qs = ei->second->get_remote_queues();
-        eq_iters.push_back(make_pair(qs.begin(), qs.end()));
+        eq_iters.push_back(make_tuple(qs.begin(), qs.end()));
     }
     bool more_to_do = true;
     while (more_to_do) {
         more_to_do = false;
-        for (vector<pair<iqi_t,iqi_t> >::iterator iqii = iq_iters.begin();
+        for (vector<tuple<iqi_t,iqi_t> >::iterator iqii = iq_iters.begin();
              iqii != iq_iters.end(); ++iqii) {
-            if (iqii->first != iqii->second) {
+            if (iqii->get<0>() != iqii->get<1>()) {
                 more_to_do = true;
-                ingress_qs.push_back(iqii->first->second);
-                (iqii->first)++;
+                ingress_qs.push_back(iqii->get<0>()->second);
+                (iqii->get<0>())++;
             }
         }
-        for (vector<pair<iqi_t,iqi_t> >::iterator eqii = eq_iters.begin();
+        for (vector<tuple<iqi_t,iqi_t> >::iterator eqii = eq_iters.begin();
              eqii != eq_iters.end(); ++eqii) {
-            if (eqii->first != eqii->second) {
+            if (eqii->get<0>() != eqii->get<1>()) {
                 more_to_do = true;
-                egress_qs.push_back(eqii->first->second);
-                (eqii->first)++;
+                egress_qs.push_back(eqii->get<0>()->second);
+                (eqii->get<0>())++;
             }
         }
     }

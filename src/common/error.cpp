@@ -57,13 +57,14 @@ void exc_reserved_hw_reg::show_to(ostream &out) const {
     out << "reserved hardware register: " << reg_no;
 }
 
-exc_bus_err::exc_bus_err(const uint32_t new_addr, const uint32_t new_start,
+exc_bus_err::exc_bus_err(const uint32_t new_id, const uint32_t new_addr,
+                         const uint32_t new_start,
                          const uint32_t new_size) throw()
-    : addr(new_addr), start(new_start), num_bytes(new_size) { }
+    : id(new_id), addr(new_addr), start(new_start), num_bytes(new_size) { }
 exc_bus_err::~exc_bus_err() throw() { }
 void exc_bus_err::show_to(ostream &out) const {
-    out << hex << setfill('0') << "bus error: address 0x"
-        << setw(8) << addr
+    out << hex << setfill('0') << "memory " << setw(2) << id
+        << ": address 0x" << setw(8) << addr
         << " outside memory [" << setw(8) << start << ".."
         << setw(8) << (start + num_bytes - 1) << "]";
 }
@@ -90,6 +91,13 @@ exc_syscall_exit::exc_syscall_exit(uint32_t n) throw() : exit_code(n) { }
 exc_syscall_exit::~exc_syscall_exit() throw() { }
 void exc_syscall_exit::show_to(ostream &out) const {
     out << "exit(" << exit_code << ")";
+}
+
+exc_no_network::exc_no_network(uint32_t new_cpu) throw() : cpu(new_cpu) { }
+exc_no_network::~exc_no_network() throw() { }
+void exc_no_network::show_to(ostream &out) const {
+    out << "CPU " << setfill('0') << hex << setw(2) << cpu
+        << " not connected to a network";
 }
 
 exc_new_flow_mid_dma::exc_new_flow_mid_dma(uint32_t new_flow, uint32_t new_node,
@@ -213,7 +221,7 @@ void exc_bad_flow::show_to(ostream &out) const {
 err_route_not_static::err_route_not_static() throw() { }
 err_route_not_static::~err_route_not_static() throw() { }
 void err_route_not_static::show_to(ostream &out) const {
-    out << "attempting to add a route to a dynamically-routed system" << endl;
+    out << "attempting to add a route to a dynamically-routed system";
 }
 
 err_route_not_terminated::err_route_not_terminated(uint32_t f, uint32_t n)
@@ -222,7 +230,7 @@ err_route_not_terminated::~err_route_not_terminated() throw() { }
 void err_route_not_terminated::show_to(ostream &out) const {
     out << "flow " << hex << setfill('0') << setw(8) << flow
         << " ends at node " << setw(2) << node
-        << " without specifying a bridge queue" << endl;
+        << " without specifying a bridge queue";
 }
 
 err_duplicate_flow::err_duplicate_flow(uint32_t new_node,
@@ -256,4 +264,23 @@ err_bad_arb_scheme::err_bad_arb_scheme(uint32_t new_arb_scheme) throw()
 err_bad_arb_scheme::~err_bad_arb_scheme() throw() { }
 void err_bad_arb_scheme::show_to(ostream &out) const {
     out << "invalid arbitration scheme code: " << dec << arb_scheme;
+}
+
+err_parse::err_parse(const string &f, const string &m) throw()
+    : file(f), line(0), msg(m) { }
+err_parse::err_parse(const string &f, unsigned l, const string &m) throw()
+    : file(f), line(l), msg(m) { }
+
+err_parse::~err_parse() throw() { }
+void err_parse::show_to(ostream &out) const {
+    if (file == "" && line == 0) {
+        out << "unknown position";
+    } else if (file == "") {
+        out << "line " << dec << noshowpos << line;
+    } else if (line == 0) {
+        out << file;
+    } else {
+        out << file << ":" << dec << noshowpos << line;
+    }
+    out << ": " << msg;
 }

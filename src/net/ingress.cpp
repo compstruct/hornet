@@ -21,17 +21,17 @@ ingress::ingress(const ingress_id &new_id, const set<virtual_queue_id> &vq_ids,
                                       i->get_numeric_id());
         shared_ptr<virtual_queue> q(new virtual_queue(parent_id, *i, rt,
                                                       vca, pt, alloc, log));
-        vqs[q->get_id().second] = q;
+        vqs[q->get_id().get<1>()] = q;
     }
 }
 
 void ingress::add_queue(shared_ptr<virtual_queue> vq) throw(err) {
-    if (vqs.find(vq->get_id().second) != vqs.end())
+    if (vqs.find(vq->get_id().get<1>()) != vqs.end())
         throw err_duplicate_queue(id.get_node_id().get_numeric_id(),
-                                  vq->get_id().second.get_numeric_id());
-    assert(next_hops.find(vq->get_id().second) == next_hops.end());
-    vqs[vq->get_id().second] = vq;
-    next_hops[vq->get_id().second] = make_pair(node_id(), virtual_queue_id());
+                                  vq->get_id().get<1>().get_numeric_id());
+    assert(next_hops.find(vq->get_id().get<1>()) == next_hops.end());
+    vqs[vq->get_id().get<1>()] = vq;
+    next_hops[vq->get_id().get<1>()] = make_tuple(node_id(), virtual_queue_id());
 }
 
 void ingress::tick_positive_edge() throw(err) {

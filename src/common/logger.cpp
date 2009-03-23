@@ -7,7 +7,7 @@ logstreambuf::logstreambuf() throw() : streams(), msg_verb(0) { }
 logstreambuf::~logstreambuf() throw() { }
 
 void logstreambuf::add(streambuf *s, unsigned v) throw() {
-    streams.push_back(pair<unsigned,streambuf *>(v,s));
+    streams.push_back(tuple<unsigned,streambuf *>(v,s));
 }
 
 logger::logger() throw()

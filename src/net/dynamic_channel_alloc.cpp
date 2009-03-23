@@ -22,8 +22,8 @@ virtual_queue_id dynamic_channel_alloc::request(node_id n, flow_id)
     int shift = 1; // how much to shift queue for round-robin
     for (qi = qs.begin(); !q.is_valid() && qi != qs.end(); ++qi, ++shift) {
         if ((*qi)->ingress_new_flow()
-            && in_use.find((*qi)->get_id().second) == in_use.end()) {
-            q = (*qi)->get_id().second;
+            && in_use.find((*qi)->get_id().get<1>()) == in_use.end()) {
+            q = (*qi)->get_id().get<1>();
             in_use.insert(q);
         }
     }

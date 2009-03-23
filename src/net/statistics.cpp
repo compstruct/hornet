@@ -64,7 +64,7 @@ ostream &operator<<(ostream &out, statistics &stats) {
         total_received += i->second;
     }
     double cycles_per_s = ((static_cast<double>(stats.system_time) * 1.0e6) /
-                           static_cast<double>(sim_time.total_microseconds()));
+                            static_cast<double>(sim_time.total_microseconds()));
     out << "total simulation time:   " << dec << sim_time << endl
         << "total simulation cycles: " << dec << stats.system_time
         << " (" << cycles_per_s << " Hz)" << endl

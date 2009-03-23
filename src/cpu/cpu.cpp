@@ -12,29 +12,33 @@
 
 using namespace std;
 
-ostream &operator<<(ostream &out, const cpu_id &id) {
-    return out << hex << setfill('0') << setw(2) << id.id;
-}
-
-cpu::cpu(const cpu_id &new_id, shared_ptr<mem> new_ram, uint32_t entry_point,
+cpu::cpu(const pe_id &new_id, shared_ptr<mem> new_ram, uint32_t entry_point,
          uint32_t stack_ptr, logger &l) throw(err)
-    : id(new_id), time(0), pc(entry_point), ram(new_ram), net(),
+    : pe(new_id), time(0), pc(entry_point), ram(new_ram), net(),
       jump_active(false), interrupts_enabled(false), stdout_buffer(), log(l) {
     assert(ram);
 
     pc = entry_point;
     gprs[29] = stack_ptr;
-    LOG(log,3) << "cpu " << id << " created with entry point at "
-        << hex << setfill('0') << setw(8) << pc << " and stack pointer at "
-        << setw(8) << stack_ptr << endl;
+    LOG(log,3) << "cpu " << get_id() << " created with entry point at "
+               << hex << setfill('0') << setw(8) << pc << " and stack pointer at "
+               << setw(8) << stack_ptr << endl;
 }
+
+cpu::~cpu() throw() { }
 
 void cpu::connect(shared_ptr<bridge> net_bridge) throw() { net = net_bridge; }
 
 void cpu::tick_positive_edge() throw(err) {
     assert(ram);
     execute();
-    pc = jump_active && (jump_time == time) ? jump_target : pc + 4;
+    if (jump_active && (jump_time == time)) {
+        LOG(log,5) << "[cpu " << get_id() << "]     pc <- "
+                   << hex << setfill('0') << setw(8) << jump_target << endl;
+        pc = jump_target;
+    } else {
+        pc += 4;
+    }
 }
 
 void cpu::tick_negative_edge() throw(err) {
@@ -43,8 +47,8 @@ void cpu::tick_negative_edge() throw(err) {
 
 void cpu::flush_stdout() throw() {
     if (!stdout_buffer.str().empty()) {
-        LOG(log,0) << "[cpu " << id << " out] " << stdout_buffer.str()
-            << flush;
+        LOG(log,0) << "[cpu " << get_id() << " out] " << stdout_buffer.str()
+                   << flush;
         stdout_buffer.str("");
     }
 }
@@ -71,20 +75,26 @@ void cpu::syscall(uint32_t call_no) throw(err) {
     case SYSCALL_EXIT:
         flush_stdout(); throw exc_syscall_exit(get(gpr(4))); break;
     case SYSCALL_SEND:
+        if (!net) throw exc_no_network(get_id().get_numeric_id());
         set(gpr(2), net->send(get(gpr(4)), ram->ptr(get(gpr(5))),
                               get(gpr(6)) >> 3));
         break;
     case SYSCALL_RECEIVE:
+        if (!net) throw exc_no_network(get_id().get_numeric_id());
         set(gpr(2), net->receive(ram->ptr(get(gpr(5))), get(gpr(4)),
                                  get(gpr(6)) >> 3));
         break;
     case SYSCALL_TRANSMISSION_DONE:
+        if (!net) throw exc_no_network(get_id().get_numeric_id());
         set(gpr(2), net->get_transmission_done(get(gpr(4)))); break;
     case SYSCALL_WAITING_QUEUES:
+        if (!net) throw exc_no_network(get_id().get_numeric_id());
         set(gpr(2), net->get_waiting_queues()); break;
     case SYSCALL_PACKET_FLOW:
+        if (!net) throw exc_no_network(get_id().get_numeric_id());
         set(gpr(2), net->get_queue_flow_id(get(gpr(4)))); break;
     case SYSCALL_PACKET_LENGTH:
+        if (!net) throw exc_no_network(get_id().get_numeric_id());
         set(gpr(2), net->get_queue_length(get(gpr(4))) << 3); break;
     default: flush_stdout(); throw exc_bad_syscall(call_no);
     }
@@ -132,9 +142,9 @@ inline uint32_t check_align(uint32_t addr, uint32_t mask) {
 void cpu::execute() throw(err) {
     assert(ram);
     instr i = instr(ram->load<uint32_t>(pc));
-    LOG(log,5) << "[cpu " << id << "] "
-        << hex << setfill('0') << setw(8) << pc << ": "
-        << i << endl;
+    LOG(log,5) << "[cpu " << get_id() << "] "
+               << hex << setfill('0') << setw(8) << pc << ": "
+               << i << endl;
     instr_code code = i.get_opcode();
     switch (code) {
     case IC_ABS_D: unimplemented_instr(i, pc);

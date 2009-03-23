@@ -12,43 +12,19 @@
 #include "reg.hpp"
 #include "mem.hpp"
 #include "bridge.hpp"
+#include "pe.hpp"
 
 using namespace std;
 using namespace boost;
 
-class cpu_id {
+class cpu : public pe {
 public:
-    cpu_id(uint32_t new_id) throw();
-    bool operator==(const cpu_id &) const throw();
-    bool operator<(const cpu_id &) const throw();
-    uint32_t get_numeric_id() const throw();
-    friend ostream &operator<<(ostream &, const cpu_id &);
-private:
-    explicit cpu_id() throw();
-    const uint32_t id;
-};
-
-inline cpu_id::cpu_id(uint32_t new_id) throw() : id(new_id) { }
-
-inline bool cpu_id::operator==(const cpu_id &o) const throw() {
-    return id == o.id;
-}
-
-inline bool cpu_id::operator<(const cpu_id &o) const throw() {
-    return id < o.id;
-}
-
-inline uint32_t cpu_id::get_numeric_id() const throw() { return id; }
-
-ostream &operator<<(ostream &, const cpu_id &);
-
-class cpu {
-public:
-    explicit cpu(const cpu_id &id, shared_ptr<mem> ram,
+    explicit cpu(const pe_id &id, shared_ptr<mem> ram,
                  uint32_t pc, uint32_t stack_pointer, logger &log) throw(err);
-    void connect(shared_ptr<bridge> net_bridge) throw();
-    void tick_positive_edge() throw(err);
-    void tick_negative_edge() throw(err);
+    virtual ~cpu() throw();
+    virtual void connect(shared_ptr<bridge> net_bridge) throw();
+    virtual void tick_positive_edge() throw(err);
+    virtual void tick_negative_edge() throw(err);
 
 private:
     uint32_t get(const gpr &r) const throw();
@@ -58,7 +34,6 @@ private:
     void execute() throw(err);
 
 private:
-    cpu_id id;
     uint32_t time; // increments every cycle
     uint32_t pc;
     uint32_t gprs[32];
@@ -86,7 +61,7 @@ inline uint32_t cpu::get(const gpr &r) const throw() {
 
 inline uint32_t cpu::get(const hwr &r) const throw(exc_reserved_hw_reg) {
     switch (r.get_no()) {
-    case 0: return id.get_numeric_id();
+    case 0: return get_id().get_numeric_id();
     case 1: return 0;
     case 2: return time;
     case 3: return 1; // spec ambiguous on whether cc_res is 3 or 4
@@ -99,14 +74,14 @@ inline uint32_t cpu::get(const hwr &r) const throw(exc_reserved_hw_reg) {
 
 inline void cpu::set(const gpr &r, uint32_t v) throw() {
     if (r.get_no() != 0) {
-        LOG(log,5) << "[cpu " << id << "]    " << r << " <- "
+        LOG(log,5) << "[cpu " << get_id() << "]     " << r << " <- "
             << hex << setfill('0') << setw(8) << v << endl;
         gprs[r.get_no()] = v;
     }
 }
 
 inline void cpu::set_hi_lo(uint64_t v) throw() {
-    LOG(log,5) << "[cpu " << id << "]   hi,lo <- "
+    LOG(log,5) << "[cpu " << get_id() << "]     hi,lo <- "
         << hex << setfill('0') << setw(16) << v << endl;
     hi_lo = v;
 }
@@ -114,7 +89,7 @@ inline void cpu::set_hi_lo(uint64_t v) throw() {
 template <class V>
 inline V cpu::load(const uint32_t &addr) throw(err) {
     V result = ram->load<V>(addr);
-    LOG(log,5) << "[cpu " << id << "]    "
+    LOG(log,5) << "[cpu " << get_id() << "]     "
         << setfill('0') << setw(2 * sizeof(V)) << result << " <- mem["
         << hex << setfill('0') << setw(8) << addr << "]" << endl;
     return result;
@@ -122,7 +97,7 @@ inline V cpu::load(const uint32_t &addr) throw(err) {
 
 template<class V>
 inline void cpu::store(const uint32_t &addr, const V &val) throw(err) {
-    LOG(log,5) << "[cpu " << id << "]    mem["
+    LOG(log,5) << "[cpu " << get_id() << "]     mem["
         << hex << setfill('0') << setw(8) << addr << "] <- "
         << setfill('0') << setw(2 * sizeof(V)) << val << endl;
     ram->store(addr, val);

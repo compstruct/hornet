@@ -26,7 +26,9 @@ AC_OUTPUT(\
     src/Makefile \
     src/common/Makefile \
     src/net/Makefile \
+    src/pe/Makefile \
     src/cpu/Makefile \
+    src/inject/Makefile \
     src/sys/Makefile \
     src/sim/Makefile \
     src/tools/Makefile \

@@ -1,1 +1,1 @@
-SUBDIRS = common net cpu sys sim tools rts
+SUBDIRS = common net pe cpu inject sys sim tools rts

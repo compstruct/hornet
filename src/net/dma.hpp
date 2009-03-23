@@ -31,7 +31,7 @@ inline uint32_t dma_channel_id::get_numeric_id() const throw() { return id; }
 
 ostream &operator<<(ostream &, const dma_channel_id &);
 
-ostream &operator<<(ostream &, const pair<node_id, dma_channel_id> &);
+ostream &operator<<(ostream &, const tuple<node_id, dma_channel_id> &);
 
 class dma_channel {
 public:
@@ -39,7 +39,7 @@ public:
     bool busy() const throw();
     const dma_channel_id &get_id() const throw();
 protected:
-    const pair<node_id, dma_channel_id> id;
+    const tuple<node_id, dma_channel_id> id;
     const uint32_t bandwidth;
     shared_ptr<virtual_queue> vq;
     bool started;
@@ -94,7 +94,7 @@ private:
 inline bool dma_channel::busy() const throw() { return remaining_flits > 0; }
 
 inline const dma_channel_id &dma_channel::get_id() const throw() {
-    return id.second;
+    return id.get<1>();
 }
 
 #endif // __DMA_HPP__

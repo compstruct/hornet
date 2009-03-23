@@ -9,14 +9,14 @@ ostream &operator<<(ostream &out, const dma_channel_id &id) {
     return out << hex << setfill('0') << setw(2) << id.id;
 }
 
-ostream &operator<<(ostream &out, const pair<node_id, dma_channel_id> &id) {
-    return out << id.first << ":" << id.second;
+ostream &operator<<(ostream &out, const tuple<node_id, dma_channel_id> &id) {
+    return out << id.get<0>() << ":" << id.get<1>();
 }
 
 dma_channel::dma_channel(node_id n_id, dma_channel_id d_id, uint32_t new_bw,
                          shared_ptr<virtual_queue> q,
                          shared_ptr<statistics> new_stats, logger &l) throw()
-    : id(make_pair(n_id, d_id)), bandwidth(new_bw), vq(q), 
+    : id(make_tuple(n_id, d_id)), bandwidth(new_bw), vq(q), 
       started(false), flow(0xdeadbeef), remaining_flits(0),
       mem(NULL), stats(new_stats), log(l) { }
 
@@ -31,8 +31,8 @@ ingress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned new_bw,
 ingress_dma_channel::~ingress_dma_channel() { }
 
 void ingress_dma_channel::receive(void *dst, uint32_t len) throw(err) {
-    if (busy()) throw exc_dma_busy(id.first.get_numeric_id(),
-                                   id.second.get_numeric_id());
+    if (busy()) throw exc_dma_busy(id.get<0>().get_numeric_id(),
+                                   id.get<1>().get_numeric_id());
     started = false;
     mem = dst;
     remaining_flits = len;
@@ -58,11 +58,11 @@ void ingress_dma_channel::tick_positive_edge() throw(err) {
             flow = vq->get_egress_flow_id();
             if (started)
                 throw exc_new_flow_mid_dma(flow.get_numeric_id(),
-                                           id.first.get_numeric_id(),
-                                           id.second.get_numeric_id());
+                                           id.get<0>().get_numeric_id(),
+                                           id.get<1>().get_numeric_id());
         } else {
-            *((uint64_t *) mem) = endian(vq->front().get_data());
-            mem = (uint8_t *) mem + sizeof(uint64_t);
+            if (mem) *((uint64_t *) mem) = endian(vq->front().get_data());
+            mem = mem ? (uint8_t *) mem + sizeof(uint64_t) : mem;
             --remaining_flits;
         }
         vq->pop();
@@ -87,8 +87,8 @@ egress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned new_bw,
 egress_dma_channel::~egress_dma_channel() { }
 
 void egress_dma_channel::send(flow_id f, void *src, uint32_t len) throw(err) {
-    if (busy()) throw exc_dma_busy(id.first.get_numeric_id(),
-                                   id.second.get_numeric_id());
+    if (busy()) throw exc_dma_busy(id.get<0>().get_numeric_id(),
+                                   id.get<1>().get_numeric_id());
     started = false;
     flow = f;
     mem = src;
@@ -103,10 +103,13 @@ void egress_dma_channel::tick_positive_edge() throw(err) {
         if (!started) {
             vq->push(head_flit(flow, remaining_flits));
         } else {
-            vq->push(flit(endian(*((uint64_t *) mem))));
-            mem = (uint8_t *) mem + sizeof(uint64_t);
             --remaining_flits;
-            if (remaining_flits == 0) vc_alloc->release(vq->get_id().second);
+            uint64_t v = (mem ? *((uint64_t *) mem)
+                          : ((((uint64_t) flow.get_numeric_id()) << 32)
+                             | remaining_flits));
+            vq->push(flit(endian(v)));
+            mem = mem ? (uint8_t *) mem + sizeof(uint64_t) : mem;
+            if (remaining_flits == 0) vc_alloc->release(vq->get_id().get<1>());
         }
         stats->send_flit(flow);
         started = true;
@@ -116,6 +119,5 @@ void egress_dma_channel::tick_positive_edge() throw(err) {
             << dec << i << " flit" << (i == 1 ? "" : "s") << endl;
     }
 }
-
+                
 void egress_dma_channel::tick_negative_edge() throw(err) { }
-

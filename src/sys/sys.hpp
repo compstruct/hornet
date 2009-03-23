@@ -12,7 +12,7 @@
 #include "cstdint.hpp"
 #include "logger.hpp"
 #include "statistics.hpp"
-#include "cpu.hpp"
+#include "pe.hpp"
 #include "node.hpp"
 #include "arbiter.hpp"
 #include "bridge.hpp"
@@ -22,17 +22,18 @@ using namespace boost;
 
 class sys {
 public:
-    sys(shared_ptr<ifstream> image, uint64_t stats_t0, logger &log) throw(err);
+    sys(shared_ptr<ifstream> image, uint64_t stats_t0,
+        shared_ptr<vector<string> > event_files, logger &log) throw(err);
     shared_ptr<statistics> get_statistics() throw();
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
 private:
-    typedef map<unsigned, shared_ptr<cpu> > cpus_t;
+    typedef map<unsigned, shared_ptr<pe> > pes_t;
     typedef map<unsigned, shared_ptr<bridge> > bridges_t;
     typedef map<unsigned, shared_ptr<node> > nodes_t;
-    typedef map<pair<unsigned, unsigned>, shared_ptr<arbiter> > arbiters_t;
+    typedef map<tuple<unsigned, unsigned>, shared_ptr<arbiter> > arbiters_t;
 
-    cpus_t cpus;
+    pes_t pes;
     bridges_t bridges;
     nodes_t nodes;
     arbiters_t arbiters;

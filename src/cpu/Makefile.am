@@ -1,4 +1,4 @@
-CPPFLAGS += $(BOOST_CPPFLAGS) -I$(top_srcdir)/src/net
+CPPFLAGS += $(BOOST_CPPFLAGS) -I$(top_srcdir)/src/net -I$(top_srcdir)/src/pe
 LDFLAGS += $(BOOST_LDFLAGS)
 
 AM_CXXFLAGS = -Wall -Werror

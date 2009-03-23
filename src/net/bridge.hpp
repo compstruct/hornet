@@ -45,6 +45,7 @@ public:
     void tick_negative_edge() throw(err);
     shared_ptr<egress> get_egress() throw();
     shared_ptr<ingress> get_ingress() throw();
+    shared_ptr<vector<uint32_t> > get_ingress_queue_ids() throw();
 private:
     const shared_ptr<ingress_dma_channel> &get_ingress_dma(uint32_t) const
         throw(err);

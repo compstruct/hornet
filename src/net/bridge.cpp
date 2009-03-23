@@ -234,3 +234,8 @@ shared_ptr<egress> bridge::get_egress() throw() { return outgoing; }
 
 shared_ptr<ingress> bridge::get_ingress() throw() { return incoming; }
 
+shared_ptr<vector<uint32_t> > bridge::get_ingress_queue_ids() throw() {
+    shared_ptr<vector<uint32_t> > v(new vector<uint32_t>(vqids.size()));
+    for (uint32_t i = 0; i < vqids.size(); ++i) v->push_back(i);
+    return v;
+}

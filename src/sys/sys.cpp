@@ -5,6 +5,8 @@
 #include <utility>
 #include <set>
 #include <cassert>
+#include <boost/tuple/tuple.hpp>
+#include <boost/tuple/tuple_comparison.hpp>
 #include "cstdint.hpp"
 #include "endian.hpp"
 #include "node.hpp"
@@ -13,6 +15,8 @@
 #include "static_channel_alloc.hpp"
 #include "dynamic_channel_alloc.hpp"
 #include "cpu.hpp"
+#include "injector.hpp"
+#include "event_parser.hpp"
 #include "sys.hpp"
 
 typedef enum {
@@ -20,6 +24,12 @@ typedef enum {
     VCA_ROUND_ROBIN = 1,
     NUM_VCAS
 } vca_type_t;
+
+typedef enum {
+    PE_CPU = 0,
+    PE_INJECTOR = 1,
+    NUM_PES
+} pe_type_t;
 
 ostream &operator<<(ostream &out, const vca_type_t &vat) {
     switch (vat) {
@@ -47,9 +57,10 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
     if (in->bad()) throw err_bad_mem_img();
 }
 
-sys::sys(shared_ptr<ifstream> img, uint64_t stats_start, logger &new_log)
-    throw(err) : cpus(), bridges(), nodes(), time(0),
-                 stats(new statistics(time, stats_start)), log(new_log) {
+sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
+         shared_ptr<vector<string> > events_files, logger &new_log) throw(err)
+    : pes(), bridges(), nodes(), time(0),
+      stats(new statistics(time, stats_start)), log(new_log) {
     uint32_t vca_type_word = read_word(img);
     if (vca_type_word >= NUM_VCAS) throw err_bad_mem_img();
     vca_type_t vca_type = static_cast<vca_type_t>(vca_type_word);
@@ -61,6 +72,10 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start, logger &new_log)
     typedef map<unsigned, shared_ptr<channel_alloc> > vcas_t;
     vcas_t br_vcas;
     vcas_t n_vcas;
+    typedef event_parser::injectors_t injectors_t;
+    typedef event_parser::flow_starts_t flow_starts_t;
+    shared_ptr<injectors_t> injectors(new injectors_t());
+    shared_ptr<flow_starts_t> flow_starts(new flow_starts_t());
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
         shared_ptr<router> n_rt(new static_router(id, log));
@@ -109,17 +124,34 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start, logger &new_log)
                 static_pointer_cast<dynamic_channel_alloc>(n_vca);
             d_n_vca->add_egress(node_id(id), n->get_egress_to(node_id(id)));
         }
-        uint32_t mem_start = read_word(img);
-        uint32_t mem_size = read_word(img);
-        shared_ptr<mem> m(new mem(mem_start, mem_size, log));
-        read_mem(m->ptr(mem_start), mem_size, img);
-
-        uint32_t cpu_entry_point = read_word(img);
-        uint32_t cpu_stack_pointer = read_word(img);
-        shared_ptr<cpu> c(new cpu(cpu_id(id), m, cpu_entry_point,
-                                  cpu_stack_pointer, log));
-        c->connect(b);
-        cpus[id] = c;
+        uint32_t pe_type_word = read_word(img);
+        if (pe_type_word >= NUM_PES) throw err_bad_mem_img();
+        pe_type_t pe_type = static_cast<pe_type_t>(pe_type_word);
+        shared_ptr<pe> p;
+        switch (pe_type) {
+        case PE_CPU: {
+            uint32_t mem_start = read_word(img);
+            uint32_t mem_size = read_word(img);
+            shared_ptr<mem> m(new mem(id, mem_start, mem_size, log));
+            read_mem(m->ptr(mem_start), mem_size, img);
+            
+            uint32_t cpu_entry_point = read_word(img);
+            uint32_t cpu_stack_pointer = read_word(img);
+            p = shared_ptr<pe>(new cpu(pe_id(id), m, cpu_entry_point,
+                                       cpu_stack_pointer, log));
+            break;
+        }
+        case PE_INJECTOR: {
+            shared_ptr<injector> inj(new injector(id, time, log));
+            p = inj;
+            (*injectors)[id] = inj;
+            break;
+        }
+        default:
+            throw err_bad_mem_img();
+        }
+        p->connect(b);
+        pes[id] = p;
         bridges[id] = b;
         nodes[id] = n;
         br_vcas[id] = b_vca;
@@ -128,7 +160,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start, logger &new_log)
     }
     arbitration_t arb_scheme = static_cast<arbitration_t>(read_word(img));
     uint32_t num_cxns = read_word(img);
-    typedef set<pair<uint32_t, uint32_t> > cxns_t;
+    typedef set<tuple<uint32_t, uint32_t> > cxns_t;
     cxns_t cxns;
     LOG(log,2) << "network uses " << vca_type
         << " virtual channel allocation" << endl;
@@ -147,6 +179,8 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start, logger &new_log)
         for (unsigned q = 0; q < link_num_queues; ++q) {
             queues.insert(virtual_queue_id(read_word(img)));
         }
+        if (nodes.find(link_src_n) == nodes.end())throw err_bad_mem_img();
+        if (nodes.find(link_dst_n) == nodes.end()) throw err_bad_mem_img();
         nodes[link_dst_n]->connect_from(string(1, link_dst_port_name),
                                         nodes[link_src_n],
                                         string(1, link_src_port_name),
@@ -157,15 +191,17 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start, logger &new_log)
             vca->add_egress(node_id(link_dst_n),
                             nodes[link_src_n]->get_egress_to(link_dst_n));
         }
-        cxns.insert(make_pair(link_src_n, link_dst_n));
+        cxns.insert(make_tuple(link_src_n, link_dst_n));
     }
     if (arb_scheme != AS_NONE) {
         for (cxns_t::const_iterator i = cxns.begin(); i != cxns.end(); ++i) {
-            if (i->first <= i->second
-                && cxns.count(make_pair(i->second, i->first)) > 0) {
+            uint32_t from, to;
+            tie(from, to) = *i;
+            if (from <= to
+                && cxns.count(make_tuple(to, from)) > 0) {
                 arbiters[*i] =
-                    shared_ptr<arbiter>(new arbiter(nodes[i->first],
-                                                    nodes[i->second],
+                    shared_ptr<arbiter>(new arbiter(nodes[from],
+                                                    nodes[to],
                                                     arb_scheme, log));
             }
         }
@@ -187,6 +223,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start, logger &new_log)
                 next_q = read_word(img);
             }
             if (hop == 0) { // origin: program the bridge
+                (*flow_starts)[flow] = next_n;
                 if (vca_type == VCA_TABLE) {
                     shared_ptr<static_channel_alloc> vca =
                         static_pointer_cast<static_channel_alloc>
@@ -219,6 +256,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start, logger &new_log)
             }
         }
     }
+    event_parser ep(events_files, injectors, flow_starts);
     LOG(log,1) << "system created" << endl;
 }
 
@@ -229,7 +267,7 @@ void sys::tick_positive_edge() throw(err) {
     for (arbiters_t::iterator i = arbiters.begin(); i != arbiters.end(); ++i) {
         i->second->tick_positive_edge();
     }
-    for (cpus_t::iterator i = cpus.begin(); i != cpus.end(); ++i) {
+    for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
         i->second->tick_positive_edge();
     }
     for (nodes_t::iterator i = nodes.begin(); i != nodes.end(); ++i) {
@@ -245,7 +283,7 @@ void sys::tick_negative_edge() throw(err) {
     for (arbiters_t::iterator i = arbiters.begin(); i != arbiters.end(); ++i) {
         i->second->tick_negative_edge();
     }
-    for (cpus_t::iterator i = cpus.begin(); i != cpus.end(); ++i) {
+    for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
         i->second->tick_negative_edge();
     }
     for (nodes_t::iterator i = nodes.begin(); i != nodes.end(); ++i) {

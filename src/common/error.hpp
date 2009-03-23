@@ -93,11 +93,13 @@ private:
 
 class exc_bus_err : public err_runtime_exc {
 public:
-    explicit exc_bus_err(const uint32_t addr, const uint32_t mem_start,
-                         const uint32_t mem_size) throw();
+    explicit exc_bus_err(const uint32_t id, const uint32_t addr,
+                         const uint32_t start, const uint32_t size) throw();
     virtual ~exc_bus_err() throw();
 private:
     virtual void show_to(ostream &out) const;
+private:
+    const uint32_t id;
     const uint32_t addr;
     const uint32_t start;
     const uint32_t num_bytes;
@@ -135,6 +137,16 @@ public:
     const uint32_t exit_code;
 private:
     virtual void show_to(ostream &out) const;
+};
+
+class exc_no_network : public err_runtime_exc {
+public:
+    explicit exc_no_network(uint32_t cpu) throw();
+    virtual ~exc_no_network() throw();
+private:
+    virtual void show_to(ostream &out) const;
+private:
+    uint32_t cpu;
 };
 
 class exc_new_flow_mid_dma : public err_runtime_exc {
@@ -330,6 +342,20 @@ public:
     virtual ~err_bad_arb_scheme() throw();
 private:
     const uint32_t arb_scheme;
+    virtual void show_to(ostream &out) const;
+};
+
+class err_parse : public err {
+public:
+    err_parse(const string &file,
+              const string &msg = string("parse error")) throw();
+    err_parse(const string &file, unsigned line,
+              const string &msg = string("parse error")) throw();
+    virtual ~err_parse() throw();
+private:
+    const string file;
+    const unsigned line;
+    const string msg;
     virtual void show_to(ostream &out) const;
 };
 

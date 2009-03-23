@@ -12,16 +12,18 @@ using namespace std;
 class flow_id {
 public:
     flow_id(uint32_t new_id) throw();
+    flow_id() throw();
     uint32_t get_numeric_id() const throw();
     bool operator==(const flow_id &) const throw();
     bool operator<(const flow_id &) const throw();
 private:
     friend ostream &operator<<(ostream &, const flow_id &);
-    explicit flow_id() throw(); // not implemented
     uint32_t id;
 };
 
-inline flow_id::flow_id(uint32_t new_id) throw() : id(new_id) {}
+inline flow_id::flow_id(uint32_t new_id) throw() : id(new_id) { }
+
+inline flow_id::flow_id() throw() : id(0xdeadbeef) { }
 
 inline uint32_t flow_id::get_numeric_id() const throw() { return id; }
 

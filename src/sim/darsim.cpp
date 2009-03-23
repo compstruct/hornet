@@ -4,9 +4,13 @@
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <csignal>
+#include <iterator>
+#include <algorithm>
 #include <boost/shared_ptr.hpp>
 #include <boost/program_options.hpp>
+#include "endian.hpp"
 #include "version.hpp"
 #include "logger.hpp"
 #include "statistics.hpp"
@@ -17,7 +21,7 @@ using namespace boost;
 namespace po = boost::program_options;
 
 static const string magic = "DAR ";
-static const uint32_t version = 200903190;
+static const uint32_t version = 200903220;
 
 typedef void (*custom_signal_handler_t)(int);
 
@@ -39,27 +43,24 @@ static uint32_t fresh_random_seed() {
     return random_seed;
 }
 
-shared_ptr<sys> new_system(string file, uint64_t stats_start) {
+shared_ptr<sys> new_system(string file, uint64_t stats_start,
+                           shared_ptr<vector<string> > events_files)
+    throw(err) {
     shared_ptr<ifstream> img(new ifstream(file.c_str(), ios::in | ios::binary));
-    if (img->fail()) {
-        cerr << file << ": cannot read file" << endl;
-        exit(1);
-    }
+    if (img->fail()) throw err_parse(file, "cannot read file");
     char file_magic[5] = { 0, 0, 0, 0, 0 };
     img->read(file_magic, 4);
-    if (magic != file_magic) {
-        cerr << file << ": not a DAR system image" << endl;
-        exit(1);
-    }
+    if (magic != file_magic) throw err_parse(file, "not a DAR system image");
     uint32_t file_version = 0;
     img->read((char *) &file_version, 4);
     file_version = endian(file_version);
     if (file_version != version) {
-        cerr << file << ": file format version (" << file_version << ") "
-             << "does not match simulator (" << version << ")" << endl;
-        exit(1);
+        ostringstream msg;
+        msg << "file format version (" << dec << file_version << ") "
+            << "does not match simulator (" << version << ")";
+        throw err_parse(file, msg.str());
     }
-    shared_ptr<sys> s(new sys(img, stats_start, syslog));
+    shared_ptr<sys> s(new sys(img, stats_start, events_files, syslog));
     img->close();
     return s;
 }
@@ -75,8 +76,10 @@ int main(int argc, char **argv) {
          "simulate for arg cycles (default: forever)")
         ("stats-start", po::value<uint64_t>(),
          "start statistics after cycle arg (default: 0)")
+        ("events", po::value<vector<string> >()->composing(),
+         "read event schedule from file arg")
         ("log", po::value<vector<string> >()->composing(),
-         "write a log to the given file")
+         "write a log to file arg")
         ("verbosity", po::value<unsigned>(), "set console verbosity")
         ("log-verbosity", po::value<unsigned>(), "set log verbosity")
         ("random-seed", po::value<uint32_t>(),
@@ -151,10 +154,20 @@ int main(int argc, char **argv) {
     } else {
         srandom(fresh_random_seed());
     }
+    shared_ptr<vector<string> > events_files;
+    if (opts.count("events")) {
+        events_files = shared_ptr<vector<string> >(new vector<string>());
+        vector<string> fns = opts["events"].as<vector<string> >();
+        copy(fns.begin(), fns.end(),
+             back_insert_iterator<vector<string> >(*events_files));
+    }
     LOG(syslog,0) << dar_full_version << endl << endl;
     shared_ptr<sys> s;
     try {
-        s = new_system(mem_image, stats_start);
+        s = new_system(mem_image, stats_start, events_files);
+    } catch (const err_parse &e) {
+        cerr << e << endl;
+        exit(1);
     } catch (const err &e) {
         cerr << "ERROR: " << e << endl;
         exit(1);

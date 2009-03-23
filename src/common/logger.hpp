@@ -7,6 +7,7 @@
 #include <vector>
 #include <iostream>
 #include <boost/shared_ptr.hpp>
+#include <boost/tuple/tuple.hpp>
 
 using namespace std;
 using namespace boost;
@@ -20,7 +21,7 @@ public:
 protected:
     virtual int overflow(int);
 private:
-    vector<pair<unsigned, streambuf *> > streams;
+    vector<tuple<unsigned, streambuf *> > streams;
     unsigned msg_verb; // current message verbosity
 };
 
@@ -39,9 +40,9 @@ private:
 };
 
 inline int logstreambuf::overflow(int ch) {
-    for (vector<pair<unsigned, streambuf *> >::iterator si = streams.begin();
+    for (vector<tuple<unsigned, streambuf *> >::iterator si = streams.begin();
          si != streams.end(); ++si) {
-        if (msg_verb <= si->first) si->second->sputc(ch);
+        if (msg_verb <= si->get<0>()) si->get<1>()->sputc(ch);
     }
     return 0;
 }
