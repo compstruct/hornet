@@ -70,13 +70,16 @@ static int random_range(int max) throw() {
 }
 
 void crossbar::tick_positive_edge() throw(err) {
+    LOG(log,12) << "[xbar " << id << "] arbitration" << endl;
     map<node_id, unsigned> bws; // remaining bandwidths for each egress
     for (egresses_t::iterator i = egresses.begin(); i != egresses.end(); ++i) {
+        LOG(log,12) << "[xbar " << id << "]     egress to "
+            << i->first << " has bandwidth "
+            << dec << i->second->get_bandwidth() << endl;
         bws[i->first] = i->second->get_bandwidth();
     }
     random_shuffle(egress_qs.begin(), egress_qs.end(), random_range);
     random_shuffle(ingress_qs.begin(), ingress_qs.end(), random_range);
-    LOG(log,12) << "[xbar " << id << "] arbitration" << endl;
     for (vqids_t::iterator eqi = egress_qs.begin();
          eqi != egress_qs.end(); ++eqi) {
         node_id n; virtual_queue_id q;

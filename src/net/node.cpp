@@ -60,12 +60,12 @@ void node::connect_from(const string &port_name,
     throw(err) {
     ingress_id dst_id(get_id(), port_name);
     shared_ptr<ingress> ingr =
-        shared_ptr<ingress>(new ingress(dst_id, vq_ids, bw, rt, vc_alloc,
-                                        pressures, log));
+        shared_ptr<ingress>(new ingress(dst_id, vq_ids, flits_per_queue, rt,
+                                        vc_alloc, pressures, log));
     egress_id src_id(get_id(), src_port_name);
     shared_ptr<egress> egr =
         shared_ptr<egress>(new egress(src_id, ingr, src->get_pressures(),
-                                      flits_per_queue, log));
+                                      bw, log));
     add_ingress(src->get_id(), ingr);
     src->add_egress(get_id(), egr);
 }

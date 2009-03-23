@@ -97,11 +97,6 @@ void egress_dma_channel::send(flow_id f, void *src, uint32_t len) throw(err) {
 
 void egress_dma_channel::tick_positive_edge() throw(err) {
     unsigned i;
-    LOG(log,3) << "[dma " << id << "] status: " << dec
-        << "bw " << bandwidth << "  started " << started
-        << "  remaining " << remaining_flits
-        << "  queue " << vq->get_id() << "  full " << vq->full()
-        << "  new_flow " << vq->ingress_new_flow() << endl;
     for (i = 0; ((bandwidth == 0 || i < bandwidth)
                  && remaining_flits > 0 && !vq->full()
                  && (started || vq->ingress_new_flow())); ++i) {
