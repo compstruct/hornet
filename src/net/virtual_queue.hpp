@@ -122,8 +122,8 @@ inline void virtual_queue::push(const flit &f) throw(err) {
         LOG(log,3) << "[queue " << id << "] ingress: " << f
             << " (flow " << ingress_flow << ")" << endl;
     }
+    if (q.empty()) pressures->inc(next_node);
     q.push(make_tuple(f, next_node));
-    pressures->inc(next_node);
 }
 
 inline void virtual_queue::pop() throw(err) {
@@ -147,6 +147,10 @@ inline void virtual_queue::pop() throw(err) {
     }
     q.pop();
     pressures->dec(n);
+    if (!q.empty()) {
+        tie(f,n) = q.front();
+        pressures->inc(n);
+    }
     --stale_size;
 }
 
