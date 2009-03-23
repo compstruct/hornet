@@ -68,8 +68,11 @@ void injector::tick_positive_edge() throw(err) {
         tick_t t; len_t l; period_t p;
         tie(t, l, p) = flows[*fi];
         if (l != 0 && t == system_time) {
-            net->send(fi->get_numeric_id(), NULL, l-1);
-            flows[*fi].get<0>() += p;
+            if (net->send(fi->get_numeric_id(), NULL, l-1)) {
+                flows[*fi].get<0>() += p; // try again in p tics
+            } else {
+                flows[*fi].get<0>()++; // try again in the next cycle
+            }
         }
     }
 }
