@@ -30,8 +30,6 @@ private:
     queue<tuple<uint64_t, unsigned, unsigned> > arb_queue;
     shared_ptr<egress> src_to_dst;
     shared_ptr<egress> dst_to_src;
-    unsigned num_dst_queues;
-    unsigned num_src_queues;
     unsigned last_queued_src_to_dst_bw;
     logger &log;
 private:

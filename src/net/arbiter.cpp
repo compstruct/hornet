@@ -13,8 +13,6 @@ arbiter::arbiter(uint64_t &time, shared_ptr<node> src, shared_ptr<node> dst,
       period(new_period), delay(new_delay), next_arb(time), arb_queue(),
       src_to_dst(src->get_egress_to(dst->get_id())),
       dst_to_src(dst->get_egress_to(src->get_id())),
-      num_dst_queues(src_to_dst->get_remote_queues().size()),
-      num_src_queues(dst_to_src->get_remote_queues().size()),
       last_queued_src_to_dst_bw(UINT_MAX), log(l) {
     if (scheme != AS_NONE && scheme != AS_DUMB)
         throw err_bad_arb_scheme(scheme);
@@ -57,6 +55,17 @@ void arbiter::tick_positive_edge() throw(err) {
                     << "] has no bandwidth to allocate" << endl;
         return;
     } else {
+        unsigned num_src_queues = 0, num_dst_queues = 0;
+        const ingress::queues_t &src_qs = dst_to_src->get_remote_queues();
+        for (ingress::queues_t::const_iterator qi = src_qs.begin();
+             qi != src_qs.end(); ++qi) {
+            if (!qi->second->full()) ++num_src_queues;
+        }
+        const ingress::queues_t &dst_qs = src_to_dst->get_remote_queues();
+        for (ingress::queues_t::const_iterator qi = dst_qs.begin();
+             qi != dst_qs.end(); ++qi) {
+            if (!qi->second->full()) ++num_dst_queues;
+        }
         double out_pressure_frac =
             src_to_dst_pressure / (src_to_dst_pressure + dst_to_src_pressure);
         double out_bw_frac = (static_cast<double>(src_to_dst_bw) /
