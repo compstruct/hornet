@@ -10,7 +10,9 @@ arbiter::arbiter(uint64_t &time, shared_ptr<node> src, shared_ptr<node> dst,
                  logger &l) throw(err)
     : system_time(time), scheme(new_sch), min_bw(new_min_bw), period(new_period),
       next_arb(time), src_to_dst(src->get_egress_to(dst->get_id())),
-      dst_to_src(dst->get_egress_to(src->get_id())), log(l) {
+      dst_to_src(dst->get_egress_to(src->get_id())),
+      num_dst_queues(src_to_dst->get_remote_queues().size()),
+      num_src_queues(dst_to_src->get_remote_queues().size()), log(l) {
     if (scheme != AS_NONE && scheme != AS_DUMB)
         throw err_bad_arb_scheme(scheme);
     if (src_to_dst->get_bandwidth() + dst_to_src->get_bandwidth() < 2 * min_bw) {
@@ -68,12 +70,12 @@ void arbiter::tick_positive_edge() throw(err) {
     if (new_src_to_dst_bw > total_bw - min_bw)
         new_src_to_dst_bw = total_bw - min_bw;
     while ((new_src_to_dst_bw > min_bw)
-           && (new_src_to_dst_bw > src_to_dst_pressure)
-           && (new_src_to_dst_bw > total_bw - dst_to_src_pressure))
+           && (new_src_to_dst_bw > num_dst_queues)
+           && (total_bw - new_src_to_dst_bw < num_src_queues))
         --new_src_to_dst_bw;
     while ((new_src_to_dst_bw < total_bw - min_bw)
-           && (new_src_to_dst_bw < total_bw - dst_to_src_pressure)
-           && new_src_to_dst_bw < src_to_dst_pressure)
+           && (total_bw - new_src_to_dst_bw > num_src_queues)
+           && new_src_to_dst_bw < num_dst_queues)
         ++new_src_to_dst_bw;
     new_dst_to_src_bw = total_bw - new_src_to_dst_bw;
     assert(new_src_to_dst_bw >= min_bw);

@@ -27,6 +27,8 @@ private:
     uint64_t next_arb;  // next arbitration tick
     shared_ptr<egress> src_to_dst;
     shared_ptr<egress> dst_to_src;
+    unsigned num_dst_queues;
+    unsigned num_src_queues;
     logger &log;
 private:
     arbiter();                // not implemented
