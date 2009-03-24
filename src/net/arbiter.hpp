@@ -14,12 +14,17 @@ typedef enum {
 
 class arbiter {
 public:
-    arbiter(shared_ptr<node> src, shared_ptr<node> dst,
-            arbitration_t scheme, logger &log) throw(err);
+    arbiter(uint64_t &time, shared_ptr<node> src, shared_ptr<node> dst,
+            arbitration_t scheme, unsigned min_bw, unsigned period,
+            logger &log) throw(err);
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
 private:
+    uint64_t &system_time;
     arbitration_t scheme;
+    unsigned min_bw;    // guarantee minimum bandwidth in each direction
+    unsigned period;    // run arbitration every sample_period ticks
+    uint64_t next_arb;  // next arbitration tick
     shared_ptr<egress> src_to_dst;
     shared_ptr<egress> dst_to_src;
     logger &log;

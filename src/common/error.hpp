@@ -345,6 +345,20 @@ private:
     virtual void show_to(ostream &out) const;
 };
 
+class err_bad_arb_min_bw : public err {
+public:
+    explicit err_bad_arb_min_bw(uint32_t src, uint32_t dst, uint32_t s2d_bw,
+                                uint32_t d2s_bw, uint32_t min_bw) throw();
+    virtual ~err_bad_arb_min_bw() throw();
+private:
+    const uint32_t src;
+    const uint32_t dst;
+    const uint32_t s2d_bw;
+    const uint32_t d2s_bw;
+    const uint32_t min_bw;
+    virtual void show_to(ostream &out) const;
+};
+
 class err_parse : public err {
 public:
     err_parse(const string &file,

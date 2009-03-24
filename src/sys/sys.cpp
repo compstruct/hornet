@@ -159,15 +159,30 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
         n_vcas[id] = n_vca;
     }
     arbitration_t arb_scheme = static_cast<arbitration_t>(read_word(img));
+    unsigned arb_min_bw = 0;
+    unsigned arb_period = 0;
+    if (arb_scheme != AS_NONE) {
+        arb_min_bw = read_word(img);
+        arb_period = read_word(img);
+    }
     uint32_t num_cxns = read_word(img);
     typedef set<tuple<uint32_t, uint32_t> > cxns_t;
     cxns_t cxns;
     LOG(log,2) << "network uses " << vca_type
         << " virtual channel allocation" << endl;
     LOG(log,2) << "network fabric has " << dec << num_cxns
-        << " one-way link" << (num_cxns == 1 ? "" : "s")
-        << " (" << (arb_scheme == AS_NONE ? "no " : "with ")
-        << "bidirectional arbitration)" << endl;
+               << " one-way link" << (num_cxns == 1 ? "" : "s") << endl;
+    if (arb_scheme == AS_NONE) {
+        LOG(log,2) << "    (no bidirectional arbitration)" << endl;
+    } else {
+        LOG(log,2) << "    (bidirectional arbitration every " << dec << arb_period
+                   << " cycle" << (arb_period == 1 ? "" : "s");
+        if (arb_min_bw == 0) {
+            LOG(log,2) << " with no minimum bandwidth" << endl;
+        } else {
+            LOG(log,2) << " with minimum bandwidth " << dec << arb_min_bw << endl;
+        }
+    }
     for (unsigned i  = 0; i < num_cxns; ++i) {
         uint32_t link_src_n = read_word(img);
         char link_src_port_name = static_cast<char>(read_word(img));
@@ -179,7 +194,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
         for (unsigned q = 0; q < link_num_queues; ++q) {
             queues.insert(virtual_queue_id(read_word(img)));
         }
-        if (nodes.find(link_src_n) == nodes.end())throw err_bad_mem_img();
+        if (nodes.find(link_src_n) == nodes.end()) throw err_bad_mem_img();
         if (nodes.find(link_dst_n) == nodes.end()) throw err_bad_mem_img();
         nodes[link_dst_n]->connect_from(string(1, link_dst_port_name),
                                         nodes[link_src_n],
@@ -200,9 +215,9 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
             if (from <= to
                 && cxns.count(make_tuple(to, from)) > 0) {
                 arbiters[*i] =
-                    shared_ptr<arbiter>(new arbiter(nodes[from],
-                                                    nodes[to],
-                                                    arb_scheme, log));
+                    shared_ptr<arbiter>(new arbiter(time, nodes[from], nodes[to],
+                                                    arb_scheme, arb_min_bw,
+                                                    arb_period, log));
             }
         }
     }

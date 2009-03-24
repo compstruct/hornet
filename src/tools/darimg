@@ -8,7 +8,7 @@ import sys, os, optparse, re, subprocess, ConfigParser
 
 objdump = 'objdump'
 file_magic = 'DAR '
-file_version = 200903220
+file_version = 200903230
 
 class Err(Exception):
     pass
@@ -25,7 +25,8 @@ def read_section_headers(file, objdump_cmd='objdump', verbose=False):
     format = None
     sections = {}
     try:
-        proc = subprocess.Popen([objdump_cmd, '-fh', file], stdout=subprocess.PIPE)
+        proc = subprocess.Popen([objdump_cmd, '-fh', file],
+                                stdout=subprocess.PIPE)
         format_pat = re.compile(r'^.*file\s+format\s+(\S+)\s*$')
         entry_pat = re.compile(r'^\s*start\s+address\s+0x([0-9A-Fa-f]+)\s*$')
         info_pat = re.compile(r'^\s*\d+\s+(\S+)\s+([0-9A-Fa-f]+)\s+[0-9A-Fa-f]+\s+([0-9A-Fa-f]+)\s+[0-9A-Fa-f]+\s+2\*\*\d+\s*$')
@@ -201,6 +202,9 @@ def write_complete_image(out, cfg, verbose=False):
         print ('writing %d connection%s...' %
                 (len(cxns), '' if len(cxns) == 1 else 's'))
     out.write(w2bs(settings['arbitration']))
+    if settings['arbitration'] != 0:
+        out.write(w2bs(settings['arbitration minimum bandwidth']))
+        out.write(w2bs(settings['arbitration period']))
     out.write(w2bs(len(cxns)))
     for cxn_cfg in cxns: write_cxn(out=out, verbose=verbose, **cxn_cfg)
     if verbose:
@@ -288,13 +292,24 @@ def new_system_config(cfg, verbose=False):
                 raise Err('flow %s: node %02x cannot route to node %02x' %
                           (id, src_n, dst_n))
     try:
+        if cfg.has_option('bandwidth', 'arbitration'):
+            raise Err('arbitration scheme must be specified '
+                      'via \'[arbitration] scheme\'')
         try:
-            arb = cfg.get('bandwidth', 'arbitration')
+            arb = cfg.get('arbitration', 'scheme')
         except Exception, e:
-            arb = None
-        arbs = { None: 0, 'off': 0, 'none': 0, 'proportional': 1 }
+            arb = 'off'
+        arbs = { 'off': 0, 'proportional': 1 }
         if arb not in arbs:
             raise Error('bad arbitration type: %s' % arbitration)
+        if arb != 'off':
+            arb_min_bw = cfg.getint('arbitration', 'minimum bandwidth')
+            arb_period = cfg.getint('arbitration', 'period')
+            if arb_period < 1:
+                raise Error('arbitration period must be at least 1')
+        else:
+            arb_min_bw = 0
+            arb_period = 1
         node_routing = cfg.get('routing', 'node')
         if node_routing != 'table':
             raise Error('bad node routing type: %s' % node_routing)
@@ -303,6 +318,8 @@ def new_system_config(cfg, verbose=False):
         if queue_routing not in queue_routing_types:
             raise Error('bad queue routing type: %s' % queue_routing)
         settings = { 'arbitration': arbs[arb],
+                     'arbitration minimum bandwidth': arb_min_bw,
+                     'arbitration period': arb_period,
                      'queue routing': queue_routing_types[queue_routing] }
         w = p_nat(cfg.get('geometry', 'width'))
         h = p_nat(cfg.get('geometry', 'height'))

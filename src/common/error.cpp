@@ -266,6 +266,18 @@ void err_bad_arb_scheme::show_to(ostream &out) const {
     out << "invalid arbitration scheme code: " << dec << arb_scheme;
 }
 
+err_bad_arb_min_bw::err_bad_arb_min_bw(uint32_t new_src, uint32_t new_dst,
+                                       uint32_t new_s2d_bw, uint32_t new_d2s_bw,
+                                       uint32_t new_min_bw) throw()
+    : src(new_src), dst(new_dst), s2d_bw(new_s2d_bw), d2s_bw(new_d2s_bw),
+      min_bw(new_min_bw) { }
+err_bad_arb_min_bw::~err_bad_arb_min_bw() throw() { }
+void err_bad_arb_min_bw::show_to(ostream &out) const {
+    out << "arbiter " << hex << setfill('0') << setw(2) << src << "<->"
+        << setw(2) << dst << " can't guarantee bandwidth " << dec << min_bw
+        << " given ->" << s2d_bw << " and <-" << d2s_bw; 
+}
+
 err_parse::err_parse(const string &f, const string &m) throw()
     : file(f), line(0), msg(m) { }
 err_parse::err_parse(const string &f, unsigned l, const string &m) throw()
