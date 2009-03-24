@@ -29,13 +29,13 @@ arbiter::arbiter(uint64_t &time, shared_ptr<node> src, shared_ptr<node> dst,
 }
 
 void arbiter::tick_positive_edge() throw(err) {
-    if (next_arb != system_time) {
+    if (next_arb > system_time) {
         LOG(log,12) << "[arbiter " << hex << setfill('0')
                     << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
                     << "] waiting until tick " << dec << next_arb << endl;
         return;
     }
-    next_arb += period;
+    next_arb = system_time + period;
     double src_to_dst_pressure = src_to_dst->get_pressure();
     double dst_to_src_pressure = dst_to_src->get_pressure();
     if (src_to_dst_pressure == 0 && dst_to_src_pressure == 0) {
@@ -60,19 +60,22 @@ void arbiter::tick_positive_edge() throw(err) {
     unsigned new_src_to_dst_bw, new_dst_to_src_bw;
     if (out_pressure_frac > out_bw_frac) {
         new_src_to_dst_bw = floor(total_bw * out_pressure_frac);
-        if (new_src_to_dst_bw < min_bw)
-            new_src_to_dst_bw = min_bw;
-        if (new_src_to_dst_bw > total_bw - min_bw)
-            new_src_to_dst_bw = total_bw - min_bw;
-        new_dst_to_src_bw = total_bw - new_src_to_dst_bw;
     } else {
         new_src_to_dst_bw = ceil(total_bw * out_pressure_frac);
-        if (new_src_to_dst_bw < min_bw)
-            new_src_to_dst_bw = min_bw;
-        if (new_src_to_dst_bw > total_bw - min_bw)
-            new_src_to_dst_bw = total_bw - min_bw;
-        new_dst_to_src_bw = total_bw - new_src_to_dst_bw;
     }
+    if (new_src_to_dst_bw < min_bw)
+        new_src_to_dst_bw = min_bw;
+    if (new_src_to_dst_bw > total_bw - min_bw)
+        new_src_to_dst_bw = total_bw - min_bw;
+    while ((new_src_to_dst_bw > min_bw)
+           && (new_src_to_dst_bw > src_to_dst_pressure)
+           && (new_src_to_dst_bw > total_bw - dst_to_src_pressure))
+        --new_src_to_dst_bw;
+    while ((new_src_to_dst_bw < total_bw - min_bw)
+           && (new_src_to_dst_bw < total_bw - dst_to_src_pressure)
+           && new_src_to_dst_bw < src_to_dst_pressure)
+        ++new_src_to_dst_bw;
+    new_dst_to_src_bw = total_bw - new_src_to_dst_bw;
     assert(new_src_to_dst_bw >= min_bw);
     assert(new_dst_to_src_bw >= min_bw);
     LOG(log,12) << "[arbiter " << hex << setfill('0')
