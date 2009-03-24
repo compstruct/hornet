@@ -161,9 +161,11 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
     arbitration_t arb_scheme = static_cast<arbitration_t>(read_word(img));
     unsigned arb_min_bw = 0;
     unsigned arb_period = 0;
+    unsigned arb_delay = 0;
     if (arb_scheme != AS_NONE) {
         arb_min_bw = read_word(img);
         arb_period = read_word(img);
+        arb_delay = read_word(img);
     }
     uint32_t num_cxns = read_word(img);
     typedef set<tuple<uint32_t, uint32_t> > cxns_t;
@@ -215,9 +217,10 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
             if (from <= to
                 && cxns.count(make_tuple(to, from)) > 0) {
                 arbiters[*i] =
-                    shared_ptr<arbiter>(new arbiter(time, nodes[from], nodes[to],
-                                                    arb_scheme, arb_min_bw,
-                                                    arb_period, log));
+                    shared_ptr<arbiter>(new arbiter(time, nodes[from],
+                                                    nodes[to], arb_scheme,
+                                                    arb_min_bw, arb_period,
+                                                    arb_delay, log));
             }
         }
     }

@@ -4,6 +4,7 @@
 #ifndef __ARBITER_HPP__
 #define __ARBITER_HPP__
 
+#include <queue>
 #include "node.hpp"
 
 typedef enum {
@@ -16,7 +17,7 @@ class arbiter {
 public:
     arbiter(uint64_t &time, shared_ptr<node> src, shared_ptr<node> dst,
             arbitration_t scheme, unsigned min_bw, unsigned period,
-            logger &log) throw(err);
+            unsigned delay, logger &log) throw(err);
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
 private:
@@ -24,11 +25,14 @@ private:
     arbitration_t scheme;
     unsigned min_bw;    // guarantee minimum bandwidth in each direction
     unsigned period;    // run arbitration every sample_period ticks
+    unsigned delay;     // delay between decision and enforcement
     uint64_t next_arb;  // next arbitration tick
+    queue<tuple<uint64_t, unsigned, unsigned> > arb_queue;
     shared_ptr<egress> src_to_dst;
     shared_ptr<egress> dst_to_src;
     unsigned num_dst_queues;
     unsigned num_src_queues;
+    unsigned last_queued_src_to_dst_bw;
     logger &log;
 private:
     arbiter();                // not implemented

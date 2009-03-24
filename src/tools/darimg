@@ -8,7 +8,7 @@ import sys, os, optparse, re, subprocess, ConfigParser
 
 objdump = 'objdump'
 file_magic = 'DAR '
-file_version = 200903230
+file_version = 200903240
 
 class Err(Exception):
     pass
@@ -205,6 +205,7 @@ def write_complete_image(out, cfg, verbose=False):
     if settings['arbitration'] != 0:
         out.write(w2bs(settings['arbitration minimum bandwidth']))
         out.write(w2bs(settings['arbitration period']))
+        out.write(w2bs(settings['arbitration delay']))
     out.write(w2bs(len(cxns)))
     for cxn_cfg in cxns: write_cxn(out=out, verbose=verbose, **cxn_cfg)
     if verbose:
@@ -303,10 +304,20 @@ def new_system_config(cfg, verbose=False):
         if arb not in arbs:
             raise Error('bad arbitration type: %s' % arbitration)
         if arb != 'off':
-            arb_min_bw = cfg.getint('arbitration', 'minimum bandwidth')
-            arb_period = cfg.getint('arbitration', 'period')
-            if arb_period < 1:
-                raise Error('arbitration period must be at least 1')
+            if cfg.has_option('arbitration', 'minimum bandwidth'):
+                arb_min_bw = cfg.getint('arbitration', 'minimum bandwidth')
+            else:
+                arb_min_bw = 0
+            if cfg.has_option('arbitration', 'period'):
+                arb_period = cfg.getint('arbitration', 'period')
+                if arb_period < 1:
+                    raise Err('arbitration period must be at least 1')
+            else:
+                arb_period = 1
+            if cfg.has_option('arbitration', 'delay'):
+                arb_delay = cfg.getint('arbitration', 'delay')
+            else:
+                arb_delay = 0
         else:
             arb_min_bw = 0
             arb_period = 1
@@ -320,6 +331,7 @@ def new_system_config(cfg, verbose=False):
         settings = { 'arbitration': arbs[arb],
                      'arbitration minimum bandwidth': arb_min_bw,
                      'arbitration period': arb_period,
+                     'arbitration delay': arb_delay,
                      'queue routing': queue_routing_types[queue_routing] }
         w = p_nat(cfg.get('geometry', 'width'))
         h = p_nat(cfg.get('geometry', 'height'))
