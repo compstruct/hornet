@@ -93,8 +93,18 @@ void crossbar::tick_positive_edge() throw(err) {
                 shared_ptr<virtual_queue> &iq = *iqi;
                 bool iq_ready = iq->egress_ready();
                 LOG(log,12) << "[xbar " << id
-                    << "]         considering ingress queue " << iq->get_id()
-                    << ": " << (iq_ready ? "" : "not ") << "ready" << endl;
+                            << "]         considering ingress queue "
+                            << iq->get_id() << ": ";
+                if (iq->empty()) {
+                    LOG(log, 12) << "empty" << endl;
+                } else {
+                    LOG(log, 12) << "-> node " << iq->front_node_id();
+                    if (iq_ready) {
+                        LOG(log, 12) << " (ready)" << endl;
+                    } else {
+                        LOG(log, 12) << " (not ready)" << endl;
+                    }
+                }
                 if (iq->egress_ready() && iq->front_node_id() == n
                     && iq->front_vq_id() == q) {
                     LOG(log,12) << "[xbar " << id

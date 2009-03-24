@@ -52,7 +52,11 @@ ostream &operator<<(ostream &out, const ingress &i) {
     for (ingress::queues_t::const_iterator qi = i.vqs.begin();
          qi != i.vqs.end(); ++qi) {
         out << "[port " << i.get_id() << "]     queue "
-            << qi->first << " has length " << qi->second->size() << endl;
+            << qi->first << " has length " << qi->second->size();
+        if (qi->second->size() > 0) {
+            out << " (head flit -> node " << qi->second->front_node_id() << ")";
+        }
+        out << endl;
     }
     return out;
 }

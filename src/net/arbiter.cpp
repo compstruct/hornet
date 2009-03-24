@@ -40,6 +40,15 @@ void arbiter::tick_positive_edge() throw(err) {
         new_src_to_dst_bw = ceil(total_bw * out_pressure_frac);
         new_dst_to_src_bw = total_bw - new_src_to_dst_bw;
     }
+    LOG(log,12) << "[arbiter " << hex << setfill('0')
+                << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
+                << "] pressures: -> " << dec << fixed << setprecision(4)
+                << src_to_dst_pressure << ", <- " << dst_to_src_pressure
+                << " (target ratio: "
+                << src_to_dst->get_pressure()/dst_to_src->get_pressure()
+                << ", effective ratio: "
+                << (static_cast<double>(new_src_to_dst_bw) /
+                    static_cast<double>(new_dst_to_src_bw)) << ")" << endl;
     if (new_src_to_dst_bw != src_to_dst_bw) {
         LOG(log,2) << "[arbiter " << hex << setfill('0')
             << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
