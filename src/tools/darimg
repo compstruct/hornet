@@ -321,6 +321,7 @@ def new_system_config(cfg, verbose=False):
         else:
             arb_min_bw = 0
             arb_period = 1
+            arb_delay = 0
         node_routing = cfg.get('routing', 'node')
         if node_routing != 'table':
             raise Error('bad node routing type: %s' % node_routing)
