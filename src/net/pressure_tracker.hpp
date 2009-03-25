@@ -5,31 +5,23 @@
 #define __PRESSURE_TRACKER_HPP__
 
 #include <map>
-#include <boost/tuple/tuple.hpp>
-#include <boost/tuple/tuple_comparison.hpp>
 #include "error.hpp"
 #include "logger.hpp"
 #include "node_id.hpp"
-#include "virtual_queue_id.hpp"
-
-using namespace std;
-using namespace boost;
-
-typedef unsigned pressure_t;
 
 class pressure_tracker {
 public:
+    typedef unsigned pressure_t;
+public:
     pressure_tracker(const node_id &parent_node, logger &log) throw();
     const node_id &get_id() const throw();
-    void inc(const node_id &target, const virtual_queue_id &queue) throw(err);
-    void dec(const node_id &target, const virtual_queue_id &queue) throw(err);
-    pressure_t get(const node_id &target,
-                   const virtual_queue_id &queue) throw(err);
-    void add_egress_queue(const node_id &target,
-                          const virtual_queue_id &queue) throw(err);
+    void inc(const node_id &target) throw(err);
+    void dec(const node_id &target) throw(err);
+    pressure_t get(const node_id &target) throw(err);
+    void add_egress(const node_id &target) throw(err);
 private:
     const node_id id;
-    map<tuple<node_id, virtual_queue_id>, pressure_t> pressures;
+    map<node_id, pressure_t> pressures;
     logger &log;
 };
 

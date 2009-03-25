@@ -35,7 +35,7 @@ public:
     const egress_id &get_id() const throw();
     unsigned get_bandwidth() const throw();
     void set_bandwidth(unsigned new_bandwidth) throw();
-    pressure_t get_pressure() const throw();
+    double get_pressure() const throw();
     const ingress::queues_t &get_remote_queues() const throw();
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);

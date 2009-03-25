@@ -7,36 +7,30 @@
 pressure_tracker::pressure_tracker(const node_id &parent, logger &l) throw()
     : id(parent), log(l) { }
 
-void pressure_tracker::inc(const node_id &n,
-                           const virtual_queue_id &q) throw(err) {
-    tuple<node_id, virtual_queue_id> tgt = make_tuple(n,q);
+void pressure_tracker::inc(const node_id &tgt) throw(err) {
     if (pressures.find(tgt) == pressures.end())
-        throw err_bad_neighbor(id.get_numeric_id(), n.get_numeric_id());
+        throw err_bad_neighbor(id.get_numeric_id(), tgt.get_numeric_id());
     pressures[tgt]++;
 }
 
-void pressure_tracker::dec(const node_id &n,
-                           const virtual_queue_id &q) throw(err) {
-    tuple<node_id, virtual_queue_id> tgt = make_tuple(n,q);
+void pressure_tracker::dec(const node_id &tgt) throw(err) {
     if (pressures.find(tgt) == pressures.end())
-        throw err_bad_neighbor(id.get_numeric_id(), n.get_numeric_id());
+        throw err_bad_neighbor(id.get_numeric_id(), tgt.get_numeric_id());
     assert(pressures[tgt] > 0);
     pressures[tgt]--;
 }
 
-pressure_t pressure_tracker::get(const node_id &n, const virtual_queue_id &q)
+pressure_tracker::pressure_t pressure_tracker::get(const node_id &tgt)
     throw(err) {
-    tuple<node_id, virtual_queue_id> tgt = make_tuple(n,q);
     if (pressures.find(tgt) == pressures.end())
-        throw err_bad_neighbor(get_id().get_numeric_id(), n.get_numeric_id());
+        throw err_bad_neighbor(get_id().get_numeric_id(), tgt.get_numeric_id());
     return pressures[tgt];
 }
 
-void pressure_tracker::add_egress_queue(const node_id &n,
-                                        const virtual_queue_id &q) throw(err) {
-    tuple<node_id, virtual_queue_id> tgt = make_tuple(n,q);
+void pressure_tracker::add_egress(const node_id &tgt) throw(err) {
     if (pressures.find(tgt) != pressures.end())
         throw err_duplicate_egress(get_id().get_numeric_id(),
-                                   n.get_numeric_id());
+                                   tgt.get_numeric_id());
     pressures[tgt] = 0;
 }
+

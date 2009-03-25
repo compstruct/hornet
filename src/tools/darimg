@@ -303,18 +303,25 @@ def new_system_config(cfg, verbose=False):
         arbs = { 'off': 0, 'proportional': 1 }
         if arb not in arbs:
             raise Error('bad arbitration type: %s' % arbitration)
-        arb_min_bw = 0
-        arb_period = 1
-        arb_delay = 0
         if arb != 'off':
             if cfg.has_option('arbitration', 'minimum bandwidth'):
                 arb_min_bw = cfg.getint('arbitration', 'minimum bandwidth')
+            else:
+                arb_min_bw = 0
             if cfg.has_option('arbitration', 'period'):
                 arb_period = cfg.getint('arbitration', 'period')
                 if arb_period < 1:
                     raise Err('arbitration period must be at least 1')
+            else:
+                arb_period = 1
             if cfg.has_option('arbitration', 'delay'):
                 arb_delay = cfg.getint('arbitration', 'delay')
+            else:
+                arb_delay = 0
+        else:
+            arb_min_bw = 0
+            arb_period = 1
+            arb_delay = 0
         node_routing = cfg.get('routing', 'node')
         if node_routing != 'table':
             raise Error('bad node routing type: %s' % node_routing)

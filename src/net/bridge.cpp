@@ -66,7 +66,6 @@ bridge::bridge(shared_ptr<node> n,
                                         target->get_pressures(), log));
     n->add_ingress(n->get_id(), node_ingress);
     shared_ptr<pressure_tracker> br_pt(new pressure_tracker(id, log));
-    br_pt->add_egress_queue(id, 0xdecaf);
     egress_id bridge_egress_id(n->get_id(), "X");
     outgoing = shared_ptr<egress>(new egress(bridge_egress_id, node_ingress,
                                              br_pt, b2n_bw, log));
@@ -86,8 +85,7 @@ bridge::bridge(shared_ptr<node> n,
     copy(bridge_vq_ids.begin(), bridge_vq_ids.end(),
          back_insert_iterator<vector<virtual_queue_id> >(vqids));
     ingress_id bridge_ingress_id(n->get_id(), "X");
-    incoming = shared_ptr<ingress>(new ingress(bridge_ingress_id,
-                                               bridge_vq_ids,
+    incoming = shared_ptr<ingress>(new ingress(bridge_ingress_id, bridge_vq_ids,
                                                flits_per_queue, br_rt,
                                                br_vca, br_pt, log));
     for (ingress::queues_t::const_iterator q = incoming->get_queues().begin();

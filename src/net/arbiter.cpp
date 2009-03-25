@@ -39,8 +39,8 @@ void arbiter::tick_positive_edge() throw(err) {
         return;
     }
     next_arb = system_time + period;
-    pressure_t src_to_dst_pressure = src_to_dst->get_pressure();
-    pressure_t dst_to_src_pressure = dst_to_src->get_pressure();
+    double src_to_dst_pressure = src_to_dst->get_pressure();
+    double dst_to_src_pressure = dst_to_src->get_pressure();
     unsigned src_to_dst_bw = src_to_dst->get_bandwidth();
     unsigned dst_to_src_bw = dst_to_src->get_bandwidth();
     unsigned total_bw = src_to_dst_bw + dst_to_src_bw;
@@ -53,13 +53,19 @@ void arbiter::tick_positive_edge() throw(err) {
                     << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
                     << "] has no bandwidth to allocate" << endl;
     } else {
-        LOG(log,12) << "[arbiter " << hex << setfill('0')
-                    << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
-                    << "] pressures -> " << dec << src_to_dst_pressure
-                    << ", <- " << dst_to_src_pressure << endl;
+        unsigned num_src_queues = 0, num_dst_queues = 0;
+        const ingress::queues_t &src_qs = dst_to_src->get_remote_queues();
+        for (ingress::queues_t::const_iterator qi = src_qs.begin();
+             qi != src_qs.end(); ++qi) {
+            if (!qi->second->full()) ++num_src_queues;
+        }
+        const ingress::queues_t &dst_qs = src_to_dst->get_remote_queues();
+        for (ingress::queues_t::const_iterator qi = dst_qs.begin();
+             qi != dst_qs.end(); ++qi) {
+            if (!qi->second->full()) ++num_dst_queues;
+        }
         double out_pressure_frac =
-            static_cast<double>(src_to_dst_pressure) /
-            static_cast<double>(src_to_dst_pressure + dst_to_src_pressure);
+            src_to_dst_pressure / (src_to_dst_pressure + dst_to_src_pressure);
         double out_bw_frac = (static_cast<double>(src_to_dst_bw) /
                               static_cast<double>(total_bw));
         unsigned new_src_to_dst_bw, new_dst_to_src_bw;
@@ -73,24 +79,25 @@ void arbiter::tick_positive_edge() throw(err) {
         if (new_src_to_dst_bw > total_bw - min_bw)
             new_src_to_dst_bw = total_bw - min_bw;
         while ((new_src_to_dst_bw > min_bw)
-               && (new_src_to_dst_bw > src_to_dst_pressure)
-               && (total_bw - new_src_to_dst_bw < dst_to_src_pressure))
+               && (new_src_to_dst_bw > num_dst_queues)
+               && (total_bw - new_src_to_dst_bw < num_src_queues))
             --new_src_to_dst_bw;
         while ((new_src_to_dst_bw < total_bw - min_bw)
-               && (total_bw - new_src_to_dst_bw > dst_to_src_pressure)
-               && new_src_to_dst_bw < src_to_dst_pressure)
+               && (total_bw - new_src_to_dst_bw > num_src_queues)
+               && new_src_to_dst_bw < num_dst_queues)
             ++new_src_to_dst_bw;
         new_dst_to_src_bw = total_bw - new_src_to_dst_bw;
         assert(new_src_to_dst_bw >= min_bw);
         assert(new_dst_to_src_bw >= min_bw);
         LOG(log,12) << "[arbiter " << hex << setfill('0')
-                    << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
-                    << "] pressures: -> " << dec << fixed << setprecision(4)
-                    << src_to_dst_pressure << ", <- " << dst_to_src_pressure
-                    << " (target ratio: "
-                    << (static_cast<double>(src_to_dst_pressure) /
-                        static_cast<double>(dst_to_src_pressure)) << ")"
-                    << endl;
+            << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
+            << "] pressures: -> " << dec << fixed << setprecision(4)
+            << src_to_dst_pressure << ", <- " << dst_to_src_pressure
+            << " (target ratio: "
+            << src_to_dst->get_pressure()/dst_to_src->get_pressure()
+            << ", effective ratio: "
+            << (static_cast<double>(new_src_to_dst_bw) /
+                static_cast<double>(new_dst_to_src_bw)) << ")" << endl;
         if (new_src_to_dst_bw != last_queued_src_to_dst_bw) {
             LOG(log,2) << "[arbiter " << hex << setfill('0')
                 << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
@@ -100,11 +107,12 @@ void arbiter::tick_positive_edge() throw(err) {
                 LOG(log,2) << " (" << dec << delay << "-cycle delay)";
             }
             LOG(log,2) << "\n[arbiter " << hex << setfill('0')
-                       << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
-                       << "]     (effective ratio: "
-                       << (static_cast<double>(new_src_to_dst_bw) /
-                           static_cast<double>(new_dst_to_src_bw)) << ")"
-                       << endl;
+                << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
+                << "]     (target ratio: " << dec << fixed << setprecision(4)
+                << src_to_dst->get_pressure()/dst_to_src->get_pressure()
+                << ", effective ratio: "
+                << (static_cast<double>(new_src_to_dst_bw) /
+                    static_cast<double>(new_dst_to_src_bw)) << ")" << endl;
             arb_queue.push(make_tuple(system_time + delay,
                                       new_src_to_dst_bw, new_dst_to_src_bw));
             last_queued_src_to_dst_bw = new_src_to_dst_bw;

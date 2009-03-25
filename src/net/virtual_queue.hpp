@@ -60,8 +60,7 @@ public:
                            shared_ptr<router> flow_router,
                            shared_ptr<channel_alloc> vc_alloc,
                            shared_ptr<pressure_tracker> pressures,
-                           shared_ptr<common_alloc> alloc,
-                           logger &log) throw();
+                           shared_ptr<common_alloc> alloc, logger &log) throw();
     const tuple<node_id, virtual_queue_id> &get_id() const throw();
     void push(const flit &) throw(err); // does not update stale size
     void pop() throw(err); // updates stale size
@@ -92,7 +91,6 @@ private:
     virtual_queue_id egress_vq;
     const shared_ptr<common_alloc> alloc;
     size_t stale_size; // resynchronized at negative clock edge
-    bool increased_pressure; // nasty hack
     logger &log;
 };
 
@@ -124,6 +122,7 @@ inline void virtual_queue::push(const flit &f) throw(err) {
         LOG(log,3) << "[queue " << id << "] ingress: " << f
             << " (flow " << ingress_flow << ")" << endl;
     }
+    if (q.empty()) pressures->inc(next_node);
     q.push(make_tuple(f, next_node));
 }
 
@@ -142,12 +141,15 @@ inline void virtual_queue::pop() throw(err) {
         LOG(log,3) << "[queue " << id << "] egress:  " << f
             << " (flow " << egress_flow << ")" << endl;
     }
-    pressures->dec(n, egress_vq);
-    increased_pressure = false;
-    q.pop();
     if (egress_remaining == 0) {
         vc_alloc->release(egress_vq);
         egress_vq = virtual_queue_id(); // invalid vqid
+    }
+    q.pop();
+    pressures->dec(n);
+    if (!q.empty()) {
+        tie(f,n) = q.front();
+        pressures->inc(n);
     }
     --stale_size;
 }
@@ -202,10 +204,6 @@ inline virtual_queue_id virtual_queue::front_vq_id() throw(err) {
     flit f(0); node_id n; tie(f,n) = q.front();
     if (!egress_vq.is_valid()) {
         egress_vq = vc_alloc->request(n, get_egress_flow_id());
-    }
-    if (!increased_pressure && egress_vq.is_valid()) {
-        pressures->inc(n, egress_vq);
-        increased_pressure = true;
     }
     return egress_vq;
 }
