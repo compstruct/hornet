@@ -13,7 +13,9 @@ libdarnet_la_SOURCES = \
     channel_alloc.hpp channel_alloc.cpp \
     pressure_tracker.hpp pressure_tracker.cpp \
     virtual_queue.hpp virtual_queue.cpp \
+    ingress_id.hpp ingress_id.cpp \
     ingress.hpp ingress.cpp \
+    egress_id.hpp egress_id.cpp \
     egress.hpp egress.cpp \
     crossbar.hpp crossbar.cpp \
     node.hpp node.cpp \

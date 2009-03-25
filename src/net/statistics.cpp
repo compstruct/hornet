@@ -9,7 +9,8 @@
 statistics::statistics(const uint64_t &sys_time, const uint64_t &start) throw()
     : system_time(sys_time), start_time(start),
       sim_start_time(microsec_clock::local_time()),
-      sim_end_time(sim_start_time) { }
+      sim_end_time(sim_start_time), sent_flits(), received_flits(),
+      link_switches() { }
 
 void statistics::start_sim() throw() {
     sim_start_time = microsec_clock::local_time();
@@ -42,6 +43,18 @@ void statistics::receive_flit(const flow_id &f) throw() {
     }
 }
 
+void statistics::switch_link(const egress_id &src,
+                             const egress_id &dst) throw() {
+    if (system_time >= start_time) {
+        link_id l(src,dst);
+        link_switch_counter_t::iterator i = link_switches.find(l);
+        if (i == link_switches.end()) {
+            link_switches[l] = 1;
+        } else {
+            link_switches[l]++;
+        }
+    }
+}
 
 ostream &operator<<(ostream &out, statistics &stats) {
     if (stats.sim_start_time == stats.sim_end_time) {
@@ -98,7 +111,20 @@ ostream &operator<<(ostream &out, statistics &stats) {
         << " sent and " << dec << total_received
         << " received (" << dec
         << (total_sent >= total_received ? total_sent - total_received : 0)
-        << " in flight)" << endl;
+        << " in flight)" << endl << endl;
+    out << "link switch counts:" << endl;
+    uint64_t total_switches = 0;
+    typedef statistics::link_switch_counter_t link_switch_counter_t;
+    for (link_switch_counter_t::const_iterator i = stats.link_switches.begin();
+         i != stats.link_switches.end(); ++i) {
+        egress_id src, dst; tie(src,dst) = i->first;
+        total_switches += i->second;
+        out << "    link " << src << " <-> " << dst << ": bandwidths changed "
+            << dec << i->second << " time" << (i->second == 1 ? "" : "s")
+            << endl;
+    }
+    out << "    all links: bandwidths changed " << dec << total_switches
+        << " time" << (total_switches == 1 ? "" : "s") << endl;
     return out;
 }
 

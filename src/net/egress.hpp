@@ -7,25 +7,10 @@
 #include <boost/shared_ptr.hpp>
 #include "flit.hpp"
 #include "ingress.hpp"
+#include "egress_id.hpp"
 
 using namespace std;
 using namespace boost;
-
-class egress_id {
-public:
-    explicit egress_id(const node_id parent, const string &name) throw();
-    bool operator==(const egress_id &) const throw();
-    bool operator<(const egress_id &) const throw();
-    friend ostream &operator<<(ostream &, const egress_id &);
-private:
-    const node_id parent;
-    const string name;
-private:
-    explicit egress_id() throw(); // not implemented
-};
-
-inline egress_id::egress_id(const node_id p, const string &n) throw()
-    : parent(p), name(n) { }
 
 class egress {
 public:

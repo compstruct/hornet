@@ -3,13 +3,10 @@
 
 #include "ingress.hpp"
 
-ostream &operator<<(ostream &out, const ingress_id &id) {
-    return out << id.parent << ":" << id.name;
-}
-
 ingress::ingress(const ingress_id &new_id, const set<virtual_queue_id> &vq_ids,
                  unsigned flits_per_queue, shared_ptr<router> rt,
-                 shared_ptr<channel_alloc> vca, shared_ptr<pressure_tracker> pt,
+                 shared_ptr<channel_alloc> vca,
+                 shared_ptr<pressure_tracker> pt,
                  logger &l) throw(err) : id(new_id), vqs(), log(l) {
     const node_id &parent_id = id.get_node_id().get_numeric_id();
     for (set<virtual_queue_id>::const_iterator i = vq_ids.begin();
@@ -31,7 +28,8 @@ void ingress::add_queue(shared_ptr<virtual_queue> vq) throw(err) {
                                   vq->get_id().get<1>().get_numeric_id());
     assert(next_hops.find(vq->get_id().get<1>()) == next_hops.end());
     vqs[vq->get_id().get<1>()] = vq;
-    next_hops[vq->get_id().get<1>()] = make_tuple(node_id(), virtual_queue_id());
+    next_hops[vq->get_id().get<1>()] =
+        make_tuple(node_id(), virtual_queue_id());
 }
 
 void ingress::tick_positive_edge() throw(err) {
@@ -54,7 +52,8 @@ ostream &operator<<(ostream &out, const ingress &i) {
         out << "[port " << i.get_id() << "]     queue "
             << qi->first << " has length " << qi->second->size();
         if (qi->second->size() > 0) {
-            out << " (head flit -> node " << qi->second->front_node_id() << ")";
+            out << " (head flit -> node " << qi->second->front_node_id()
+                << ")";
         }
         out << endl;
     }

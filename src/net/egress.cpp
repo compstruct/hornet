@@ -3,10 +3,6 @@
 
 #include "egress.hpp"
 
-ostream &operator<<(ostream &out, const egress_id &id) {
-    return out << id.parent << ":" << id.name;
-}
-
 egress::egress(egress_id new_id, shared_ptr<ingress> new_tgt,
                shared_ptr<pressure_tracker> pt, unsigned bw, logger &l)
     throw(err)

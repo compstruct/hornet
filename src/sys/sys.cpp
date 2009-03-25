@@ -220,7 +220,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
                     shared_ptr<arbiter>(new arbiter(time, nodes[from],
                                                     nodes[to], arb_scheme,
                                                     arb_min_bw, arb_period,
-                                                    arb_delay, log));
+                                                    arb_delay, stats, log));
             }
         }
     }

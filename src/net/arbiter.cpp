@@ -8,12 +8,13 @@
 
 arbiter::arbiter(uint64_t &time, shared_ptr<node> src, shared_ptr<node> dst,
                  arbitration_t new_sch, unsigned new_min_bw,
-                 unsigned new_period, unsigned new_delay, logger &l) throw(err)
+                 unsigned new_period, unsigned new_delay,
+                 shared_ptr<statistics> new_stats, logger &l) throw(err)
     : system_time(time), scheme(new_sch), min_bw(new_min_bw),
       period(new_period), delay(new_delay), next_arb(time), arb_queue(),
       src_to_dst(src->get_egress_to(dst->get_id())),
       dst_to_src(dst->get_egress_to(src->get_id())),
-      last_queued_src_to_dst_bw(UINT_MAX), log(l) {
+      last_queued_src_to_dst_bw(UINT_MAX), stats(new_stats), log(l) {
     if (scheme != AS_NONE && scheme != AS_DUMB)
         throw err_bad_arb_scheme(scheme);
     if (src_to_dst->get_bandwidth() + dst_to_src->get_bandwidth() < 2*min_bw) {
@@ -126,6 +127,7 @@ void arbiter::tick_positive_edge() throw(err) {
         src_to_dst->set_bandwidth(arb_queue.front().get<1>());
         dst_to_src->set_bandwidth(arb_queue.front().get<2>());
         arb_queue.pop();
+        stats->switch_link(src_to_dst->get_id(), dst_to_src->get_id());
     }
 }
 
