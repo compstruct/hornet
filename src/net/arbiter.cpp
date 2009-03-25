@@ -48,12 +48,10 @@ void arbiter::tick_positive_edge() throw(err) {
         LOG(log,12) << "[arbiter " << hex << setfill('0')
                     << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
                     << "] has no pressures to arbitrate" << endl;
-        return;
     } else if (total_bw == 0) {
         LOG(log,12) << "[arbiter " << hex << setfill('0')
                     << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
                     << "] has no bandwidth to allocate" << endl;
-        return;
     } else {
         unsigned num_src_queues = 0, num_dst_queues = 0;
         const ingress::queues_t &src_qs = dst_to_src->get_remote_queues();
