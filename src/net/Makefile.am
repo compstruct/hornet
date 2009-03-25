@@ -1,6 +1,5 @@
-CPPFLAGS += $(BOOST_CPPFLAGS)
-LDFLAGS += $(BOOST_LDFLAGS)
-
+AM_CPPFLAGS = $(BOOST_CPPFLAGS)
+AM_LDFLAGS = $(BOOST_LDFLAGS)
 AM_CXXFLAGS = -Wall -Wno-uninitialized -Werror
 
 noinst_LTLIBRARIES = libdarnet.la

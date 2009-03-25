@@ -1,11 +1,10 @@
-CPPFLAGS += $(BOOST_CPPFLAGS) \
-           -I$(top_srcdir)/src/net \
-           -I$(top_srcdir)/src/pe \
-           -I$(top_srcdir)/src/cpu \
-           -I$(top_srcdir)/src/inject \
-           -I$(top_srcdir)/src/sys
-LDFLAGS += $(BOOST_LDFLAGS) $(BOOST_PROGRAM_OPTIONS_LIB) @LTLIBOBJS@
-
+AM_CPPFLAGS = $(BOOST_CPPFLAGS) \
+              -I$(top_srcdir)/src/net \
+              -I$(top_srcdir)/src/pe \
+              -I$(top_srcdir)/src/cpu \
+              -I$(top_srcdir)/src/inject \
+              -I$(top_srcdir)/src/sys
+AM_LDFLAGS = $(BOOST_LDFLAGS) $(BOOST_PROGRAM_OPTIONS_LIB) @LTLIBOBJS@
 AM_CXXFLAGS = -Wall -Werror
 
 bin_PROGRAMS = darsim

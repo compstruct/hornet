@@ -1,6 +1,5 @@
-CPPFLAGS += $(BOOST_CPPFLAGS) -I$(top_srcdir)/src/net
-LDFLAGS += $(BOOST_LDFLAGS) -static
-
+AM_CPPFLAGS = $(BOOST_CPPFLAGS) -I$(top_srcdir)/src/net
+AM_LDFLAGS = $(BOOST_LDFLAGS) -static
 AM_CXXFLAGS = -Wall -Werror
 
 noinst_LTLIBRARIES = libdarpe.la

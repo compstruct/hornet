@@ -1,6 +1,5 @@
-CPPFLAGS += $(BOOST_CPPFLAGS)
-LDFLAGS += $(BOOST_LDFLAGS) -static
-
+AM_CPPFLAGS = $(BOOST_CPPFLAGS)
+AM_LDFLAGS = $(BOOST_LDFLAGS) -static
 AM_CXXFLAGS = -Wall -Werror
 
 noinst_LTLIBRARIES = libdarcommon.la
