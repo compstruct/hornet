@@ -12,7 +12,12 @@ egress::egress(egress_id new_id, shared_ptr<ingress> new_tgt,
     throw(err)
     : id(new_id), target_id(new_tgt->get_id().get_node_id()), target(new_tgt),
       pressures(pt), bandwidth(bw), log(l) {
-    pt->add_egress(target_id);
+    const ingress::queues_t &qs = target->get_queues();
+    for (ingress::queues_t::const_iterator qi = qs.begin(); qi != qs.end();
+         ++qi) {
+        node_id n; virtual_queue_id q; tie(n, q) = qi->second->get_id();
+        pt->add_egress_queue(n, q);
+    }
 }
 
 const egress_id &egress::get_id() const throw() { return id; }
@@ -21,8 +26,16 @@ unsigned egress::get_bandwidth() const throw() { return bandwidth; }
 
 void egress::set_bandwidth(unsigned b) throw() { bandwidth = b; }
 
-double egress::get_pressure() const throw() {
-    return pressures->get(target_id);
+pressure_t egress::get_pressure() const throw() {
+    const ingress::queues_t &qs = get_remote_queues();
+    pressure_t pressure = 0;
+    for (ingress::queues_t::const_iterator qi = qs.begin(); qi != qs.end();
+         ++qi) {
+        node_id n; virtual_queue_id q; tie(n,q) = qi->second->get_id();
+        assert(n == target_id);
+        pressure += pressures->get(n, q);
+    }
+    return pressure;
 }
 
 const ingress::queues_t &egress::get_remote_queues() const throw() {

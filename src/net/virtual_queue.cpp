@@ -18,7 +18,7 @@ virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
       vc_alloc(new_vc_alloc), pressures(new_pt),
       ingress_remaining(0), ingress_flow(0),
       egress_remaining(0), egress_flow(0), egress_vq(),
-      alloc(new_alloc), stale_size(0), log(l) { }
+      alloc(new_alloc), stale_size(0), increased_pressure(false), log(l) { }
 
 ostream &operator<<(ostream &out, const tuple<node_id, virtual_queue_id> &id) {
     return out << id.get<0>() << ":" << id.get<1>();
