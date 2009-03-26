@@ -14,10 +14,12 @@ arbiter::arbiter(uint64_t &time, shared_ptr<node> src, shared_ptr<node> dst,
       period(new_period), delay(new_delay), next_arb(time), arb_queue(),
       src_to_dst(src->get_egress_to(dst->get_id())),
       dst_to_src(dst->get_egress_to(src->get_id())),
-      last_queued_src_to_dst_bw(UINT_MAX), stats(new_stats), log(l) {
+      total_bw(src_to_dst->get_bandwidth() + dst_to_src->get_bandwidth()),
+      last_queued_src_to_dst_bw(src_to_dst->get_bandwidth()),
+      stats(new_stats), log(l) {
     if (scheme != AS_NONE && scheme != AS_DUMB)
         throw err_bad_arb_scheme(scheme);
-    if (src_to_dst->get_bandwidth() + dst_to_src->get_bandwidth() < 2*min_bw) {
+    if (total_bw < 2 * min_bw) {
         throw err_bad_arb_min_bw(src->get_id().get_numeric_id(),
                                  dst->get_id().get_numeric_id(),
                                  src_to_dst->get_bandwidth(),
@@ -42,9 +44,8 @@ void arbiter::tick_positive_edge() throw(err) {
     next_arb = system_time + period;
     double src_to_dst_pressure = src_to_dst->get_pressure();
     double dst_to_src_pressure = dst_to_src->get_pressure();
-    unsigned src_to_dst_bw = src_to_dst->get_bandwidth();
-    unsigned dst_to_src_bw = dst_to_src->get_bandwidth();
-    unsigned total_bw = src_to_dst_bw + dst_to_src_bw;
+    unsigned src_to_dst_bw = last_queued_src_to_dst_bw;
+    unsigned dst_to_src_bw = total_bw - src_to_dst_bw;
     if (src_to_dst_pressure == 0 && dst_to_src_pressure == 0) {
         LOG(log,12) << "[arbiter " << hex << setfill('0')
                     << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
@@ -53,6 +54,12 @@ void arbiter::tick_positive_edge() throw(err) {
         LOG(log,12) << "[arbiter " << hex << setfill('0')
                     << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
                     << "] has no bandwidth to allocate" << endl;
+    } else if ((src_to_dst_bw >= src_to_dst_pressure)
+               && (dst_to_src_bw >= dst_to_src_pressure)) {
+        LOG(log,12) << "[arbiter " << hex << setfill('0')
+                    << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
+                    << "] pressures satisfied with current configuration"
+                    << endl;
     } else {
         unsigned num_src_queues = 0, num_dst_queues = 0;
         const ingress::queues_t &src_qs = dst_to_src->get_remote_queues();
