@@ -24,7 +24,10 @@ public:
     void end_sim() throw();
     void send_flit(const flow_id &) throw();
     void receive_flit(const flow_id &) throw();
-    void switch_link(const egress_id &src, const egress_id &dst) throw();
+    void register_links(const egress_id &src, const egress_id &dst,
+                        unsigned num_links) throw();
+    void switch_links(const egress_id &src, const egress_id &dst,
+                      unsigned min_link, unsigned num_links) throw();
     friend ostream &operator<<(ostream &, statistics &);
 private:
     const uint64_t &system_time;
@@ -32,7 +35,7 @@ private:
     ptime sim_start_time;
     ptime sim_end_time;
     typedef map<flow_id, uint64_t> flit_counter_t;
-    typedef tuple<egress_id, egress_id> link_id;
+    typedef tuple<egress_id, egress_id, unsigned> link_id;
     typedef map<link_id, uint64_t> link_switch_counter_t;
     flit_counter_t sent_flits;
     flit_counter_t received_flits;
@@ -42,4 +45,3 @@ private:
 ostream &operator<<(ostream &, const statistics &);
 
 #endif // __STATISTICS_HPP__
-

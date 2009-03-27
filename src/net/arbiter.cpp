@@ -25,6 +25,8 @@ arbiter::arbiter(uint64_t &time, shared_ptr<node> src, shared_ptr<node> dst,
                                  src_to_dst->get_bandwidth(),
                                  dst_to_src->get_bandwidth(), min_bw);
     }
+    stats->register_links(src_to_dst->get_id(), dst_to_src->get_id(),
+                          total_bw);
     if (scheme != AS_NONE) {
         LOG(log,3) << "arbiter " << hex << setfill('0')
                    << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
@@ -58,7 +60,7 @@ void arbiter::tick_positive_edge() throw(err) {
                && (dst_to_src_bw >= dst_to_src_pressure)) {
         LOG(log,12) << "[arbiter " << hex << setfill('0')
                     << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
-                    << "] pressures satisfied with current configuration"
+                    << "] pressures satisfied with last configuration"
                     << endl;
     } else {
         unsigned num_src_queues = 0, num_dst_queues = 0;
@@ -127,14 +129,20 @@ void arbiter::tick_positive_edge() throw(err) {
         }
     }
     if (!arb_queue.empty() && arb_queue.front().get<0>() <= system_time) {
+        unsigned cur_src_to_dst_bw = src_to_dst->get_bandwidth();
+        unsigned new_src_to_dst_bw = arb_queue.front().get<1>();
+        unsigned new_dst_to_src_bw = arb_queue.front().get<2>();
+        unsigned min_sw_link = min(cur_src_to_dst_bw, new_src_to_dst_bw);
+        unsigned num_sw_links = labs(cur_src_to_dst_bw - new_src_to_dst_bw);
         LOG(log,2) << "[arbiter " << hex << setfill('0')
             << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
             << "] setting bandwidths ->" << dec << arb_queue.front().get<1>()
             << " and <-" << arb_queue.front().get<2>() << endl;
-        src_to_dst->set_bandwidth(arb_queue.front().get<1>());
-        dst_to_src->set_bandwidth(arb_queue.front().get<2>());
+        src_to_dst->set_bandwidth(new_src_to_dst_bw);
+        dst_to_src->set_bandwidth(new_dst_to_src_bw);
         arb_queue.pop();
-        stats->switch_link(src_to_dst->get_id(), dst_to_src->get_id());
+        stats->switch_links(src_to_dst->get_id(), dst_to_src->get_id(),
+                            min_sw_link, num_sw_links);
     }
 }
 

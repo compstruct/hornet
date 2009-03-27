@@ -43,17 +43,31 @@ void statistics::receive_flit(const flow_id &f) throw() {
     }
 }
 
-void statistics::switch_link(const egress_id &src,
-                             const egress_id &dst) throw() {
+void statistics::register_links(const egress_id &src, const egress_id &dst,
+                                unsigned num_links) throw() {
+    for (unsigned n = 0; n < num_links; ++n) {
+        link_id l(src,dst,n);
+        assert(link_switches.find(l) == link_switches.end());
+        link_switches[l] = 0;
+    }
+}
+
+void statistics::switch_links(const egress_id &src, const egress_id &dst,
+                              unsigned min_link, unsigned num_links) throw() {
     if (system_time >= start_time) {
-        link_id l(src,dst);
-        link_switch_counter_t::iterator i = link_switches.find(l);
-        if (i == link_switches.end()) {
-            link_switches[l] = 1;
-        } else {
+        for (unsigned n = min_link; n < min_link + num_links; ++n) {
+            link_id l(src,dst,n);
+            assert(link_switches.find(l) != link_switches.end());
             link_switches[l]++;
         }
     }
+}
+
+static ostream &operator<<(ostream &out,
+                           const tuple<egress_id, egress_id, unsigned> &l) {
+    egress_id src, dst; unsigned no; tie(src,dst,no) = l;
+    return out << src << "<->" << dst << "/"
+               << hex << setfill('0') << setw(2) << no;
 }
 
 ostream &operator<<(ostream &out, statistics &stats) {
@@ -117,9 +131,8 @@ ostream &operator<<(ostream &out, statistics &stats) {
     typedef statistics::link_switch_counter_t link_switch_counter_t;
     for (link_switch_counter_t::const_iterator i = stats.link_switches.begin();
          i != stats.link_switches.end(); ++i) {
-        egress_id src, dst; tie(src,dst) = i->first;
         total_switches += i->second;
-        out << "    link " << src << " <-> " << dst << ": bandwidths changed "
+        out << "    link " << i->first << ": bandwidths changed "
             << dec << i->second << " time" << (i->second == 1 ? "" : "s")
             << endl;
     }
