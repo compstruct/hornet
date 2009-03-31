@@ -24,8 +24,6 @@ libdarnet_la_SOURCES = \
     bridge.hpp bridge.cpp \
     arbiter.hpp arbiter.cpp \
     static_router.hpp static_router.cpp \
-    static_channel_alloc.hpp static_channel_alloc.cpp \
-    dynamic_channel_alloc.hpp dynamic_channel_alloc.cpp \
-    static_bridge_channel_alloc.hpp static_bridge_channel_alloc.cpp \
-    dynamic_bridge_channel_alloc.hpp dynamic_bridge_channel_alloc.cpp \
+    set_channel_alloc.hpp set_channel_alloc.cpp \
+    set_bridge_channel_alloc.hpp set_bridge_channel_alloc.cpp \
     statistics.hpp statistics.cpp

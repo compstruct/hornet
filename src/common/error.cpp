@@ -191,15 +191,27 @@ void err_duplicate_egress::show_to(ostream &out) const {
 }
 
 err_bad_next_hop::err_bad_next_hop(uint32_t new_node, uint32_t new_flow,
-                                   uint32_t new_next_node, uint32_t new_queue)
-  throw() : node(new_node), flow(new_flow), next_node(new_next_node),
-            next_queue(new_queue) { }
+                                   uint32_t new_next_node)
+  throw() : node(new_node), flow(new_flow), next_node(new_next_node) { }
 err_bad_next_hop::~err_bad_next_hop() throw() { }
 void err_bad_next_hop::show_to(ostream &out) const {
     out << "node " << setfill('0') << hex << setw(2) << node
         << " cannot route flow " << setw(8) << flow << " to "
+        << setw(2) << next_node << ": no connection to node";
+}
+
+err_bad_next_hop_queue::err_bad_next_hop_queue(uint32_t new_node,
+                                               uint32_t new_flow,
+                                               uint32_t new_next_node,
+                                               uint32_t new_next_q) throw()
+    : node(new_node), flow(new_flow), next_node(new_next_node),
+      next_queue(new_next_q) { }
+err_bad_next_hop_queue::~err_bad_next_hop_queue() throw() { }
+void err_bad_next_hop_queue::show_to(ostream &out) const {
+    out << "node " << setfill('0') << hex << setw(2) << node
+        << " cannot route flow " << setw(8) << flow << " to "
         << setw(2) << next_node << ":" << setw(2) << next_queue
-        << ": no connection to node " << setw(2) << next_node;
+        << ": no connection to queue";
 }
 
 err_bad_neighbor::err_bad_neighbor(uint32_t new_node, uint32_t new_nbr) throw()

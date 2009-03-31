@@ -12,37 +12,18 @@
 #include "node.hpp"
 #include "bridge.hpp"
 #include "static_router.hpp"
-#include "static_channel_alloc.hpp"
-#include "dynamic_channel_alloc.hpp"
-#include "static_bridge_channel_alloc.hpp"
-#include "dynamic_bridge_channel_alloc.hpp"
+#include "set_channel_alloc.hpp"
+#include "set_bridge_channel_alloc.hpp"
 #include "cpu.hpp"
 #include "injector.hpp"
 #include "event_parser.hpp"
 #include "sys.hpp"
 
 typedef enum {
-    VCA_TABLE = 0,
-    VCA_ROUND_ROBIN = 1,
-    NUM_VCAS
-} vca_type_t;
-
-typedef enum {
     PE_CPU = 0,
     PE_INJECTOR = 1,
     NUM_PES
 } pe_type_t;
-
-ostream &operator<<(ostream &out, const vca_type_t &vat) {
-    switch (vat) {
-    case VCA_TABLE:
-        return out << "table-driven";
-    case VCA_ROUND_ROBIN:
-        return out << "round-robin";
-    default:
-        abort();
-    }
-}
 
 static uint32_t read_word(shared_ptr<ifstream> in) throw(err) {
     uint32_t word = 0xdeadbeef;
@@ -63,9 +44,6 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
          shared_ptr<vector<string> > events_files, logger &new_log) throw(err)
     : pes(), bridges(), nodes(), time(0),
       stats(new statistics(time, stats_start)), log(new_log) {
-    uint32_t vca_type_word = read_word(img);
-    if (vca_type_word >= NUM_VCAS) throw err_bad_mem_img();
-    vca_type_t vca_type = static_cast<vca_type_t>(vca_type_word);
     uint32_t num_nodes = read_word(img);
     LOG(log,2) << "creating system with " << num_nodes << " node"
         << (num_nodes == 1 ? "" : "s") << "..." << endl;
@@ -82,28 +60,13 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
         shared_ptr<router> n_rt(new static_router(id, log));
-        shared_ptr<channel_alloc> n_vca;
-        shared_ptr<bridge_channel_alloc> b_vca;
-        switch (vca_type) {
-        case VCA_TABLE:
-            n_vca =
-                shared_ptr<channel_alloc>(new static_channel_alloc(id, log));
-            b_vca = (shared_ptr<bridge_channel_alloc>
-                     (new static_bridge_channel_alloc(id, log)));
-            break;
-        case VCA_ROUND_ROBIN:
-            n_vca =
-                shared_ptr<channel_alloc>(new dynamic_channel_alloc(id, log));
-            b_vca = (shared_ptr<bridge_channel_alloc>
-                     (new dynamic_bridge_channel_alloc(id, log)));
-            break;
-        default:
-            throw err_bad_mem_img();
-        }
+        shared_ptr<channel_alloc>
+            n_vca(new set_channel_alloc(id, log));
+        shared_ptr<bridge_channel_alloc>
+            b_vca(new set_bridge_channel_alloc(id, log));
         uint32_t flits_per_q = read_word(img);
         shared_ptr<node> n(new node(node_id(id), flits_per_q, n_rt, n_vca,
                                     log));
-
         uint32_t n2b_bw = read_word(img);
         uint32_t b2n_bw = read_word(img);
         uint32_t b2n_num_queues = read_word(img);
@@ -119,15 +82,13 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
         shared_ptr<bridge> b(new bridge(n, b_vca,
                                         n2b_queues, n2b_bw, b2n_queues, b2n_bw,
                                         flits_per_q, stats, log));
-        if (vca_type == VCA_ROUND_ROBIN) {
-            shared_ptr<dynamic_bridge_channel_alloc> vca =
-                static_pointer_cast<dynamic_bridge_channel_alloc>(b_vca);
-            shared_ptr<ingress> ingr = n->get_ingress_from(b->get_id());
-            const ingress::queues_t &qs = ingr->get_queues();
-            for (ingress::queues_t::const_iterator qi = qs.begin();
-                 qi != qs.end(); ++qi) {
+        shared_ptr<set_bridge_channel_alloc> vca =
+            static_pointer_cast<set_bridge_channel_alloc>(b_vca);
+        shared_ptr<ingress> b_n_i = n->get_ingress_from(b->get_id());
+        const ingress::queues_t &b_n_i_qs = b_n_i->get_queues();
+        for (ingress::queues_t::const_iterator qi = b_n_i_qs.begin();
+                 qi != b_n_i_qs.end(); ++qi) {
                 vca->add_queue(qi->second);
-            }
         }
         uint32_t pe_type_word = read_word(img);
         if (pe_type_word >= NUM_PES) throw err_bad_mem_img();
@@ -175,19 +136,19 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
     uint32_t num_cxns = read_word(img);
     typedef set<tuple<uint32_t, uint32_t> > cxns_t;
     cxns_t cxns;
-    LOG(log,2) << "network uses " << vca_type
-        << " virtual channel allocation" << endl;
     LOG(log,2) << "network fabric has " << dec << num_cxns
                << " one-way link" << (num_cxns == 1 ? "" : "s") << endl;
     if (arb_scheme == AS_NONE) {
         LOG(log,2) << "    (no bidirectional arbitration)" << endl;
     } else {
-        LOG(log,2) << "    (bidirectional arbitration every " << dec << arb_period
+        LOG(log,2) << "    (bidirectional arbitration every "
+                   << dec << arb_period
                    << " cycle" << (arb_period == 1 ? "" : "s");
         if (arb_min_bw == 0) {
             LOG(log,2) << " with no minimum bandwidth" << endl;
         } else {
-            LOG(log,2) << " with minimum bandwidth " << dec << arb_min_bw << endl;
+            LOG(log,2) << " with minimum bandwidth "
+                       << dec << arb_min_bw << endl;
         }
     }
     for (unsigned i  = 0; i < num_cxns; ++i) {
@@ -236,39 +197,28 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
         uint32_t cur_n = 0xdeadbeef;
         for (unsigned hop = 0; hop < route_len; ++hop) {
             uint32_t next_n = read_word(img);
-            uint32_t next_q = 0xdeadbeef;
-            if (vca_type == VCA_TABLE) {
-                next_q = read_word(img);
+            uint32_t num_next_qs = read_word(img);
+            vector<virtual_queue_id> next_qs;
+            for (uint32_t i = 0; i < num_next_qs; ++i) {
+                next_qs.push_back(virtual_queue_id(read_word(img)));
             }
             if (hop == 0) { // origin: program the bridge
                 (*flow_starts)[flow] = next_n;
-                if (vca_type == VCA_TABLE) {
-                    shared_ptr<static_bridge_channel_alloc> vca =
-                        static_pointer_cast<static_bridge_channel_alloc>
-                            (br_vcas[next_n]);
-                    vca->add_route(flow_id(flow), virtual_queue_id(next_q));
-                }
+                shared_ptr<set_bridge_channel_alloc> vca =
+                    static_pointer_cast<set_bridge_channel_alloc>
+                        (br_vcas[next_n]);
+                vca->add_route(flow_id(flow), next_qs);
                 prev_n = cur_n = next_n;
             } else { // next hop: program the current node
-                if ((vca_type == VCA_TABLE) && (hop == route_len - 1)
-                    && (next_n != cur_n))
+                if ((hop == route_len - 1) && (next_n != cur_n))
                     throw err_route_not_terminated(flow, next_n);
                 shared_ptr<static_router> r =
                     static_pointer_cast<static_router>(node_rts[cur_n]);
                 r->add_route(prev_n, flow_id(flow), next_n); // next node hop
-                if (vca_type == VCA_ROUND_ROBIN && hop == route_len - 1) {
-                    // final node -> bridge hop, missing in dynamic routes
-                    shared_ptr<static_router> r =
-                        static_pointer_cast<static_router>(node_rts[next_n]);
-                    r->add_route(cur_n, flow_id(flow), next_n);
-                }
-                if (vca_type == VCA_TABLE) { // VCA alloc route
-                    shared_ptr<static_channel_alloc> vca =
-                        static_pointer_cast<static_channel_alloc>
-                            (n_vcas[cur_n]);
-                    vca->add_route(next_n, flow_id(flow),
-                                   virtual_queue_id(next_q));
-                }
+                shared_ptr<set_channel_alloc> vca =
+                    static_pointer_cast<set_channel_alloc>
+                    (n_vcas[cur_n]);
+                vca->add_route(prev_n, flow_id(flow), next_n, next_qs);
                 prev_n = cur_n;
                 cur_n = next_n;
             }

@@ -72,13 +72,14 @@ public:
     bool full() const throw();  // uses real size only
     bool egress_ready() const throw(err);
     flit front() const throw(err);
-    node_id front_node_id() const throw(err);
+    node_id front_node_id() const throw(err); // dest node id for front flit
     virtual_queue_id front_vq_id() const throw(err);
     void set_front_vq_id(const virtual_queue_id &vqid) throw(err);
     bool ingress_new_flow() const throw(); // can accept new flit sequence
     bool egress_new_flow() const throw();  // next flit is a head flit
     flow_id get_egress_flow_id() const throw(err);
     uint32_t get_egress_flow_length() const throw(err);
+    node_id get_src_node_id() const throw();
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
 private:
@@ -135,6 +136,10 @@ inline node_id virtual_queue::front_node_id() const throw(err) {
 inline virtual_queue_id virtual_queue::front_vq_id() const throw(err) {
     assert(!empty());
     return egress_vq;
+}
+
+inline node_id virtual_queue::get_src_node_id() const throw() {
+    return src_node_id;
 }
 
 inline void virtual_queue::tick_positive_edge() throw(err) { }

@@ -257,8 +257,21 @@ private:
 class err_bad_next_hop : public err {
 public:
     explicit err_bad_next_hop(uint32_t node, uint32_t flow,
-                              uint32_t next_node, uint32_t next_queue) throw();
+                              uint32_t next_node) throw();
     virtual ~err_bad_next_hop() throw();
+private:
+    const uint32_t node;
+    const uint32_t flow;
+    const uint32_t next_node;
+    virtual void show_to(ostream &out) const;
+};
+
+class err_bad_next_hop_queue : public err {
+public:
+    explicit err_bad_next_hop_queue(uint32_t node, uint32_t flow,
+                                    uint32_t next_node, uint32_t next_queue)
+        throw();
+    virtual ~err_bad_next_hop_queue() throw();
 private:
     const uint32_t node;
     const uint32_t flow;

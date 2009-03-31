@@ -8,7 +8,7 @@ import sys, os, optparse, re, subprocess, ConfigParser
 
 objdump = 'objdump'
 file_magic = 'DAR '
-file_version = 200903300
+file_version = 200903310
 
 class Err(Exception):
     pass
@@ -167,7 +167,7 @@ def write_cxn(out, src, src_port, dst, dst_port, bw, queues, verbose=False):
     out.write(w2bs(len(queues)))
     for q in queues: out.write(w2bs(q))
 
-def write_route(out, queue_routing, flow, hops, verbose=False):
+def write_route(out, flow, hops, verbose=False):
     def pp_hop(hop):
         if type(hop) is tuple:
             n,q = hop
@@ -179,20 +179,14 @@ def write_route(out, queue_routing, flow, hops, verbose=False):
         print '    ' + ' '.join([pp_hop(h) for h in hops])
     out.write(w2bs(flow))
     out.write(w2bs(len(hops)))
-    if queue_routing == 0: # table routing
-        for n, q in hops:
-            out.write(w2bs(n))
-            out.write(w2bs(q))
-    elif queue_routing == 1: # round robin
-        for n in hops:
-            out.write(w2bs(n))
-    else:
-        raise Err('bad queue routing type: %s' % queue_routing)
+    for n, qs in hops:
+        out.write(w2bs(n))
+        out.write(w2bs(len(qs)))
+        for q in qs: out.write(w2bs(q))
 
 def write_complete_image(out, cfg, verbose=False):
     settings, pes, cxns, flows = new_system_config(cfg, verbose=verbose)
     write_header(out, verbose=verbose)
-    out.write(w2bs(settings['queue routing']))
     if verbose:
         print ('writing %d PE%s...' % (len(pes), '' if len(pes) == 1 else 's'))
     out.write(w2bs(len(pes)))
@@ -213,8 +207,7 @@ def write_complete_image(out, cfg, verbose=False):
                 (len(flows), '' if len(flows) == 1 else 's'))
     out.write(w2bs(len(flows)))
     for flow_id, flow_hops in flows:
-        write_route(out, settings['queue routing'], flow_id, flow_hops,
-                    verbose=verbose)
+        write_route(out, flow_id, flow_hops, verbose=verbose)
 
 def new_system_config(cfg, verbose=False):
     def get_links(w, h, n):
@@ -245,7 +238,19 @@ def new_system_config(cfg, verbose=False):
         try:
             for f in s.split():
                 n, q = [p_nat(v) for v in f.split(':')]
-                fs.append((n,q))
+                fs.append((n,[q]))
+        except ValueError:
+            raise Err('bad node:queue flows description: %s' % s)
+        return fs
+    def p_flow_nqs(s):
+        '''node:queue format'''
+        fs = []
+        try:
+            for f in s.split():
+                n_s, qs_s = f.split(':')
+                n = p_nat(n_s)
+                qs = [p_nat(q) for q in qs_s.split(',')]
+                fs.append((n,qs))
         except ValueError:
             raise Err('bad node:queue flows description: %s' % s)
         return fs
@@ -255,9 +260,10 @@ def new_system_config(cfg, verbose=False):
         try:
             for f in s.split():
                 n = p_nat(f)
-                fs.append(n)
+                fs.append((n,[]))
         except ValueError:
             raise Err('bad node-only flows description: %s' % s)
+        fs.append(fs[-1]) # duplicate last hop for node->bridge
         return fs
     def check_qs(dests):
         for d1 in dests:
@@ -267,31 +273,30 @@ def new_system_config(cfg, verbose=False):
                 if d1 != d2 and len(overlap) > 0:
                     raise Err('queues for %s and %s overlap: %s' %
                               (d1, d2, ' '.join(map(str,overlap))))
-    def check_flow_nq(id, hops, links):
+    def check_flow_nqs(id, hops, links):
         # hops[0] should come from cpu
         if len(hops) < 1: raise Err('flow %s: empty flow' % id)
-        first_n, first_q = hops[0]
-        if first_q not in get_qs('cpu'):
-            raise Err('flow %s: initial queue %02x:%02x does not exit the CPU' %
-                      (id, first_n, first_q))
-        last_n, last_q = hops[-1]
-        if last_q not in get_qs('net'):
-            raise Err(('flow %s: final queue %02x:%02x does not exit '
-                       'the network') % (id, last_n, last_q))
-        for (src_n, _), (dst_n, dst_q) in zip(hops, hops[1:-1]):
-            if [l for l in links
-                if (l['src'] == src_n and l['dst'] == dst_n
-                    and dst_q in l['queues'])] == []:
-                raise Err(('flow %s: queue %02x:%02x does not come from '
-                           'node %02x') % (id, dst_n, dst_q, src_n))
-    def check_flow_n(id, hops, links):
-        # hops[0] should come from cpu
-        if len(hops) < 1: raise Err('flow %s: empty flow' % id)
-        for src_n, dst_n in zip(hops, hops[1:]):
+        first_n, first_qs = hops[0]
+        for first_q in first_qs:
+            if first_q not in get_qs('cpu'):
+                raise Err(('flow %s: initial queue %02x:%02x does not '
+                           'exit the CPU') % (id, first_n, first_q))
+        last_n, last_qs = hops[-1]
+        for last_q in last_qs:
+            if last_q not in get_qs('net'):
+                raise Err(('flow %s: final queue %02x:%02x does not exit '
+                           'the network') % (id, last_n, last_q))
+        for (src_n, _), (dst_n, dst_qs) in zip(hops, hops[1:-1]):
             if [l for l in links
                 if l['src'] == src_n and l['dst'] == dst_n] == []:
                 raise Err('flow %s: node %02x cannot route to node %02x' %
                           (id, src_n, dst_n))
+            for dst_q in dst_qs:
+                if [l for l in links
+                    if (l['src'] == src_n and l['dst'] == dst_n
+                        and dst_q in l['queues'])] == []:
+                    raise Err(('flow %s: queue %02x:%02x does not come from '
+                               'node %02x') % (id, dst_n, dst_q, src_n))
     try:
         if cfg.has_option('bandwidth', 'arbitration'):
             raise Err('arbitration scheme must be specified '
@@ -325,15 +330,14 @@ def new_system_config(cfg, verbose=False):
         node_routing = cfg.get('routing', 'node')
         if node_routing != 'table':
             raise Error('bad node routing type: %s' % node_routing)
-        queue_routing_types = { 'table': 0, 'round-robin': 1 }
+        queue_routing_types = ['table', 'round-robin', 'set']
         queue_routing = cfg.get('routing', 'queue')
         if queue_routing not in queue_routing_types:
             raise Error('bad queue routing type: %s' % queue_routing)
         settings = { 'arbitration': arbs[arb],
                      'arbitration minimum bandwidth': arb_min_bw,
                      'arbitration period': arb_period,
-                     'arbitration delay': arb_delay,
-                     'queue routing': queue_routing_types[queue_routing] }
+                     'arbitration delay': arb_delay }
         w = p_nat(cfg.get('geometry', 'width'))
         h = p_nat(cfg.get('geometry', 'height'))
         check_qs(cfg.options('queues'))
@@ -361,12 +365,16 @@ def new_system_config(cfg, verbose=False):
                  for dir, dst_port, src, src_port in get_links(w, h, dst)]
         if queue_routing == 'table':
             for n, v in cfg.items('flows'):
-                check_flow_nq(n, p_flow_nq(v), links)
+                check_flow_nqs(n, p_flow_nq(v), links)
             flows = [(p_nat(n), p_flow_nq(v)) for n, v in cfg.items('flows')]
         elif queue_routing == 'round-robin':
             for n, v in cfg.items('flows'):
-                check_flow_n(n, p_flow_n(v), links)
+                check_flow_nqs(n, p_flow_n(v), links)
             flows = [(p_nat(n), p_flow_n(v)) for n, v in cfg.items('flows')]
+        elif queue_routing == 'set':
+            for n, v in cfg.items('flows'):
+                check_flow_nqs(n, p_flow_nqs(v), links)
+            flows = [(p_nat(n), p_flow_nqs(v)) for n, v in cfg.items('flows')]
         else:
             raise Err('bad queue routing type: %s' % queue_routing)
     except ConfigParser.Error, e:
