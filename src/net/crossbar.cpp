@@ -2,6 +2,7 @@
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
 #include <algorithm>
+#include "random.hpp"
 #include "crossbar.hpp"
 
 crossbar::crossbar(node_id parent, logger &l) throw()
@@ -64,11 +65,6 @@ void crossbar::rebuild_queues() throw() {
     }
 }
 
-static int random_range(int max) throw() {
-    double uniform_random = random()/(static_cast<double>(RAND_MAX)+1.0);
-    return static_cast<int>(max * uniform_random);
-}
-
 void crossbar::tick_positive_edge() throw(err) {
     LOG(log,12) << "[xbar " << id << "] arbitration" << endl;
     map<node_id, unsigned> bws; // remaining bandwidths for each egress
@@ -122,4 +118,3 @@ void crossbar::tick_positive_edge() throw(err) {
 }
 
 void crossbar::tick_negative_edge() throw(err) { }
-

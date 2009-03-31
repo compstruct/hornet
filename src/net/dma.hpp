@@ -8,7 +8,7 @@
 #include <boost/shared_ptr.hpp>
 #include "cstdint.hpp"
 #include "virtual_queue.hpp"
-#include "channel_alloc.hpp"
+#include "bridge_channel_alloc.hpp"
 #include "logger.hpp"
 #include "statistics.hpp"
 
@@ -78,14 +78,14 @@ class egress_dma_channel : public dma_channel {
 public:
     egress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned bw,
                        shared_ptr<virtual_queue> vq,
-                       shared_ptr<channel_alloc> vca,
+                       shared_ptr<bridge_channel_alloc> vca,
                        shared_ptr<statistics> stats, logger &log) throw();
     virtual ~egress_dma_channel();
     void send(flow_id flow, void *src, uint32_t num_flits) throw(err);
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
 private:
-    shared_ptr<channel_alloc> vc_alloc;
+    shared_ptr<bridge_channel_alloc> vc_alloc;
 private:
     egress_dma_channel(); // not defined
     egress_dma_channel(const egress_dma_channel &); // not defined

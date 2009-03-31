@@ -31,15 +31,14 @@ ingress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned new_bw,
 ingress_dma_channel::~ingress_dma_channel() { }
 
 void ingress_dma_channel::receive(void *dst, uint32_t len) throw(err) {
-    if (busy()) throw exc_dma_busy(id.get<0>().get_numeric_id(),
-                                   id.get<1>().get_numeric_id());
+    assert(!busy());
     started = false;
     mem = dst;
     remaining_flits = len;
 }
 
 bool ingress_dma_channel::has_waiting_flow() const throw() {
-    return  !vq->empty() && vq->egress_new_flow();
+    return vq->egress_ready();
 }
 
 uint32_t ingress_dma_channel::get_flow_length() const throw(err) {
@@ -75,24 +74,28 @@ void ingress_dma_channel::tick_positive_edge() throw(err) {
     }
 }
 
-void ingress_dma_channel::tick_negative_edge() throw(err) { }
+void ingress_dma_channel::tick_negative_edge() throw(err) {
+    if (vq->egress_new_flow() && !vq->front_vq_id().is_valid()) {
+        vq->set_front_vq_id(vq->get_id().get<1>());
+    }
+}
 
 egress_dma_channel::
 egress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned new_bw,
                    shared_ptr<virtual_queue> q,
-                   shared_ptr<channel_alloc> vca,
+                   shared_ptr<bridge_channel_alloc> vca,
                    shared_ptr<statistics> s, logger &l) throw()
     : dma_channel(n_id, d_id, new_bw, q, s, l), vc_alloc(vca) { }
 
 egress_dma_channel::~egress_dma_channel() { }
 
 void egress_dma_channel::send(flow_id f, void *src, uint32_t len) throw(err) {
-    if (busy()) throw exc_dma_busy(id.get<0>().get_numeric_id(),
-                                   id.get<1>().get_numeric_id());
+    assert(!busy());
     started = false;
     flow = f;
     mem = src;
     remaining_flits = len;
+    vc_alloc->claim(vq->get_id());
 }
 
 void egress_dma_channel::tick_positive_edge() throw(err) {
@@ -109,7 +112,7 @@ void egress_dma_channel::tick_positive_edge() throw(err) {
                              | remaining_flits));
             vq->push(flit(endian(v)));
             mem = mem ? (uint8_t *) mem + sizeof(uint64_t) : mem;
-            if (remaining_flits == 0) vc_alloc->release(vq->get_id().get<1>());
+            if (remaining_flits == 0) vc_alloc->release(vq->get_id());
         }
         stats->send_flit(flow);
         started = true;

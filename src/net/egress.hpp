@@ -18,12 +18,11 @@ public:
                     shared_ptr<pressure_tracker> pressures,
                     unsigned max_bandwidth, logger &log) throw(err);
     const egress_id &get_id() const throw();
+    const node_id &get_target_id() const throw();
     unsigned get_bandwidth() const throw();
     void set_bandwidth(unsigned new_bandwidth) throw();
     double get_pressure() const throw();
     const ingress::queues_t &get_remote_queues() const throw();
-    void tick_positive_edge() throw(err);
-    void tick_negative_edge() throw(err);
 private:
     const egress_id id;
     const node_id target_id;

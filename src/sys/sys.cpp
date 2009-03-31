@@ -14,6 +14,8 @@
 #include "static_router.hpp"
 #include "static_channel_alloc.hpp"
 #include "dynamic_channel_alloc.hpp"
+#include "static_bridge_channel_alloc.hpp"
+#include "dynamic_bridge_channel_alloc.hpp"
 #include "cpu.hpp"
 #include "injector.hpp"
 #include "event_parser.hpp"
@@ -70,8 +72,9 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
     typedef map<unsigned, shared_ptr<router> > routers_t;
     routers_t node_rts;
     typedef map<unsigned, shared_ptr<channel_alloc> > vcas_t;
-    vcas_t br_vcas;
+    typedef map<unsigned, shared_ptr<bridge_channel_alloc> > br_vcas_t;
     vcas_t n_vcas;
+    br_vcas_t br_vcas;
     typedef event_parser::injectors_t injectors_t;
     typedef event_parser::flow_starts_t flow_starts_t;
     shared_ptr<injectors_t> injectors(new injectors_t());
@@ -80,19 +83,19 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
         uint32_t id = read_word(img);
         shared_ptr<router> n_rt(new static_router(id, log));
         shared_ptr<channel_alloc> n_vca;
-        shared_ptr<channel_alloc> b_vca;
+        shared_ptr<bridge_channel_alloc> b_vca;
         switch (vca_type) {
         case VCA_TABLE:
             n_vca =
                 shared_ptr<channel_alloc>(new static_channel_alloc(id, log));
-            b_vca =
-                shared_ptr<channel_alloc>(new static_channel_alloc(id, log));
+            b_vca = (shared_ptr<bridge_channel_alloc>
+                     (new static_bridge_channel_alloc(id, log)));
             break;
         case VCA_ROUND_ROBIN:
             n_vca =
                 shared_ptr<channel_alloc>(new dynamic_channel_alloc(id, log));
-            b_vca =
-                shared_ptr<channel_alloc>(new dynamic_channel_alloc(id, log));
+            b_vca = (shared_ptr<bridge_channel_alloc>
+                     (new dynamic_bridge_channel_alloc(id, log)));
             break;
         default:
             throw err_bad_mem_img();
@@ -117,12 +120,14 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
                                         n2b_queues, n2b_bw, b2n_queues, b2n_bw,
                                         flits_per_q, stats, log));
         if (vca_type == VCA_ROUND_ROBIN) {
-            shared_ptr<dynamic_channel_alloc> d_b_vca =
-                static_pointer_cast<dynamic_channel_alloc>(b_vca);
-            d_b_vca->add_egress(node_id(id), b->get_egress());
-            shared_ptr<dynamic_channel_alloc> d_n_vca =
-                static_pointer_cast<dynamic_channel_alloc>(n_vca);
-            d_n_vca->add_egress(node_id(id), n->get_egress_to(node_id(id)));
+            shared_ptr<dynamic_bridge_channel_alloc> vca =
+                static_pointer_cast<dynamic_bridge_channel_alloc>(b_vca);
+            shared_ptr<ingress> ingr = n->get_ingress_from(b->get_id());
+            const ingress::queues_t &qs = ingr->get_queues();
+            for (ingress::queues_t::const_iterator qi = qs.begin();
+                 qi != qs.end(); ++qi) {
+                vca->add_queue(qi->second);
+            }
         }
         uint32_t pe_type_word = read_word(img);
         if (pe_type_word >= NUM_PES) throw err_bad_mem_img();
@@ -202,12 +207,6 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
                                         nodes[link_src_n],
                                         string(1, link_src_port_name),
                                         queues, link_bandwidth);
-        if (vca_type == VCA_ROUND_ROBIN) {
-            shared_ptr<dynamic_channel_alloc> vca =
-                static_pointer_cast<dynamic_channel_alloc>(n_vcas[link_src_n]);
-            vca->add_egress(node_id(link_dst_n),
-                            nodes[link_src_n]->get_egress_to(link_dst_n));
-        }
         cxns.insert(make_tuple(link_src_n, link_dst_n));
     }
     if (arb_scheme != AS_NONE) {
@@ -243,11 +242,10 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
             if (hop == 0) { // origin: program the bridge
                 (*flow_starts)[flow] = next_n;
                 if (vca_type == VCA_TABLE) {
-                    shared_ptr<static_channel_alloc> vca =
-                        static_pointer_cast<static_channel_alloc>
+                    shared_ptr<static_bridge_channel_alloc> vca =
+                        static_pointer_cast<static_bridge_channel_alloc>
                             (br_vcas[next_n]);
-                    vca->add_route(next_n, flow_id(flow),
-                                   virtual_queue_id(next_q));
+                    vca->add_route(flow_id(flow), virtual_queue_id(next_q));
                 }
                 cur_n = next_n;
             } else { // next hop: program the current node
@@ -311,4 +309,3 @@ void sys::tick_negative_edge() throw(err) {
         i->second->tick_negative_edge();
     }
 }
-

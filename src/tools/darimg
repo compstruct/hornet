@@ -8,7 +8,7 @@ import sys, os, optparse, re, subprocess, ConfigParser
 
 objdump = 'objdump'
 file_magic = 'DAR '
-file_version = 200903240
+file_version = 200903300
 
 class Err(Exception):
     pass
@@ -348,8 +348,8 @@ def new_system_config(cfg, verbose=False):
                    'n2b_bw': get_bw('cpu'),
                    'b2n_bw': get_bw('net'),
                    'qmem_size': p_nat(cfg.get('node', 'queue size')),
-                   'n2b_queues': get_qs('cpu'),
-                   'b2n_queues': get_qs('net') }
+                   'n2b_queues': get_qs('net'),
+                   'b2n_queues': get_qs('cpu') }
                  for id in node_ids]
         links = [{ 'src': src,
                    'src_port': src_port,

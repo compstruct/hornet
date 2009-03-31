@@ -7,13 +7,15 @@
 pressure_tracker::pressure_tracker(const node_id &parent, logger &l) throw()
     : id(parent), log(l) { }
 
-void pressure_tracker::inc(const node_id &tgt) throw(err) {
+void pressure_tracker::inc(const node_id &tgt,
+                           const virtual_queue_id &q) throw(err) {
     if (pressures.find(tgt) == pressures.end())
         throw err_bad_neighbor(id.get_numeric_id(), tgt.get_numeric_id());
     pressures[tgt]++;
 }
 
-void pressure_tracker::dec(const node_id &tgt) throw(err) {
+void pressure_tracker::dec(const node_id &tgt,
+                           const virtual_queue_id &q) throw(err) {
     if (pressures.find(tgt) == pressures.end())
         throw err_bad_neighbor(id.get_numeric_id(), tgt.get_numeric_id());
     assert(pressures[tgt] > 0);

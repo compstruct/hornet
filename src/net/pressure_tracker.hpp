@@ -8,6 +8,7 @@
 #include "error.hpp"
 #include "logger.hpp"
 #include "node_id.hpp"
+#include "virtual_queue_id.hpp"
 
 class pressure_tracker {
 public:
@@ -15,8 +16,8 @@ public:
 public:
     pressure_tracker(const node_id &parent_node, logger &log) throw();
     const node_id &get_id() const throw();
-    void inc(const node_id &target) throw(err);
-    void dec(const node_id &target) throw(err);
+    void inc(const node_id &target, const virtual_queue_id &q) throw(err);
+    void dec(const node_id &target, const virtual_queue_id &q) throw(err);
     pressure_t get(const node_id &target) throw(err);
     void add_egress(const node_id &target) throw(err);
 private:

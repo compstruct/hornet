@@ -5,9 +5,13 @@
 #define __VIRTUAL_QUEUE_ID_HPP__
 
 #include <iostream>
+#include <boost/tuple/tuple.hpp>
+#include <boost/tuple/tuple_comparison.hpp>
 #include "cstdint.hpp"
+#include "node_id.hpp"
 
 using namespace std;
+using namespace boost;
 
 class virtual_queue_id {
 public:
@@ -22,6 +26,8 @@ public:
 private:
     uint32_t id;
 };
+
+typedef tuple<node_id, virtual_queue_id> virtual_queue_node_id;
 
 inline virtual_queue_id::virtual_queue_id() throw()
     : id(0xffffffffUL) { }
@@ -51,5 +57,6 @@ inline uint32_t virtual_queue_id::get_numeric_id() const throw() { return id; }
 
 ostream &operator<<(ostream &, const virtual_queue_id &);
 
-#endif // __VIRTUAL_QUEUE_ID_HPP__
+ostream &operator<<(ostream &, const virtual_queue_node_id &);
 
+#endif // __VIRTUAL_QUEUE_ID_HPP__

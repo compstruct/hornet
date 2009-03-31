@@ -13,6 +13,8 @@ egress::egress(egress_id new_id, shared_ptr<ingress> new_tgt,
 
 const egress_id &egress::get_id() const throw() { return id; }
 
+const node_id &egress::get_target_id() const throw() { return target_id; }
+
 unsigned egress::get_bandwidth() const throw() { return bandwidth; }
 
 void egress::set_bandwidth(unsigned b) throw() { bandwidth = b; }
@@ -24,7 +26,3 @@ double egress::get_pressure() const throw() {
 const ingress::queues_t &egress::get_remote_queues() const throw() {
     return target->get_queues();
 }
-
-void egress::tick_positive_edge() throw(err) { }
-
-void egress::tick_negative_edge() throw(err) { }

@@ -15,6 +15,7 @@
 #include "statistics.hpp"
 #include "virtual_queue.hpp"
 #include "router.hpp"
+#include "bridge_channel_alloc.hpp"
 #include "node.hpp"
 #include "dma.hpp"
 
@@ -26,11 +27,12 @@ class node;
 class bridge {
 public:
     explicit bridge(shared_ptr<node> n,
-                    shared_ptr<channel_alloc> bridge_vca,
+                    shared_ptr<bridge_channel_alloc> bridge_vca,
                     const set<virtual_queue_id> &node_vq_ids, unsigned n2b_bw,
                     const set<virtual_queue_id> &bridge_vq_ids, unsigned b2n_bw,
                     unsigned flits_per_queue, shared_ptr<statistics> stats,
                     logger &new_log) throw(err);
+    const node_id &get_id() const throw();
     uint32_t get_transmission_done(uint32_t transmission) throw();
     uint32_t get_waiting_queues() throw();
     uint32_t get_queue_flow_id(uint32_t queue) throw(err);
@@ -59,7 +61,7 @@ private:
 
     const node_id id;
     shared_ptr<node> target;
-    shared_ptr<channel_alloc> vc_alloc;
+    shared_ptr<bridge_channel_alloc> vc_alloc;
     shared_ptr<ingress> incoming;
     shared_ptr<egress> outgoing;
     ingress_dmas_t ingress_dmas;
@@ -72,6 +74,8 @@ private:
     bridge(); // not defined
     bridge(const bridge &); // not defined
 };
+
+inline const node_id &bridge::get_id() const throw() { return id; }
 
 #endif // __BRIDGE_HPP__
 

@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <utility>
 #include "endian.hpp"
+#include "channel_alloc.hpp"
 #include "node.hpp"
 
 node::node(node_id new_id, uint32_t memsz, shared_ptr<router> new_rt,
@@ -30,6 +31,7 @@ void node::add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err) {
         add_queue_id(q->first);
     }
     ingresses[src] = ingress;
+    vc_alloc->add_ingress(ingress);
     xbar.add_ingress(src, ingress);
 }
 
@@ -39,7 +41,14 @@ void node::add_egress(node_id dst, shared_ptr<egress> egress) throw(err) {
                                    dst.get_numeric_id());
     }
     egresses[dst] = egress;
+    vc_alloc->add_egress(egress);
     xbar.add_egress(dst, egress);
+}
+
+shared_ptr<ingress> node::get_ingress_from(node_id src) throw(err) {
+    if (ingresses.find(src) == ingresses.end())
+        throw err_bad_neighbor(get_id().get_numeric_id(), src.get_numeric_id());
+    return ingresses[src];
 }
 
 shared_ptr<egress> node::get_egress_to(node_id dst) throw(err) {
@@ -70,16 +79,13 @@ void node::connect_from(const string &port_name,
     src->add_egress(get_id(), egr);
 }
 
+
 void node::tick_positive_edge() throw(err) {
     for (ingresses_t::iterator n = ingresses.begin();
          n != ingresses.end(); ++n) {
         n->second->tick_positive_edge();
     }
     xbar.tick_positive_edge();
-    for (egresses_t::iterator n = egresses.begin();
-         n != egresses.end(); ++n) {
-        n->second->tick_positive_edge();
-    }
 }
 
 void node::tick_negative_edge() throw(err) {
@@ -88,9 +94,6 @@ void node::tick_negative_edge() throw(err) {
         n->second->tick_negative_edge();
     }
     xbar.tick_negative_edge();
-    for (egresses_t::iterator n = egresses.begin();
-         n != egresses.end(); ++n) {
-        n->second->tick_negative_edge();
-    }
+    vc_alloc->allocate();
 }
 

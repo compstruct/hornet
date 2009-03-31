@@ -12,12 +12,11 @@ class static_channel_alloc : public channel_alloc {
 public:
     static_channel_alloc(node_id src, logger &log) throw();
     virtual ~static_channel_alloc() throw();
-    virtual virtual_queue_id request(node_id node, flow_id flow) throw(err);
-    virtual void release(virtual_queue_id q) throw(err);
+    virtual void allocate() throw(err);
+    virtual void add_egress(shared_ptr<egress> egress) throw(err);
     void add_route(node_id dst, flow_id, virtual_queue_id vq) throw(err);
 private:
     map<node_id, map<flow_id, virtual_queue_id> > routes;
-    set<virtual_queue_id> in_use;
 };
 
 #endif // __STATIC_CHANNEL_ALLOC_HPP__

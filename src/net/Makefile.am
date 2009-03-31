@@ -11,6 +11,7 @@ libdarnet_la_SOURCES = \
     virtual_queue_id.hpp virtual_queue_id.cpp \
     router.hpp router.cpp \
     channel_alloc.hpp channel_alloc.cpp \
+    bridge_channel_alloc.hpp bridge_channel_alloc.cpp \
     pressure_tracker.hpp pressure_tracker.cpp \
     virtual_queue.hpp virtual_queue.cpp \
     ingress_id.hpp ingress_id.cpp \
@@ -25,5 +26,6 @@ libdarnet_la_SOURCES = \
     static_router.hpp static_router.cpp \
     static_channel_alloc.hpp static_channel_alloc.cpp \
     dynamic_channel_alloc.hpp dynamic_channel_alloc.cpp \
+    static_bridge_channel_alloc.hpp static_bridge_channel_alloc.cpp \
+    dynamic_bridge_channel_alloc.hpp dynamic_bridge_channel_alloc.cpp \
     statistics.hpp statistics.cpp
-

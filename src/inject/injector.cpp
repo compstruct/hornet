@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <iterator>
 #include <algorithm>
+#include "random.hpp"
 #include "injector.hpp"
 
 injector::injector(const pe_id &id, uint64_t &t, logger &l) throw(err)
@@ -31,11 +32,6 @@ void injector::add_event(const uint64_t &t, const flow_id &f,
         flow_ids.push_back(f);
         flows[f] = make_tuple(UINT64_MAX, 0, 0);
     }
-}
-
-static int random_range(int max) throw() {
-    double uniform_random = random()/(static_cast<double>(RAND_MAX)+1.0);
-    return static_cast<int>(max * uniform_random);
 }
 
 void injector::tick_positive_edge() throw(err) {

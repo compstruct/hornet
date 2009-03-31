@@ -27,6 +27,7 @@ public:
     void add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err);
     void add_egress(node_id dst, shared_ptr<egress> egress) throw(err);
     void add_queue_id(virtual_queue_id id) throw(err);
+    shared_ptr<ingress> get_ingress_from(node_id src) throw(err);
     shared_ptr<egress> get_egress_to(node_id dst) throw(err);
     shared_ptr<router> get_router() throw();
     shared_ptr<channel_alloc> get_channel_alloc() throw();

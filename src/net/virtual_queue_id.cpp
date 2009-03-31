@@ -7,3 +7,7 @@
 ostream &operator<<(ostream &out, const virtual_queue_id &id) {
     return out << hex << setfill('0') << setw(2) << id.id;
 }
+
+ostream &operator<<(ostream &out, const virtual_queue_node_id &id) {
+    return out << id.get<0>() << ":" << id.get<1>();
+}

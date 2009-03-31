@@ -6,6 +6,8 @@
 
 #include <set>
 #include <map>
+#include <boost/tuple/tuple.hpp>
+#include <boost/tuple/tuple_comparison.hpp>
 #include "channel_alloc.hpp"
 #include "egress.hpp"
 
@@ -13,15 +15,11 @@ class dynamic_channel_alloc : public channel_alloc {
 public:
     dynamic_channel_alloc(node_id src, logger &log) throw();
     virtual ~dynamic_channel_alloc() throw();
-    virtual virtual_queue_id request(node_id node, flow_id flow) throw(err);
-    virtual void release(virtual_queue_id q) throw(err);
-    void add_egress(node_id dst, shared_ptr<egress> egress) throw(err);
+    virtual void allocate() throw(err);
+    void add_egress(shared_ptr<egress> egress) throw(err);
 private:
-    typedef deque<shared_ptr<virtual_queue> > vq_deque_t;
-    typedef map<node_id, vq_deque_t> egress_queues_t;
-    egress_queues_t egresses;
-    set<virtual_queue_id> in_use;
+    typedef vector<shared_ptr<egress> > egresses_t;
+    egresses_t egresses;
 };
 
 #endif // __DYNAMIC_CHANNEL_ALLOC_HPP__
-
