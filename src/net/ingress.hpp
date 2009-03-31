@@ -19,7 +19,8 @@ class ingress {
 public:
     typedef map<virtual_queue_id, shared_ptr<virtual_queue> > queues_t;
 public:
-    explicit ingress(const ingress_id &id, const set<virtual_queue_id> &vq_ids,
+    explicit ingress(const ingress_id &id, const node_id &src_node_id,
+                     const set<virtual_queue_id> &vq_ids,
                      unsigned flits_per_queue, shared_ptr<router> rt,
                      shared_ptr<channel_alloc> virtual_channel_alloc,
                      shared_ptr<pressure_tracker> pressures,
@@ -33,6 +34,7 @@ public:
 private:
     typedef map<virtual_queue_id, virtual_queue_node_id > next_hops_t;
     const ingress_id id;
+    const node_id src_node_id;
     queues_t vqs;
     next_hops_t next_hops;
     logger &log;

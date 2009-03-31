@@ -232,6 +232,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
         uint32_t route_len = read_word(img);
         LOG(log,2) << "flow " << flow_id(flow) << " with " << dec
             << route_len << " hop" << (route_len == 1 ? "" : "s") << endl;
+        uint32_t prev_n = 0xdeadbeef;
         uint32_t cur_n = 0xdeadbeef;
         for (unsigned hop = 0; hop < route_len; ++hop) {
             uint32_t next_n = read_word(img);
@@ -247,19 +248,19 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
                             (br_vcas[next_n]);
                     vca->add_route(flow_id(flow), virtual_queue_id(next_q));
                 }
-                cur_n = next_n;
+                prev_n = cur_n = next_n;
             } else { // next hop: program the current node
                 if ((vca_type == VCA_TABLE) && (hop == route_len - 1)
                     && (next_n != cur_n))
                     throw err_route_not_terminated(flow, next_n);
                 shared_ptr<static_router> r =
                     static_pointer_cast<static_router>(node_rts[cur_n]);
-                r->add_route(flow_id(flow), next_n); // next node hop
+                r->add_route(prev_n, flow_id(flow), next_n); // next node hop
                 if (vca_type == VCA_ROUND_ROBIN && hop == route_len - 1) {
                     // final node -> bridge hop, missing in dynamic routes
                     shared_ptr<static_router> r =
                         static_pointer_cast<static_router>(node_rts[next_n]);
-                    r->add_route(flow_id(flow), next_n);
+                    r->add_route(cur_n, flow_id(flow), next_n);
                 }
                 if (vca_type == VCA_TABLE) { // VCA alloc route
                     shared_ptr<static_channel_alloc> vca =
@@ -268,6 +269,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
                     vca->add_route(next_n, flow_id(flow),
                                    virtual_queue_id(next_q));
                 }
+                prev_n = cur_n;
                 cur_n = next_n;
             }
         }

@@ -16,7 +16,7 @@ using namespace std;
 class router {
 public:
     virtual ~router() throw();
-    virtual node_id route(flow_id flow) throw(err) = 0;
+    virtual node_id route(node_id src_node_id, flow_id flow) throw(err) = 0;
     const node_id &get_id() const throw();
 protected:
     router(node_id id, logger &log) throw();

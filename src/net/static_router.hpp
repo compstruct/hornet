@@ -5,16 +5,21 @@
 #define __STATIC_ROUTER_HPP__
 
 #include <map>
+#include "boost/tuple/tuple.hpp"
+#include "boost/tuple/tuple_comparison.hpp"
 #include "router.hpp"
+
+using namespace boost;
 
 class static_router : public router {
 public:
     static_router(node_id id, logger &log) throw();
     virtual ~static_router() throw();
-    virtual node_id route(flow_id flow) throw(err);
-    void add_route(flow_id flow, node_id n) throw(err);
+    virtual node_id route(node_id src_node_id, flow_id flow) throw(err);
+    void add_route(node_id prev, flow_id flow, node_id n) throw(err);
 private:
-    typedef map<flow_id, node_id> routes_t;
+    typedef tuple<node_id, flow_id> route_query_t;
+    typedef map<route_query_t, node_id> routes_t;
     routes_t routes;
 };
 

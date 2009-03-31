@@ -14,14 +14,16 @@ class bogus_router : public router {
 public:
     bogus_router(node_id id, logger &log) throw();
     virtual ~bogus_router() throw();
-    virtual node_id route(flow_id flow) throw(err);
+    virtual node_id route(node_id src_id, flow_id flow) throw(err);
 };
 
 bogus_router::bogus_router(node_id i, logger &l) throw() : router(i,l) { }
 
 bogus_router::~bogus_router() throw() { }
 
-node_id bogus_router::route(flow_id flow) throw(err) { return get_id(); }
+node_id bogus_router::route(node_id n, flow_id f) throw(err) {
+    return get_id();
+}
 
 class bogus_channel_alloc : public channel_alloc {
 public:
@@ -61,8 +63,8 @@ bridge::bridge(shared_ptr<node> n,
     // bridge -> node: bridge egress and node ingress
     ingress_id node_ingress_id(n->get_id(), "B");
     shared_ptr<ingress> node_ingress =
-        shared_ptr<ingress>(new ingress(node_ingress_id, b2n_vq_ids,
-                                        flits_per_queue,
+        shared_ptr<ingress>(new ingress(node_ingress_id, n->get_id(),
+                                        b2n_vq_ids, flits_per_queue,
                                         target->get_router(),
                                         target->get_channel_alloc(),
                                         target->get_pressures(), log));
@@ -87,9 +89,9 @@ bridge::bridge(shared_ptr<node> n,
     copy(n2b_vq_ids.begin(), n2b_vq_ids.end(),
          back_insert_iterator<vector<virtual_queue_id> >(vqids));
     ingress_id bridge_ingress_id(n->get_id(), "X");
-    incoming = shared_ptr<ingress>(new ingress(bridge_ingress_id, n2b_vq_ids,
-                                               flits_per_queue, br_rt,
-                                               br_vca, br_pt, log));
+    incoming = shared_ptr<ingress>(new ingress(bridge_ingress_id, n->get_id(),
+                                               n2b_vq_ids, flits_per_queue,
+                                               br_rt, br_vca, br_pt, log));
     for (ingress::queues_t::const_iterator q = incoming->get_queues().begin();
          q != incoming->get_queues().end(); ++q) {
         n->add_queue_id(q->first);

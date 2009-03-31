@@ -218,6 +218,16 @@ void exc_bad_flow::show_to(ostream &out) const {
         << " has no route for flow " << setw(8) << flow;
 }
 
+exc_bad_flow_from::exc_bad_flow_from(uint32_t new_node, uint32_t new_src_node,
+                                     uint32_t new_flow) throw()
+    : node(new_node), src_node(new_src_node), flow(new_flow) { }
+exc_bad_flow_from::~exc_bad_flow_from() throw() { }
+void exc_bad_flow_from::show_to(ostream &out) const {
+    out << "node " << setfill('0') << hex << setw(2) << node 
+        << " has no route for flow " << setw(8) << flow
+        << " from node " << setw(2) << src_node;
+}
+
 err_route_not_static::err_route_not_static() throw() { }
 err_route_not_static::~err_route_not_static() throw() { }
 void err_route_not_static::show_to(ostream &out) const {

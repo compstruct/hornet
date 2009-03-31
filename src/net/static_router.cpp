@@ -9,20 +9,23 @@ static_router::static_router(node_id i, logger &l) throw()
 
 static_router::~static_router() throw() { }
 
-node_id static_router::route(flow_id flow) throw(err) {
-    routes_t::iterator ri = routes.find(flow);
+node_id static_router::route(node_id src, flow_id f) throw(err) {
+    route_query_t rq = route_query_t(src, f);
+    routes_t::iterator ri = routes.find(rq);
     if (ri == routes.end())
-        throw exc_bad_flow(id.get_numeric_id(), flow.get_numeric_id());
+        throw exc_bad_flow_from(id.get_numeric_id(), src.get_numeric_id(),
+                                f.get_numeric_id());
     return ri->second;
 }
 
-void static_router::add_route(flow_id f, node_id n) throw(err) {
-    if (routes.find(f) != routes.end()) {
+void static_router::add_route(node_id src, flow_id f,
+                              node_id dst) throw(err) {
+    route_query_t rq = route_query_t(src, f);
+    if (routes.find(rq) != routes.end()) {
         throw err_duplicate_flow(get_id().get_numeric_id(),
                                  f.get_numeric_id());
     }
     LOG(log,4) << "router " << get_id() << " routing flow " << f
-        << " to node " << n << endl;
-    routes[f] = n;
+               << " from node " << src << " to node " << dst << endl;
+    routes[rq] = dst;
 }
-

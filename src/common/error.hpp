@@ -287,6 +287,18 @@ private:
     virtual void show_to(ostream &out) const;
 };
 
+class exc_bad_flow_from : public err_runtime_exc {
+public:
+    explicit exc_bad_flow_from(uint32_t node, uint32_t src_node,
+                               uint32_t flow) throw();
+    virtual ~exc_bad_flow_from() throw();
+private:
+    const uint32_t node;
+    const uint32_t src_node;
+    const uint32_t flow;
+    virtual void show_to(ostream &out) const;
+};
+
 class err_route_not_static : public err {
 public:
     explicit err_route_not_static() throw();

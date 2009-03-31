@@ -10,13 +10,14 @@ common_alloc::common_alloc(unsigned max_slots) throw()
     : size(max_slots), max_size(max_slots) { }
 
 virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
+                             node_id new_src_node_id,
                              shared_ptr<router> new_rt,
                              shared_ptr<channel_alloc> new_vc_alloc,
                              shared_ptr<pressure_tracker> new_pt,
                              shared_ptr<common_alloc> new_alloc,
                              logger &l) throw()
-    : id(make_tuple(new_node_id, new_vq_id)), q(), rt(new_rt),
-      vc_alloc(new_vc_alloc), pressures(new_pt),
+    : id(make_tuple(new_node_id, new_vq_id)), src_node_id(new_src_node_id),
+      q(), rt(new_rt), vc_alloc(new_vc_alloc), pressures(new_pt),
       ingress_remaining(0), ingress_flow(0),
       egress_remaining(0), egress_flow(0), egress_vq(),
       alloc(new_alloc), stale_size(0), log(l) { }
@@ -29,7 +30,7 @@ void virtual_queue::push(const flit &f) throw(err) {
         ingress_flow = head.get_flow_id();
         if (q.empty()) egress_flow = ingress_flow;
         ingress_remaining = head.get_length();
-        next_node = rt->route(ingress_flow);
+        next_node = rt->route(src_node_id, ingress_flow);
         LOG(log,3) << "[queue " << id << "] ingress: " << head
             << " (flow " << ingress_flow << ")" << endl;
     } else {

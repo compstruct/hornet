@@ -58,6 +58,7 @@ class channel_alloc;
 class virtual_queue {
 public:
     explicit virtual_queue(node_id parent_id, virtual_queue_id queue_id,
+                           node_id src_node_id,
                            shared_ptr<router> flow_router,
                            shared_ptr<channel_alloc> vc_alloc,
                            shared_ptr<pressure_tracker> pressures,
@@ -82,6 +83,7 @@ public:
     void tick_negative_edge() throw(err);
 private:
     const virtual_queue_node_id id;
+    node_id src_node_id;
     queue<tuple<flit, node_id> > q;
     shared_ptr<router> rt;
     shared_ptr<channel_alloc> vc_alloc;
