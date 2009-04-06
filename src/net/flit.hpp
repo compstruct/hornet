@@ -13,14 +13,33 @@ using namespace std;
 
 class flit {
 public:
-    flit(uint64_t data);
+    flit(uint64_t data) throw();
+    flit(const flit &flit) throw();
+    flit &operator=(const flit &flit) throw();
     const uint64_t &get_data() const throw();
+    const uint64_t &get_uid() const throw();
 protected:
     uint64_t data;
+    uint64_t uid;
+protected:
+    static uint64_t next_uid;
 };
 
-inline flit::flit(uint64_t new_data) : data(new_data) { }
+inline flit::flit(uint64_t new_data) throw() : data(new_data), uid(next_uid++) {
+    assert(next_uid != 0);
+}
+
+inline flit::flit(const flit &f) throw() : data(f.data), uid(f.uid) { }
+
+inline flit &flit::operator=(const flit &f) throw() {
+    data = f.data;
+    uid = f.uid;
+    return *this;
+}
+
 inline const uint64_t &flit::get_data() const throw() { return data; }
+
+inline const uint64_t &flit::get_uid() const throw() { return uid; }
 
 // for head flits, length is the number of packets that follow the head
 class head_flit : public flit {

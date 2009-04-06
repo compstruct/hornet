@@ -5,12 +5,14 @@
 #define __STATISTICS_HPP__
 
 #include <map>
+#include <map>
 #include <iostream>
 #include <boost/tuple/tuple.hpp>
 #include <boost/tuple/tuple_comparison.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include "cstdint.hpp"
 #include "flow_id.hpp"
+#include "flit.hpp"
 #include "egress_id.hpp"
 
 using namespace std;
@@ -22,8 +24,8 @@ public:
     statistics(const uint64_t &system_time, const uint64_t &start_time) throw();
     void start_sim() throw();
     void end_sim() throw();
-    void send_flit(const flow_id &) throw();
-    void receive_flit(const flow_id &) throw();
+    void send_flit(const flow_id &, const flit &) throw();
+    void receive_flit(const flow_id &, const flit &) throw();
     void register_links(const egress_id &src, const egress_id &dst,
                         unsigned num_links) throw();
     void switch_links(const egress_id &src, const egress_id &dst,
@@ -37,8 +39,15 @@ private:
     typedef map<flow_id, uint64_t> flit_counter_t;
     typedef tuple<egress_id, egress_id, unsigned> link_id;
     typedef map<link_id, uint64_t> link_switch_counter_t;
+    typedef map<uint64_t, uint64_t> flit_timestamp_t;
+    typedef map<flow_id, tuple<double, double> > flit_inc_stats_t;
     flit_counter_t sent_flits;
+    uint64_t total_sent_flits;
     flit_counter_t received_flits;
+    uint64_t total_received_flits;
+    flit_timestamp_t flit_departures;
+    flit_inc_stats_t flit_inc_stats;
+    tuple<double,double> total_inc_stats;
     link_switch_counter_t link_switches;
 };
 

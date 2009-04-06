@@ -1,6 +1,7 @@
 // -*- mode:c++; c-style:k&r; c-basic-offset:4; indent-tabs-mode: nil; -*-
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
+#include <cmath>
 #include <set>
 #include <algorithm>
 #include <iomanip>
@@ -9,7 +10,9 @@
 statistics::statistics(const uint64_t &sys_time, const uint64_t &start) throw()
     : system_time(sys_time), start_time(start),
       sim_start_time(microsec_clock::local_time()),
-      sim_end_time(sim_start_time), sent_flits(), received_flits(),
+      sim_end_time(sim_start_time), sent_flits(), total_sent_flits(0),
+      received_flits(), total_received_flits(0),
+      flit_departures(), flit_inc_stats(), total_inc_stats(0,0),
       link_switches() { }
 
 void statistics::start_sim() throw() {
@@ -21,24 +24,54 @@ void statistics::end_sim() throw() {
     sim_end_time = microsec_clock::local_time();
 }
 
-void statistics::send_flit(const flow_id &f) throw() {
+void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
     if (system_time >= start_time) {
-        flit_counter_t::iterator i = sent_flits.find(f);
+        total_sent_flits++;
+        flit_counter_t::iterator i = sent_flits.find(fid);
         if (i == sent_flits.end()) {
-            sent_flits[f] = 1;
+            sent_flits[fid] = 1;
         } else {
-            sent_flits[f]++;
+            sent_flits[fid]++;
         }
+        assert(flit_departures.find(flt.get_uid()) == flit_departures.end());
+        flit_departures[flt.get_uid()] = system_time;
     }
 }
 
-void statistics::receive_flit(const flow_id &f) throw() {
+void statistics::receive_flit(const flow_id &fid, const flit &flt) throw() {
     if (system_time >= start_time) {
-        flit_counter_t::iterator i = received_flits.find(f);
-        if (i == received_flits.end()) {
-            received_flits[f] = 1;
-        } else {
-            received_flits[f]++;
+        flit_timestamp_t::iterator di = flit_departures.find(flt.get_uid());
+        if (di != flit_departures.end()) {
+            float flight_time = system_time - di->second;
+            total_received_flits++;
+            if (total_received_flits == 1) {
+                total_inc_stats.get<0>() = flight_time;
+            } else {
+                double &mean = total_inc_stats.get<0>();
+                double &var_numer = total_inc_stats.get<1>();
+                double q = flight_time - mean;
+                double r = q / total_received_flits;
+                mean += r;
+                var_numer += r * (total_received_flits - 1) * q;
+            }
+            if (received_flits.find(fid) == received_flits.end()) {
+                received_flits[fid] = 1;
+            } else {
+                received_flits[fid]++;
+            }
+            flit_inc_stats_t::iterator si = flit_inc_stats.find(fid);
+            if (si == flit_inc_stats.end()) {
+                flit_inc_stats[fid] = make_tuple(flight_time, 0);
+            } else {
+                double &mean = si->second.get<0>();
+                double &var_numer = si->second.get<1>();
+                double num_received = received_flits[fid];
+                double q = flight_time - mean;
+                double r = q / num_received;
+                mean += r;
+                var_numer += r * (num_received - 1) * q;
+            }
+            flit_departures.erase(flt.get_uid());
         }
     }
 }
@@ -76,19 +109,15 @@ ostream &operator<<(ostream &out, statistics &stats) {
     }
     time_duration sim_time = stats.sim_end_time - stats.sim_start_time;
     uint64_t stats_time = stats.system_time - stats.start_time;
-    uint64_t total_sent = 0;
-    uint64_t total_received = 0;
     set<flow_id> flow_ids;
     typedef statistics::flit_counter_t flit_counter_t;
     for (flit_counter_t::const_iterator i = stats.sent_flits.begin();
          i != stats.sent_flits.end(); ++i) {
         flow_ids.insert(i->first);
-        total_sent += i->second;
     }
     for (flit_counter_t::const_iterator i = stats.received_flits.begin();
          i != stats.received_flits.end(); ++i) {
         flow_ids.insert(i->first);
-        total_received += i->second;
     }
     double cycles_per_s = ((static_cast<double>(stats.system_time) * 1.0e6) /
                             static_cast<double>(sim_time.total_microseconds()));
@@ -97,8 +126,9 @@ ostream &operator<<(ostream &out, statistics &stats) {
         << " (" << cycles_per_s << " Hz)" << endl
         << "total statistics cycles: " << dec << stats_time
         << " (statistics start after cycle " << dec << stats.start_time
-        << ")" << endl
-        << "flit counts:" << endl;
+        << ")" << endl << endl;
+    
+    out << "flit counts:" << endl;
     for (set<flow_id>::const_iterator i = flow_ids.begin();
          i != flow_ids.end(); ++i) {
         const flow_id &f = *i;
@@ -116,16 +146,36 @@ ostream &operator<<(ostream &out, statistics &stats) {
         } else {
             received = 0;
         }
+        assert(sent >= received);
         out << "    flow " << f << ": " << dec << sent
             << " sent and " << dec << received
-            << " received (" << dec << (sent >= received ? sent - received : 0)
+            << " received (" << dec << sent - received
             << " in flight)" << endl;
     }
-    out << "    all flows: " << dec << total_sent
-        << " sent and " << dec << total_received
+    assert(stats.total_sent_flits >= stats.total_received_flits);
+    out << "    all flows: " << dec << stats.total_sent_flits
+        << " sent and " << dec << stats.total_received_flits
         << " received (" << dec
-        << (total_sent >= total_received ? total_sent - total_received : 0)
+        << stats.total_sent_flits - stats.total_received_flits
         << " in flight)" << endl << endl;
+    out << "flit latencies (mean +/- s.d., in # cycles):" << endl;
+    for (set<flow_id>::const_iterator i = flow_ids.begin();
+         i != flow_ids.end(); ++i) {
+        const flow_id &f = *i;
+        if (stats.received_flits.find(f) != stats.received_flits.end()) {
+            assert(stats.flit_inc_stats.find(f) != stats.flit_inc_stats.end());
+            uint64_t received = stats.received_flits[f];
+            assert(received > 0);
+            tuple<double,double> &inc_stats = stats.flit_inc_stats[f];
+            out << "    flow " << f << ": "
+                << dec << inc_stats.get<0>() << " +/- "
+                << sqrt(inc_stats.get<1>() / received) << endl;
+        }
+    }
+    out << "    all flows: " << dec << stats.total_inc_stats.get<0>() << " +/- "
+        << sqrt(stats.total_inc_stats.get<1>() / stats.total_received_flits)
+        << endl << endl;
+    
     out << "link switch counts:" << endl;
     uint64_t total_switches = 0;
     typedef statistics::link_switch_counter_t link_switch_counter_t;
@@ -140,4 +190,3 @@ ostream &operator<<(ostream &out, statistics &stats) {
         << " time" << (total_switches == 1 ? "" : "s") << endl;
     return out;
 }
-

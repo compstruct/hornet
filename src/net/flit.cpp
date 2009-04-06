@@ -5,6 +5,8 @@
 #include <iomanip>
 #include "flit.hpp"
 
+uint64_t flit::next_uid = 0;
+
 ostream &operator<<(ostream &out, const flit &f) {
     return out << "<" << hex << setfill('0') << setw(16) << f.get_data() << '>';
 }

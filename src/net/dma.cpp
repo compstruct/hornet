@@ -64,8 +64,8 @@ void ingress_dma_channel::tick_positive_edge() throw(err) {
             mem = mem ? (uint8_t *) mem + sizeof(uint64_t) : mem;
             --remaining_flits;
         }
+        stats->receive_flit(flow, vq->front());
         vq->pop();
-        stats->receive_flit(flow);
         started = true;
     }
     if (i > 0) {
@@ -104,17 +104,20 @@ void egress_dma_channel::tick_positive_edge() throw(err) {
                  && remaining_flits > 0 && !vq->full()
                  && (started || vq->ingress_new_flow())); ++i) {
         if (!started) {
-            vq->push(head_flit(flow, remaining_flits));
+            head_flit f(flow, remaining_flits);
+            vq->push(f);
+            stats->send_flit(flow, f);
         } else {
             --remaining_flits;
             uint64_t v = (mem ? *((uint64_t *) mem)
                           : ((((uint64_t) flow.get_numeric_id()) << 32)
                              | remaining_flits));
-            vq->push(flit(endian(v)));
+            flit f(endian(v));
+            vq->push(f);
+            stats->send_flit(flow, f);
             mem = mem ? (uint8_t *) mem + sizeof(uint64_t) : mem;
             if (remaining_flits == 0) vc_alloc->release(vq->get_id());
         }
-        stats->send_flit(flow);
         started = true;
     }
     if (i > 0) {
