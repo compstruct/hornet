@@ -21,7 +21,7 @@ using namespace boost;
 namespace po = boost::program_options;
 
 static const string magic = "DAR ";
-static const uint32_t version = 200903310;
+static const uint32_t version = 200905100;
 
 typedef void (*custom_signal_handler_t)(int);
 

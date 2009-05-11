@@ -4,11 +4,11 @@
 
 from __future__ import with_statement
 
-import sys, os, optparse, re, subprocess, ConfigParser
+import sys, os, optparse, re, subprocess, struct, ConfigParser
 
 objdump = 'objdump'
 file_magic = 'DAR '
-file_version = 200903310
+file_version = 200905100
 
 class Err(Exception):
     pass
@@ -17,7 +17,26 @@ def w2bs(w):
     '''convert a 32-bit word into four bytes in big-endian order'''
     assert w >= 0
     assert w <= (1 << 32)
-    return ''.join([chr((w >> sa) & 0xff) for sa in [24, 16, 8, 0]])
+    assert struct.calcsize('>I') == 4
+    return struct.pack('>I', w)
+
+def f2bs(f):
+    '''convert a double into eight bytes in big-endian order'''
+    assert struct.calcsize('>d') == 8
+    return struct.pack('>d', f)
+
+def p_nat(s, min=0):
+    try: ans = int(s)
+    except ValueError:
+        try: ans = int(s,16)
+        except ValueError: raise Err('not a natural number: %s' % s)
+    if ans < min: raise Err('value %s must be >= %d' % (s, d))
+    return ans
+def p_prop(s):
+    try: ans = float(s)
+    except ValueError: raise Err('not a real number: %s' % s)
+    if ans <= 0: raise Err('propensity not > 0: %s' % s)
+    return ans
 
 def read_section_headers(file, objdump_cmd='objdump', verbose=False):
     '''process file and section headers'''
@@ -167,25 +186,43 @@ def write_cxn(out, src, src_port, dst, dst_port, bw, queues, verbose=False):
     out.write(w2bs(len(queues)))
     for q in queues: out.write(w2bs(q))
 
-def write_route(out, flow, hops, verbose=False):
-    def pp_hop(hop):
-        if type(hop) is tuple:
-            n,q = hop
-            return '%s:%s' % (n,q)
-        else:
-            return '%s' % hop
+def write_route(out, (route_type, route), verbose=False):
     if verbose:
-        print 'writing route for flow %08x:' % flow
-        print '    ' + ' '.join([pp_hop(h) for h in hops])
-    out.write(w2bs(flow))
-    out.write(w2bs(len(hops)))
-    for n, qs in hops:
-        out.write(w2bs(n))
+        print ('writing %s route for flow %08x at node %02x...' %
+               (route_type, route[0], route[1]))
+    def write_qs(qs):
+        if verbose and qs != []:
+            print ('  queues: ' +
+                   ' '.join(['%02x@%3.2f' % (q,p) for (q,p) in qs]))
         out.write(w2bs(len(qs)))
-        for q in qs: out.write(w2bs(q))
+        for qid, prop in qs:
+            out.write(w2bs(qid))
+            out.write(f2bs(prop))
+    def write_bridge_route((flow, cur_n, qs)):
+        out.write(w2bs(flow))
+        out.write(w2bs(cur_n))
+        out.write(w2bs(0xffffffff)) # indicates bridge route
+        write_qs(qs)
+    def write_node_route((flow, cur_n, prev_n, next_nodes)):
+        out.write(w2bs(flow))
+        out.write(w2bs(cur_n))
+        out.write(w2bs(prev_n))
+        out.write(w2bs(len(next_nodes)))
+        assert next_nodes != []
+        for next_n, prop, qs in next_nodes:
+            if verbose and qs != []:
+                print ('  next hop: node %02x@%3.2f' % (next_n, prop))
+            out.write(w2bs(next_n))
+            out.write(f2bs(prop))
+            write_qs(qs)
+    assert route_type == 'bridge' or route_type == 'node'
+    if route_type == 'bridge':
+        write_bridge_route(route)
+    else: # route_type == 'node'
+        write_node_route(route)
 
 def write_complete_image(out, cfg, verbose=False):
-    settings, pes, cxns, flows = new_system_config(cfg, verbose=verbose)
+    settings, pes, cxns, routes = new_system_config(cfg, verbose=verbose)
     write_header(out, verbose=verbose)
     if verbose:
         print ('writing %d PE%s...' % (len(pes), '' if len(pes) == 1 else 's'))
@@ -203,11 +240,13 @@ def write_complete_image(out, cfg, verbose=False):
     out.write(w2bs(len(cxns)))
     for cxn_cfg in cxns: write_cxn(out=out, verbose=verbose, **cxn_cfg)
     if verbose:
-        print ('writing %d flow%s...' %
-                (len(flows), '' if len(flows) == 1 else 's'))
-    out.write(w2bs(len(flows)))
-    for flow_id, flow_hops in flows:
-        write_route(out, flow_id, flow_hops, verbose=verbose)
+        print ('writing %d route%s...' %
+                (len(routes), '' if len(routes) == 1 else 's'))
+    out.write(w2bs(len(routes)))
+    for route in routes:
+        write_route(out, route, verbose=verbose)
+
+
 
 def new_system_config(cfg, verbose=False):
     def get_links(w, h, n):
@@ -215,13 +254,6 @@ def new_system_config(cfg, verbose=False):
                 ([('east', 'E', n + 1, 'W')] if n % w != w - 1 else []) +
                 ([('south', 'S', n + w, 'N')] if n / w != h - 1 else []) +
                 ([('west', 'W', n - 1, 'E')] if n % w != 0 else []))
-    def p_nat(s, min=0):
-        try: ans = int(s)
-        except ValueError,e:
-            try: ans = int(s,16)
-            except ValueError: raise Err('not a number: %s' % s)
-        if ans < min: raise Err('value %s must be >= %d' % (s, d))
-        return ans
     def get_code((progs,dflt), id):
         if id not in progs and dflt is None:
             raise Err('no code for CPU %d and no default' % id)
@@ -297,6 +329,52 @@ def new_system_config(cfg, verbose=False):
                         and dst_q in l['queues'])] == []:
                     raise Err(('flow %s: queue %02x:%02x does not come from '
                                'node %02x') % (id, dst_n, dst_q, src_n))
+    def p_route((address, next_entries)):
+        flow, prev_n, cur_n = 0xdeadbeef, 0xdeadbeef, 0xdeadbeef
+        try:
+            flow_s, prev_cur_s = address.split('@')
+            prev_s, cur_s = prev_cur_s.split('->')
+            flow = p_nat(flow_s.strip())
+            prev_n = None if prev_s.strip() == '' else p_nat(prev_s.strip())
+            cur_n = p_nat(cur_s.strip())
+        except ValueError:
+            raise Err('bad flow/node->node route: %s' % address)
+        if prev_n is None: # bridge route, queues only
+            qs = [(p_nat(q), 1.0) for q in next_entries.split(',')]
+            return ('bridge', (flow, cur_n, qs))
+        else:
+            try:
+                nexts = next_entries.split()
+                next_ns = []
+                if nexts == []:
+                    raise Err('route %s has no next node info' % address)
+                for next in nexts:
+                    np_s, qs_s = next.split(':')
+                    n_s, p_s = np_s.split('@')
+                    n = p_nat(n_s)
+                    p = p_prop(p_s)
+                    qs = [(p_nat(q), 1.0) for q in qs_s.split(',')]
+                    next_ns.append((n, p, qs))
+                return ('node', (flow, cur_n, prev_n, next_ns))
+            except ValueError:
+                raise Err('bad entries for route %s: %s' %
+                          (address,next_entries))
+    # bridge: 0xf00@2->2 = 2:5,6,7
+    # node: 0xf00@2->3: 1@0.2:5,4 2@0.5:8,9
+    def flows_to_routes(flows):
+        routes = []
+        for flow, hops in flows:
+            assert hops != []
+            (cur_n, br_qs) = hops[0]
+            routes.append(('bridge', (flow, cur_n, [(q,1.0) for q in br_qs])))
+            prev_n = cur_n
+            for next_n, next_qs in hops[1:]:
+                qs = [(q,1.0) for q in next_qs]
+                next_ns = [(next_n, 1.0, qs)]
+                routes.append(('node', (flow, cur_n, prev_n, next_ns)))
+                prev_n = cur_n
+                cur_n = next_n
+        return routes
     try:
         if cfg.has_option('bandwidth', 'arbitration'):
             raise Err('arbitration scheme must be specified '
@@ -328,12 +406,14 @@ def new_system_config(cfg, verbose=False):
             arb_period = 1
             arb_delay = 0
         node_routing = cfg.get('routing', 'node')
-        if node_routing != 'table':
+        if node_routing not in ['table', 'weighted']:
             raise Error('bad node routing type: %s' % node_routing)
         queue_routing_types = ['table', 'round-robin', 'set']
         queue_routing = cfg.get('routing', 'queue')
         if queue_routing not in queue_routing_types:
             raise Error('bad queue routing type: %s' % queue_routing)
+        if node_routing == 'weighted' and queue_routing != 'set':
+            raise Error('weighted node routing requires set queue routing')
         settings = { 'arbitration': arbs[arb],
                      'arbitration minimum bandwidth': arb_min_bw,
                      'arbitration period': arb_period,
@@ -363,23 +443,27 @@ def new_system_config(cfg, verbose=False):
                    'queues': get_qs(dir) }
                  for dst in node_ids
                  for dir, dst_port, src, src_port in get_links(w, h, dst)]
-        if queue_routing == 'table':
+        if node_routing == 'weighted':
+            routes = [p_route(nv) for nv in cfg.items('flows')]
+        elif queue_routing == 'table':
             for n, v in cfg.items('flows'):
                 check_flow_nqs(n, p_flow_nq(v), links)
             flows = [(p_nat(n), p_flow_nq(v)) for n, v in cfg.items('flows')]
+            routes = flows_to_routes(flows)
         elif queue_routing == 'round-robin':
             for n, v in cfg.items('flows'):
                 check_flow_nqs(n, p_flow_n(v), links)
-            flows = [(p_nat(n), p_flow_n(v)) for n, v in cfg.items('flows')]
+            routes = flows_to_routes(flows)
         elif queue_routing == 'set':
             for n, v in cfg.items('flows'):
                 check_flow_nqs(n, p_flow_nqs(v), links)
             flows = [(p_nat(n), p_flow_nqs(v)) for n, v in cfg.items('flows')]
+            routes = flows_to_routes(flows)
         else:
             raise Err('bad queue routing type: %s' % queue_routing)
     except ConfigParser.Error, e:
         raise Err('bad config: %s' % e)
-    return settings, nodes, links, flows
+    return settings, nodes, links, routes
 
 def main():
     try:
@@ -404,4 +488,3 @@ def main():
         sys.exit(1)
 
 if __name__ == '__main__': main()
-

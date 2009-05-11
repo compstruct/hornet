@@ -15,12 +15,14 @@ public:
     virtual ~set_bridge_channel_alloc() throw();
     virtual virtual_queue_id request(flow_id flow) throw(err);
     void add_queue(shared_ptr<virtual_queue> q) throw(err);
-    void add_route(const flow_id &f, const vector<virtual_queue_id> &qs)
+    void add_route(const flow_id &f,
+                   const vector<tuple<virtual_queue_id,double> > &qs)
         throw(err);
 private:
     typedef map<virtual_queue_id, shared_ptr<virtual_queue> > queues_t;
     queues_t queues;
-    typedef map<flow_id, vector<shared_ptr<virtual_queue> > > routes_t;
+    typedef vector<tuple<shared_ptr<virtual_queue>, double> > route_queues_t;
+    typedef map<flow_id, route_queues_t> routes_t;
     routes_t routes;
 };
 

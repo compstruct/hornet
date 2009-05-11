@@ -1,0 +1,29 @@
+// -*- mode:c++; c-style:k&r; c-basic-offset:4; indent-tabs-mode: nil; -*-
+// vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
+
+#ifndef __SET_ROUTER_HPP__
+#define __SET_ROUTER_HPP__
+
+#include <map>
+#include "boost/tuple/tuple.hpp"
+#include "boost/tuple/tuple_comparison.hpp"
+#include "router.hpp"
+
+using namespace boost;
+
+class set_router : public router {
+public:
+    set_router(node_id id, logger &log) throw();
+    virtual ~set_router() throw();
+    virtual node_id route(node_id src_node_id, flow_id flow) throw(err);
+    void add_route(const node_id &prev, const flow_id &flow,
+                   const vector<tuple<node_id,double> > &nodes) throw(err);
+private:
+    typedef tuple<node_id, flow_id> route_query_t;
+    typedef vector<tuple<node_id,double> > route_nodes_t; // cumulative props
+    typedef map<route_query_t, route_nodes_t> routes_t;
+    routes_t routes;
+};
+
+#endif // __SET_ROUTER_HPP__
+

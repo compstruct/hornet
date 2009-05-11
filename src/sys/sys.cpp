@@ -5,13 +5,14 @@
 #include <utility>
 #include <set>
 #include <cassert>
+#include <boost/static_assert.hpp>
 #include <boost/tuple/tuple.hpp>
 #include <boost/tuple/tuple_comparison.hpp>
 #include "cstdint.hpp"
 #include "endian.hpp"
 #include "node.hpp"
 #include "bridge.hpp"
-#include "static_router.hpp"
+#include "set_router.hpp"
 #include "set_channel_alloc.hpp"
 #include "set_bridge_channel_alloc.hpp"
 #include "cpu.hpp"
@@ -28,9 +29,20 @@ typedef enum {
 static uint32_t read_word(shared_ptr<ifstream> in) throw(err) {
     uint32_t word = 0xdeadbeef;
     in->read((char *) &word, 4);
-    word = endian(word);
     if (in->bad()) throw err_bad_mem_img();
+    word = endian(word);
     return word;
+}
+
+static double read_double(shared_ptr<ifstream> in) throw(err) {
+    uint64_t word = 0xdeadbeefdeadbeefLL;
+    in->read((char *) &word, 8);
+    if (in->bad()) throw err_bad_mem_img();
+    word = endian(word);
+    BOOST_STATIC_ASSERT(sizeof(double) == 8);
+    double d;
+    memcpy(&d, &word, sizeof(double));
+    return d;
 }
 
 static void read_mem(uint8_t *ptr, uint32_t num_bytes,
@@ -59,7 +71,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
     shared_ptr<flow_starts_t> flow_starts(new flow_starts_t());
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
-        shared_ptr<router> n_rt(new static_router(id, log));
+        shared_ptr<router> n_rt(new set_router(id, log));
         shared_ptr<channel_alloc>
             n_vca(new set_channel_alloc(id, log));
         shared_ptr<bridge_channel_alloc>
@@ -187,41 +199,48 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
 
     uint32_t num_routes = read_word(img);
     LOG(log,2) << "network contains " << dec << num_routes
-        << " flow" << (num_routes == 1 ? "" : "s") << endl;
+        << " routing " << (num_routes == 1 ? "entry" : "entries") << endl;
     for (unsigned i = 0; i < num_routes; ++i) {
         uint32_t flow = read_word(img);
-        uint32_t route_len = read_word(img);
-        LOG(log,2) << "flow " << flow_id(flow) << " with " << dec
-            << route_len << " hop" << (route_len == 1 ? "" : "s") << endl;
-        uint32_t prev_n = 0xdeadbeef;
-        uint32_t cur_n = 0xdeadbeef;
-        for (unsigned hop = 0; hop < route_len; ++hop) {
-            uint32_t next_n = read_word(img);
-            uint32_t num_next_qs = read_word(img);
-            vector<virtual_queue_id> next_qs;
-            for (uint32_t i = 0; i < num_next_qs; ++i) {
-                next_qs.push_back(virtual_queue_id(read_word(img)));
+        uint32_t cur_n = read_word(img);
+        uint32_t prev_n = read_word(img);
+        if (prev_n == 0xffffffffUL) { // program the bridge
+            uint32_t num_queues = read_word(img); // 0 is valid (= all queues)
+            vector<tuple<virtual_queue_id, double> > qs;
+            for (uint32_t q = 0; q < num_queues; ++q) {
+                uint32_t vqid = read_word(img);
+                double prop = read_double(img);
+                if (prop <= 0) throw err_bad_mem_img();
+                qs.push_back(make_tuple(virtual_queue_id(vqid), prop));
             }
-            if (hop == 0) { // origin: program the bridge
-                (*flow_starts)[flow] = next_n;
-                shared_ptr<set_bridge_channel_alloc> vca =
-                    static_pointer_cast<set_bridge_channel_alloc>
-                        (br_vcas[next_n]);
-                vca->add_route(flow_id(flow), next_qs);
-                prev_n = cur_n = next_n;
-            } else { // next hop: program the current node
-                if ((hop == route_len - 1) && (next_n != cur_n))
-                    throw err_route_not_terminated(flow, next_n);
-                shared_ptr<static_router> r =
-                    static_pointer_cast<static_router>(node_rts[cur_n]);
-                r->add_route(prev_n, flow_id(flow), next_n); // next node hop
+            (*flow_starts)[flow] = cur_n;
+            shared_ptr<set_bridge_channel_alloc> vca =
+                static_pointer_cast<set_bridge_channel_alloc>(br_vcas[cur_n]);
+            vca->add_route(flow_id(flow), qs);
+        } else { // program a routing node
+            uint32_t num_nodes = read_word(img);
+            vector<tuple<node_id,double> > next_nodes;
+            if (num_nodes == 0) throw err_bad_mem_img();
+            for (uint32_t n = 0; n < num_nodes; ++n) {
+                uint32_t next_n = read_word(img);
+                double nprop = read_double(img);
+                if (nprop <= 0) throw err_bad_mem_img();
+                next_nodes.push_back(make_tuple(next_n, nprop));
+                uint32_t num_queues = read_word(img); // 0 is valid
+                vector<tuple<virtual_queue_id,double> > next_qs;
+                for (uint32_t q = 0; q < num_queues; ++q) {
+                    uint32_t qid = read_word(img);
+                    double qprop = read_double(img);
+                    if (qprop <= 0) throw err_bad_mem_img();
+                    next_qs.push_back(make_tuple(qid, qprop));
+                }
                 shared_ptr<set_channel_alloc> vca =
-                    static_pointer_cast<set_channel_alloc>
-                    (n_vcas[cur_n]);
+                    static_pointer_cast<set_channel_alloc>(n_vcas[cur_n]);
                 vca->add_route(prev_n, flow_id(flow), next_n, next_qs);
-                prev_n = cur_n;
-                cur_n = next_n;
             }
+            shared_ptr<set_router> r =
+                static_pointer_cast<set_router>(node_rts[cur_n]);
+            r->add_route(prev_n, flow_id(flow), next_nodes);
         }
     }
     event_parser ep(events_files, injectors, flow_starts);

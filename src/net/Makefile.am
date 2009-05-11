@@ -23,7 +23,7 @@ libdarnet_la_SOURCES = \
     dma.hpp dma.cpp \
     bridge.hpp bridge.cpp \
     arbiter.hpp arbiter.cpp \
-    static_router.hpp static_router.cpp \
+    set_router.hpp set_router.cpp \
     set_channel_alloc.hpp set_channel_alloc.cpp \
     set_bridge_channel_alloc.hpp set_bridge_channel_alloc.cpp \
     statistics.hpp statistics.cpp

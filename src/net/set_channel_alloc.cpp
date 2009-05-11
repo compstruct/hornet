@@ -16,9 +16,10 @@ void set_channel_alloc::add_egress(shared_ptr<egress> egr) throw(err) {
     egresses[egr->get_target_id()] = egr;
 }
 
-void set_channel_alloc::add_route(const node_id &src, const flow_id &f,
-                                  const node_id &dst,
-                                  const vector<virtual_queue_id> &qids)
+void
+set_channel_alloc::add_route(const node_id &src, const flow_id &f,
+                             const node_id &dst,
+                             const vector<tuple<virtual_queue_id,double> > &qis)
     throw(err) {
     if (egresses.find(dst) == egresses.end())
         throw err_bad_next_hop(get_id().get_numeric_id(), f.get_numeric_id(),
@@ -26,21 +27,23 @@ void set_channel_alloc::add_route(const node_id &src, const flow_id &f,
     const ingress::queues_t &eqs = egresses[dst]->get_remote_queues();
     route_query_t rq = route_query_t(src,f,dst);
     assert(routes.find(rq) == routes.end());
-    if (!qids.empty()) { // add only specified queues
-        for (vector<virtual_queue_id>::const_iterator idi = qids.begin();
-             idi != qids.end(); ++idi) {
-            ingress::queues_t::const_iterator eqi = eqs.find(*idi);
+    if (!qis.empty()) { // add only specified queues with given propensities
+        for (vector<tuple<virtual_queue_id,double> >::const_iterator idi =
+                 qis.begin(); idi != qis.end(); ++idi) {
+            virtual_queue_id vqid; double prop; tie(vqid,prop) = *idi;
+            assert(prop > 0);
+            ingress::queues_t::const_iterator eqi = eqs.find(vqid);
             if (eqi == eqs.end())
                 throw err_bad_next_hop_queue(get_id().get_numeric_id(),
                                              f.get_numeric_id(),
                                              dst.get_numeric_id(),
-                                             idi->get_numeric_id());
-            routes[rq].push_back(eqi->second);
+                                             vqid.get_numeric_id());
+            routes[rq].push_back(make_tuple(eqi->second, prop));
         }
-    } else { // add all egress queues
+    } else { // add all egress queues with equal propensity
         for (ingress::queues_t::const_iterator eqi = eqs.begin();
              eqi != eqs.end(); ++eqi) {
-            routes[rq].push_back(eqi->second);
+            routes[rq].push_back(make_tuple(eqi->second, 1.0));
         }
     }
 }
@@ -66,18 +69,27 @@ void set_channel_alloc::allocate() throw(err) {
         route_query_t rq(iq->get_src_node_id(), iq->get_egress_flow_id(),
                          iq->front_node_id());
         assert(routes.find(rq) != routes.end());
-        const qs_t &route_qs = routes[rq];
-        qs_t free_qs;
-        for (qs_t::const_iterator rqi = route_qs.begin(); rqi != route_qs.end();
-             ++rqi) {
-            if (!is_claimed((*rqi)->get_id()) && (*rqi)->ingress_new_flow()) {
-                free_qs.push_back(*rqi);
-            }            
+        const route_queues_t &route_qs = routes[rq];
+        route_queues_t free_qs;
+        double prop_sum = 0.0;
+        for (route_queues_t::const_iterator rqi = route_qs.begin();
+             rqi != route_qs.end(); ++rqi) {
+            shared_ptr<virtual_queue> rq; double prop; tie(rq,prop) = *rqi;
+            if (!is_claimed(rq->get_id()) && rq->ingress_new_flow()) {
+                prop_sum += prop;
+                free_qs.push_back(make_tuple(rq, prop_sum));
+            }
         }
         if (!free_qs.empty()) {
-            int n = free_qs.size() == 1 ? 0 : random_range(free_qs.size());
-            shared_ptr<virtual_queue> oq = free_qs[n];
-            iq->set_front_vq_id(oq->get_id().get<1>());
+            double r = random_range_double(prop_sum);
+            for (route_queues_t::const_iterator oqi = free_qs.begin();
+                 oqi != free_qs.end(); ++oqi) {
+                shared_ptr<virtual_queue> oq; double prop; tie(oq,prop) = *oqi;
+                if (r < prop) {
+                    iq->set_front_vq_id(oq->get_id().get<1>());
+                    break;
+                }
+            }
         }
     }
 }

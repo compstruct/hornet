@@ -18,6 +18,11 @@ int random_range(int max) throw() {
     return static_cast<int>(max * uniform_random);
 }
 
+double random_range_double(double max) throw() {
+    double uniform_random = random()/(static_cast<double>(RAND_MAX)+1.0);
+    return max * uniform_random;
+}
+
 int init_random(int seed) throw() {
     srandom(seed);
     return seed;

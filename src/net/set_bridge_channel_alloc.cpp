@@ -18,25 +18,28 @@ void set_bridge_channel_alloc::add_queue(shared_ptr<virtual_queue> q)
     queues[qid] = q;
 }
 
-void set_bridge_channel_alloc::add_route(const flow_id &f,
-                                         const vector<virtual_queue_id> &qids)
+void
+set_bridge_channel_alloc::
+add_route(const flow_id &f, const vector<tuple<virtual_queue_id,double> > &qids)
     throw(err) {
     if (routes.find(f) != routes.end())
         throw err_duplicate_flow(get_id().get_numeric_id(), f.get_numeric_id());
-    if (!qids.empty()) { // add only specified queues
-        for (vector<virtual_queue_id>::const_iterator idi = qids.begin();
-             idi != qids.end(); ++idi) {
-            queues_t::iterator qi = queues.find(*idi);
+    if (!qids.empty()) { // add only specified queues with given propensities
+        for (vector<tuple<virtual_queue_id,double> >::const_iterator idi =
+                 qids.begin(); idi != qids.end(); ++idi) {
+            virtual_queue_id vqid; double prop; tie(vqid,prop) = *idi;
+            assert(prop > 0);
+            queues_t::iterator qi = queues.find(vqid);
             if (qi == queues.end())
                 throw err_bad_next_hop_queue(get_id().get_numeric_id(),
                                              f.get_numeric_id(),
                                              get_id().get_numeric_id(),
-                                             idi->get_numeric_id());
-            routes[f].push_back(qi->second);
+                                             vqid.get_numeric_id());
+            routes[f].push_back(make_tuple(qi->second, prop));
         }
-    } else { // add all queues
+    } else { // add all queues with equal propensity
         for(queues_t::iterator qi = queues.begin(); qi != queues.end(); ++qi) {
-            routes[f].push_back(qi->second);
+            routes[f].push_back(make_tuple(qi->second, 1.0));
         }
     }
 }
@@ -44,17 +47,28 @@ void set_bridge_channel_alloc::add_route(const flow_id &f,
 virtual_queue_id set_bridge_channel_alloc::request(flow_id f) throw(err) {
     if (routes.find(f) == routes.end())
         throw exc_bad_flow(get_id().get_numeric_id(), f.get_numeric_id());
-    const vector<shared_ptr<virtual_queue> > &qs = routes[f];
-    vector<shared_ptr<virtual_queue> > free_qs;
-    for (vector<shared_ptr<virtual_queue> >::const_iterator qi = qs.begin();
-         qi != qs.end(); ++qi) {
-        if (!is_claimed((*qi)->get_id()) && (*qi)->ingress_new_flow()) {
-            free_qs.push_back(*qi);
+    const route_queues_t &qs = routes[f];
+    route_queues_t free_qs;
+    double prop_sum = 0.0;
+    for (route_queues_t::const_iterator qi = qs.begin(); qi != qs.end(); ++qi) {
+        shared_ptr<virtual_queue> q; double prop; tie(q,prop) = *qi;
+        if (!is_claimed(q->get_id()) && q->ingress_new_flow()) {
+            prop_sum += prop;
+            free_qs.push_back(make_tuple(q, prop_sum));
         }
     }
     if (!free_qs.empty()) {
-        int n = free_qs.size() == 1 ? 0 : random_range(free_qs.size());
-        return free_qs[n]->get_id().get<1>();
+        virtual_queue_id vqid;
+        double r = random_range_double(prop_sum);
+        for (route_queues_t::const_iterator oqi = free_qs.begin();
+             oqi != free_qs.end(); ++oqi) {
+            shared_ptr<virtual_queue> oq; double prop; tie(oq,prop) = *oqi;
+            if (r < prop) {
+                vqid = oq->get_id().get<1>();
+                break;
+            }
+        }
+        return vqid;
     } else {
         return virtual_queue_id(); // invalid ID
     }

@@ -4,8 +4,11 @@
 #ifndef __RANDOM_HPP__
 #define __RANDOM_HPP__
 
-// return a number selected u.a.r. from [0..max)
+// return a natural number selected u.a.r. from [0..max)
 int random_range(int max) throw();
+
+// return a real number selected u.a.r. from [0..max)
+double random_range_double(double max) throw();
 
 // init the system random number generator with the given seed
 int init_random(int seed) throw();
