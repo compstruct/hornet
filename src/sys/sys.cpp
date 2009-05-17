@@ -81,6 +81,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
                                     log));
         uint32_t n2b_bw = read_word(img);
         uint32_t b2n_bw = read_word(img);
+        uint32_t b2n_xbar_bw = read_word(img);
         uint32_t b2n_num_queues = read_word(img);
         set<virtual_queue_id> b2n_queues;
         for (uint32_t q = 0; q < b2n_num_queues; ++q) {
@@ -93,7 +94,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
         }
         shared_ptr<bridge> b(new bridge(n, b_vca,
                                         n2b_queues, n2b_bw, b2n_queues, b2n_bw,
-                                        flits_per_q, stats, log));
+                                        flits_per_q, b2n_xbar_bw, stats, log));
         shared_ptr<set_bridge_channel_alloc> vca =
             static_pointer_cast<set_bridge_channel_alloc>(b_vca);
         shared_ptr<ingress> b_n_i = n->get_ingress_from(b->get_id());
@@ -168,7 +169,8 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
         char link_src_port_name = static_cast<char>(read_word(img));
         uint32_t link_dst_n = read_word(img);
         char link_dst_port_name = static_cast<char>(read_word(img));
-        uint32_t link_bandwidth = read_word(img);
+        uint32_t link_bw = read_word(img);
+        uint32_t to_xbar_bw = read_word(img);
         uint32_t link_num_queues = read_word(img);
         set<virtual_queue_id> queues;
         for (unsigned q = 0; q < link_num_queues; ++q) {
@@ -179,7 +181,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
         nodes[link_dst_n]->connect_from(string(1, link_dst_port_name),
                                         nodes[link_src_n],
                                         string(1, link_src_port_name),
-                                        queues, link_bandwidth);
+                                        queues, link_bw, to_xbar_bw);
         cxns.insert(make_tuple(link_src_n, link_dst_n));
     }
     if (arb_scheme != AS_NONE) {

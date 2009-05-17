@@ -34,8 +34,8 @@ public:
     shared_ptr<pressure_tracker> get_pressures() throw();
     void connect_from(const string &port_name,
                       shared_ptr<node> src, const string &src_port_name,
-                      const set<virtual_queue_id> &vq_ids, unsigned bw)
-        throw(err);
+                      const set<virtual_queue_id> &vq_ids, unsigned link_bw,
+                      unsigned bw_to_xbar) throw(err);
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
 private:

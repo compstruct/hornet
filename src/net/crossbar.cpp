@@ -31,12 +31,12 @@ void crossbar::rebuild_queues() throw() {
     typedef iq_t::const_iterator iqi_t;
     ingress_qs.clear();
     egress_qs.clear();
-    vector<tuple<iqi_t, iqi_t> > iq_iters;
+    vector<tuple<node_id, iqi_t, iqi_t> > iq_iters;
     vector<tuple<iqi_t, iqi_t> > eq_iters;
     for (ingresses_t::iterator ii = ingresses.begin(); ii != ingresses.end();
          ++ii) {
         const iq_t &qs = ii->second->get_queues();
-        iq_iters.push_back(make_tuple(qs.begin(), qs.end()));
+        iq_iters.push_back(make_tuple(ii->first, qs.begin(), qs.end()));
     }
     for (egresses_t::iterator ei = egresses.begin(); ei != egresses.end();
          ++ei) {
@@ -46,12 +46,14 @@ void crossbar::rebuild_queues() throw() {
     bool more_to_do = true;
     while (more_to_do) {
         more_to_do = false;
-        for (vector<tuple<iqi_t,iqi_t> >::iterator iqii = iq_iters.begin();
+        for (vector<tuple<node_id, iqi_t,iqi_t> >::iterator iqii =
+                 iq_iters.begin();
              iqii != iq_iters.end(); ++iqii) {
-            if (iqii->get<0>() != iqii->get<1>()) {
+            if (iqii->get<1>() != iqii->get<2>()) {
                 more_to_do = true;
-                ingress_qs.push_back(iqii->get<0>()->second);
-                (iqii->get<0>())++;
+                ingress_qs.push_back(make_tuple(iqii->get<0>(),
+                                                iqii->get<1>()->second));
+                (iqii->get<1>())++;
             }
         }
         for (vector<tuple<iqi_t,iqi_t> >::iterator eqii = eq_iters.begin();
@@ -67,25 +69,40 @@ void crossbar::rebuild_queues() throw() {
 
 void crossbar::tick_positive_edge() throw(err) {
     LOG(log,12) << "[xbar " << id << "] arbitration" << endl;
-    map<node_id, unsigned> bws; // remaining bandwidths for each egress
+    map<node_id, unsigned> ibws; // remaining bandwidths for each ingress port
+    map<node_id, unsigned> ebws; // remaining bandwidths for each egress
+    for (ingresses_t::iterator i = ingresses.begin();
+         i != ingresses.end(); ++i) {
+        ibws[i->first] = i->second->get_bw_to_xbar();
+    }
     for (egresses_t::iterator i = egresses.begin(); i != egresses.end(); ++i) {
         LOG(log,12) << "[xbar " << id << "]     egress to "
             << i->first << " has bandwidth "
             << dec << i->second->get_bandwidth() << endl;
-        bws[i->first] = i->second->get_bandwidth();
+        ebws[i->first] = i->second->get_bandwidth();
     }
     random_shuffle(egress_qs.begin(), egress_qs.end(), random_range);
     random_shuffle(ingress_qs.begin(), ingress_qs.end(), random_range);
-    for (vqids_t::iterator eqi = egress_qs.begin();
+    vqs_t ingress_ready_qs;
+    for (nvqs_t::iterator iqi = ingress_qs.begin();
+         iqi != ingress_qs.end(); ++iqi) {
+        node_id &in_node = iqi->get<0>();
+        shared_ptr<virtual_queue> &iq = iqi->get<1>();
+        if (ibws[in_node] > 0 && !iq->empty()) {
+            ingress_ready_qs.push_back(iq);
+            --ibws[in_node];
+        }
+    }
+    for (vqs_t::iterator eqi = egress_qs.begin();
          eqi != egress_qs.end(); ++eqi) {
-        node_id n; virtual_queue_id q;
+        node_id out_node; virtual_queue_id out_q;
         shared_ptr<virtual_queue> &eq = *eqi;
-        tie(n,q) = eq->get_id();
+        tie(out_node,out_q) = eq->get_id();
         LOG(log,12) << "[xbar " << id << "]     egress queue "
             << eq->get_id() << endl;
-        if (bws[n] > 0 && !eq->full()) {
-            for (vqids_t::iterator iqi = ingress_qs.begin();
-                 iqi != ingress_qs.end(); ++iqi) {
+        if (ebws[out_node] > 0 && !eq->full()) {
+            for (vqs_t::iterator iqi = ingress_ready_qs.begin();
+                 iqi != ingress_ready_qs.end(); ++iqi) {
                 shared_ptr<virtual_queue> &iq = *iqi;
                 bool iq_ready = iq->egress_ready();
                 LOG(log,12) << "[xbar " << id
@@ -96,21 +113,22 @@ void crossbar::tick_positive_edge() throw(err) {
                 } else {
                     LOG(log, 12) << "-> node " << iq->front_node_id();
                     if (iq_ready) {
-                        LOG(log, 12) << " (ready)" << endl;
+                        LOG(log, 12) << " (ready)";
                     } else {
-                        LOG(log, 12) << " (not ready)" << endl;
+                        LOG(log, 12) << " (not ready)";
                     }
+                    LOG(log, 12) << endl;
                 }
-                if (iq->egress_ready() && iq->front_node_id() == n
-                    && iq->front_vq_id() == q) {
+                if (iq_ready && iq->front_node_id() == out_node
+                    && iq->front_vq_id() == out_q) {
                     LOG(log,12) << "[xbar " << id
                         << "]         queue " << iq->get_id()
                         << " wins arbitration" << endl;
                     flit f = iq->front();
                     iq->pop();
                     eq->push(f);
-                    --bws[n];
-                    break; // exit ingress_qs loop
+                    --ebws[out_node];
+                    break; // exit ingress_ready_qs loop
                 }
             }
         }

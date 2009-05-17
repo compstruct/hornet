@@ -8,7 +8,7 @@ import sys, os, optparse, re, subprocess, struct, ConfigParser
 
 objdump = 'objdump'
 file_magic = 'DAR '
-file_version = 200905100
+file_version = 200905150
 
 class Err(Exception):
     pass
@@ -144,7 +144,7 @@ def write_header(out, verbose=False):
     out.write(file_magic)
     out.write(w2bs(file_version))
 
-def write_pe(out, id, img, n2b_bw, b2n_bw, qmem_size,
+def write_pe(out, id, img, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_size,
              n2b_queues, b2n_queues, verbose=False):
     if verbose:
         print 'writing PE %d' % id
@@ -154,6 +154,7 @@ def write_pe(out, id, img, n2b_bw, b2n_bw, qmem_size,
     # bridge
     out.write(w2bs(n2b_bw))
     out.write(w2bs(b2n_bw))
+    out.write(w2bs(b2n_xbar_bw if b2n_xbar_bw is not None else 0xffffffff))
     # node->bridge connection
     out.write(w2bs(len(b2n_queues)))
     for q in b2n_queues: out.write(w2bs(q))
@@ -171,7 +172,8 @@ def write_pe(out, id, img, n2b_bw, b2n_bw, qmem_size,
     else: # injector
         out.write(w2bs(1))
 
-def write_cxn(out, src, src_port, dst, dst_port, bw, queues, verbose=False):
+def write_cxn(out, src, src_port, dst, dst_port, bw, xbar_bw, queues,
+              verbose=False):
     if verbose:
         print (('writing connection %d:%s -> %d:%s with bandwidth %d '
                 'and %d queues') %
@@ -183,6 +185,7 @@ def write_cxn(out, src, src_port, dst, dst_port, bw, queues, verbose=False):
     out.write(w2bs(dst))
     out.write(w2bs(ord(dst_port)))
     out.write(w2bs(bw))
+    out.write(w2bs(xbar_bw if xbar_bw is not None else 0xffffffff))
     out.write(w2bs(len(queues)))
     for q in queues: out.write(w2bs(q))
 
@@ -263,7 +266,16 @@ def new_system_config(cfg, verbose=False):
             raise Err('missing code image file: %s' % code)
         return code
     def get_qs(s): return [p_nat(n) for n in cfg.get('queues',s).split()]
-    def get_bw(s): return p_nat(cfg.get('bandwidth',s), 1)
+    def get_bw(s):
+        try:
+            bw_ss = cfg.get('bandwidth',s).split('/')
+            if len(bw_ss) < 1 or len(bw_ss) > 2:
+                raise Err('bad bandwidth description: %s' % s)
+            bw = p_nat(bw_ss[0], 1)
+            xbar_bw = p_nat(bw_ss[1], 1) if len(bw_ss) > 1 else None
+        except ValueError:
+            raise Err('bad bandwidth description: %s' % s)
+        return bw, xbar_bw
     def p_flow_nq(s):
         '''node:queue format'''
         fs = []
@@ -427,10 +439,13 @@ def new_system_config(cfg, verbose=False):
                                            else None)
         node_ids = range(0, w * h)
         cpu_qs = get_qs('cpu')
+        if get_bw('net')[1] is not None:
+            raise Err('from-net bandwidth cannot have crossbar input limit')
         nodes = [{ 'id': id,
                    'img': get_code(progs, id),
-                   'n2b_bw': get_bw('cpu'),
-                   'b2n_bw': get_bw('net'),
+                   'n2b_bw': get_bw('cpu')[0],
+                   'b2n_bw': get_bw('net')[0],
+                   'b2n_xbar_bw': get_bw('net')[1],
                    'qmem_size': p_nat(cfg.get('node', 'queue size')),
                    'n2b_queues': get_qs('net'),
                    'b2n_queues': get_qs('cpu') }
@@ -439,7 +454,8 @@ def new_system_config(cfg, verbose=False):
                    'src_port': src_port,
                    'dst': dst,
                    'dst_port': dst_port,
-                   'bw': get_bw(dir),
+                   'bw': get_bw(dir)[0],
+                   'xbar_bw': get_bw(dir)[1],
                    'queues': get_qs(dir) }
                  for dst in node_ids
                  for dir, dst_port, src, src_port in get_links(w, h, dst)]

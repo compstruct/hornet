@@ -30,8 +30,8 @@ public:
                     shared_ptr<bridge_channel_alloc> bridge_vca,
                     const set<virtual_queue_id> &node_vq_ids, unsigned n2b_bw,
                     const set<virtual_queue_id> &bridge_vq_ids, unsigned b2n_bw,
-                    unsigned flits_per_queue, shared_ptr<statistics> stats,
-                    logger &new_log) throw(err);
+                    unsigned flits_per_queue, unsigned b2n_bw_to_xbar,
+                    shared_ptr<statistics> stats, logger &new_log) throw(err);
     const node_id &get_id() const throw();
     uint32_t get_transmission_done(uint32_t transmission) throw();
     uint32_t get_waiting_queues() throw();

@@ -65,21 +65,21 @@ shared_ptr<pressure_tracker> node::get_pressures() throw() { return pressures; }
 
 void node::connect_from(const string &port_name,
                         shared_ptr<node> src, const string &src_port_name,
-                        const set<virtual_queue_id> &vq_ids, unsigned bw)
+                        const set<virtual_queue_id> &vq_ids, unsigned link_bw,
+                        unsigned bw_to_xbar)
     throw(err) {
     ingress_id dst_id(get_id(), port_name);
     shared_ptr<ingress> ingr =
         shared_ptr<ingress>(new ingress(dst_id, src->get_id(), vq_ids,
-                                        flits_per_queue, rt,
+                                        flits_per_queue, bw_to_xbar, rt,
                                         vc_alloc, pressures, log));
     egress_id src_id(src->get_id(), src_port_name);
     shared_ptr<egress> egr =
         shared_ptr<egress>(new egress(src_id, ingr, src->get_pressures(),
-                                      bw, log));
+                                      link_bw, log));
     add_ingress(src->get_id(), ingr);
     src->add_egress(get_id(), egr);
 }
-
 
 void node::tick_positive_edge() throw(err) {
     for (ingresses_t::iterator n = ingresses.begin();

@@ -28,9 +28,10 @@ private:
     typedef map<node_id, shared_ptr<egress> > egresses_t;
     ingresses_t ingresses;
     egresses_t egresses;
-    typedef vector<shared_ptr<virtual_queue> > vqids_t;
-    vqids_t ingress_qs;
-    vqids_t egress_qs;
+    typedef vector<tuple<node_id, shared_ptr<virtual_queue> > > nvqs_t;
+    nvqs_t ingress_qs;
+    typedef vector<shared_ptr<virtual_queue> > vqs_t;
+    vqs_t egress_qs;
     logger &log;
 };
 

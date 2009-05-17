@@ -21,7 +21,8 @@ public:
 public:
     explicit ingress(const ingress_id &id, const node_id &src_node_id,
                      const set<virtual_queue_id> &vq_ids,
-                     unsigned flits_per_queue, shared_ptr<router> rt,
+                     unsigned flits_per_queue, unsigned bw_to_xbar,
+                     shared_ptr<router> rt,
                      shared_ptr<channel_alloc> virtual_channel_alloc,
                      shared_ptr<pressure_tracker> pressures,
                      logger &log) throw(err);
@@ -31,10 +32,12 @@ public:
     const queues_t &get_queues() const throw();
     const ingress_id &get_id() const throw();
     const node_id &get_src_node_id() const throw();
+    const unsigned get_bw_to_xbar() const throw();
     friend ostream &operator<<(ostream &out, const ingress &v);
 private:
     typedef map<virtual_queue_id, virtual_queue_node_id > next_hops_t;
     const ingress_id id;
+    const unsigned bw_to_xbar;
     const node_id src_node_id;
     queues_t vqs;
     next_hops_t next_hops;
@@ -48,6 +51,10 @@ inline const ingress_id &ingress::get_id() const throw() { return id; }
 
 inline const node_id &ingress::get_src_node_id() const throw() {
     return src_node_id;
+}
+
+inline const unsigned ingress::get_bw_to_xbar() const throw() {
+    return bw_to_xbar;
 }
 
 inline const ingress::queues_t &ingress::get_queues() const throw() {

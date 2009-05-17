@@ -3,12 +3,12 @@
 
 #include <iomanip>
 #include <algorithm>
+#include <iterator>
+#include <climits>
 #include "endian.hpp"
 #include "node.hpp"
 #include "bridge.hpp"
 #include "channel_alloc.hpp"
-
-#include <iterator>
 
 class bogus_router : public router {
 public:
@@ -50,8 +50,8 @@ bridge::bridge(shared_ptr<node> n,
                shared_ptr<bridge_channel_alloc> bridge_vca,
                const set<virtual_queue_id> &n2b_vq_ids, unsigned n2b_bw,
                const set<virtual_queue_id> &b2n_vq_ids, unsigned b2n_bw,
-               unsigned flits_per_queue, shared_ptr<statistics> st,
-               logger &l) throw(err)
+               unsigned flits_per_queue, unsigned b2n_bw_to_xbar,
+               shared_ptr<statistics> st, logger &l) throw(err)
     : id(n->get_id()), target(n), vc_alloc(bridge_vca), incoming(), outgoing(),
       ingress_dmas(), egress_dmas(), vqids(), stats(st), log(l) {
     unsigned dma_no = 1;
@@ -65,6 +65,7 @@ bridge::bridge(shared_ptr<node> n,
     shared_ptr<ingress> node_ingress =
         shared_ptr<ingress>(new ingress(node_ingress_id, n->get_id(),
                                         b2n_vq_ids, flits_per_queue,
+                                        b2n_bw_to_xbar,
                                         target->get_router(),
                                         target->get_channel_alloc(),
                                         target->get_pressures(), log));
@@ -91,7 +92,8 @@ bridge::bridge(shared_ptr<node> n,
     ingress_id bridge_ingress_id(n->get_id(), "X");
     incoming = shared_ptr<ingress>(new ingress(bridge_ingress_id, n->get_id(),
                                                n2b_vq_ids, flits_per_queue,
-                                               br_rt, br_vca, br_pt, log));
+                                               UINT_MAX, br_rt, br_vca, br_pt,
+                                               log));
     for (ingress::queues_t::const_iterator q = incoming->get_queues().begin();
          q != incoming->get_queues().end(); ++q) {
         n->add_queue_id(q->first);

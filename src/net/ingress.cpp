@@ -5,11 +5,13 @@
 
 ingress::ingress(const ingress_id &new_id, const node_id &new_src_node_id,
                  const set<virtual_queue_id> &vq_ids,
-                 unsigned flits_per_queue, shared_ptr<router> rt,
+                 unsigned flits_per_queue, unsigned xbar_bw,
+                 shared_ptr<router> rt,
                  shared_ptr<channel_alloc> vca,
                  shared_ptr<pressure_tracker> pt,
                  logger &l) throw(err)
-    : id(new_id), src_node_id(new_src_node_id), vqs(), log(l) {
+    : id(new_id), bw_to_xbar(xbar_bw), src_node_id(new_src_node_id), vqs(),
+      log(l) {
     const node_id &parent_id = id.get_node_id().get_numeric_id();
     for (set<virtual_queue_id>::const_iterator i = vq_ids.begin();
          i != vq_ids.end(); ++i) {
