@@ -453,6 +453,7 @@ def new_system_config(cfg, verbose=False):
         elif queue_routing == 'round-robin':
             for n, v in cfg.items('flows'):
                 check_flow_nqs(n, p_flow_n(v), links)
+            flows = [(p_nat(n), p_flow_n(v)) for n, v in cfg.items('flows')]
             routes = flows_to_routes(flows)
         elif queue_routing == 'set':
             for n, v in cfg.items('flows'):
