@@ -16,7 +16,7 @@ public:
     virtual ~set_channel_alloc() throw();
     virtual void allocate() throw(err);
     virtual void add_egress(shared_ptr<egress> egress) throw(err);
-    void add_route(const node_id &src, const flow_id &f, const node_id &dst,
+    void add_route(const node_id &src, const node_id &dst, const flow_id &f,
                    const vector<tuple<virtual_queue_id,double> > &qs)
         throw(err);
 private:

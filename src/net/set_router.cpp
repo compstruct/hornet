@@ -10,7 +10,7 @@ set_router::set_router(node_id i, logger &l) throw() : router(i,l), routes() { }
 
 set_router::~set_router() throw() { }
 
-node_id set_router::route(node_id src, flow_id f) throw(err) {
+tuple<node_id,flow_id> set_router::route(node_id src, flow_id f) throw(err) {
     route_query_t rq = route_query_t(src, f);
     routes_t::iterator ri = routes.find(rq);
     if (ri == routes.end())
@@ -18,17 +18,19 @@ node_id set_router::route(node_id src, flow_id f) throw(err) {
                                 f.get_numeric_id());
     const route_nodes_t &nodes = ri->second;
     assert(!nodes.empty());
-    double r = random_range_double(nodes.back().get<1>());
-    node_id dst(0xdeadbeef);
+    double r = random_range_double(nodes.back().get<2>());
+    node_id dst_n(0xdeadbeef);
+    flow_id dst_f(0xdeadbeef);
     for (route_nodes_t::const_iterator ni = nodes.begin();
          ni != nodes.end(); ++ni) {
-        node_id n; double prop; tie(n,prop) = *ni;
+        node_id n; flow_id nf; double prop; tie(n,nf,prop) = *ni;
         if (r < prop) {
-            dst = n;
+            dst_n = n;
+            dst_f = nf;
             break;
         }
     }
-    return dst;
+    return make_tuple(dst_n, dst_f);
 }
 
 void set_router::add_route(const node_id &src, const flow_id &f,
@@ -42,23 +44,27 @@ void set_router::add_route(const node_id &src, const flow_id &f,
     double prop_sum = 0.0;
     for (route_nodes_t::const_iterator di = dsts.begin();
          di != dsts.end(); ++di) {
-        node_id n; double prop; tie(n,prop) = *di;
+        node_id n; flow_id nf; double prop; tie(n,nf,prop) = *di;
         assert(prop > 0);
         prop_sum += prop;
-        routes[rq].push_back(make_tuple(n, prop_sum));
+        routes[rq].push_back(make_tuple(n, nf, prop_sum));
     }
     if (dsts.size() == 1) {
-        node_id n; double prop; tie(n,prop) = dsts.front();
+        node_id n; flow_id nf; double prop; tie(n,nf,prop) = dsts.front();
         LOG(log,4) << "router " << get_id() << " routing flow " << f
-                   << " from node " << src << " to node " << n << endl;
+                   << " from node " << src << " to node " << n;
+        if (nf != f) LOG(log,4) << " as " << nf;
+        LOG(log,4) << endl;
     } else {
         LOG(log,4) << "router " << get_id() << " routing flow " << f
                    << " from node " << src << " to nodes ";
         for (route_nodes_t::const_iterator di = dsts.begin();
              di != dsts.end(); ++di) {
-            node_id n; double prop; tie(n,prop) = *di;
+            node_id n; flow_id nf; double prop; tie(n,nf,prop) = *di;
             LOG(log,4) << (di == dsts.begin() ? "" : ", ")
-                       << n << dec << fixed << setprecision(4)
+                       << n;
+            if (nf != f) LOG(log,4) << " as " << nf;
+            LOG(log,4) << dec << fixed << setprecision(4)
                        << " (" << (prop * 100) << "%)";
         }
         LOG(log,4) << endl;

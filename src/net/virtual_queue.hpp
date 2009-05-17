@@ -85,11 +85,12 @@ public:
 private:
     const virtual_queue_node_id id;
     node_id src_node_id;
-    queue<tuple<flit, node_id> > q;
+    queue<tuple<flit, node_id, flow_id> > q;
     shared_ptr<router> rt;
     shared_ptr<channel_alloc> vc_alloc;
     shared_ptr<pressure_tracker> pressures;
     node_id next_node; // for next incoming flit
+    flow_id next_flow; // for next incoming flit
     unsigned ingress_remaining;
     flow_id ingress_flow;
     unsigned egress_remaining;

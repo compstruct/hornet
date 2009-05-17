@@ -17,8 +17,8 @@ void set_channel_alloc::add_egress(shared_ptr<egress> egr) throw(err) {
 }
 
 void
-set_channel_alloc::add_route(const node_id &src, const flow_id &f,
-                             const node_id &dst,
+set_channel_alloc::add_route(const node_id &src,
+                             const node_id &dst, const flow_id &f,
                              const vector<tuple<virtual_queue_id,double> > &qis)
     throw(err) {
     if (egresses.find(dst) == egresses.end())

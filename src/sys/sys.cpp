@@ -221,13 +221,14 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
             vca->add_route(flow_id(flow), qs);
         } else { // program a routing node
             uint32_t num_nodes = read_word(img);
-            vector<tuple<node_id,double> > next_nodes;
+            vector<tuple<node_id,flow_id,double> > next_nodes;
             if (num_nodes == 0) throw err_bad_mem_img();
             for (uint32_t n = 0; n < num_nodes; ++n) {
                 uint32_t next_n = read_word(img);
+                uint32_t next_f = read_word(img);
                 double nprop = read_double(img);
                 if (nprop <= 0) throw err_bad_mem_img();
-                next_nodes.push_back(make_tuple(next_n, nprop));
+                next_nodes.push_back(make_tuple(next_n, next_f, nprop));
                 uint32_t num_queues = read_word(img); // 0 is valid
                 vector<tuple<virtual_queue_id,double> > next_qs;
                 for (uint32_t q = 0; q < num_queues; ++q) {
@@ -238,7 +239,8 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
                 }
                 shared_ptr<set_channel_alloc> vca =
                     static_pointer_cast<set_channel_alloc>(n_vcas[cur_n]);
-                vca->add_route(prev_n, flow_id(flow), next_n, next_qs);
+                vca->add_route(prev_n, next_n, flow_id(next_f), next_qs);
+                if (flow != next_f) stats->register_flow_rename(flow, next_f);
             }
             shared_ptr<set_router> r =
                 static_pointer_cast<set_router>(node_rts[cur_n]);

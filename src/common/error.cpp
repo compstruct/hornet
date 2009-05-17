@@ -261,7 +261,18 @@ err_duplicate_flow::err_duplicate_flow(uint32_t new_node,
 err_duplicate_flow::~err_duplicate_flow() throw() { }
 void err_duplicate_flow::show_to(ostream &out) const {
     out << "node " << setfill('0') << hex << setw(2) << node
-        << " already has a route for flow " << setw(2) << flow;
+        << " already has a route for flow " << setw(8) << flow;
+}
+
+err_duplicate_flow_rename::err_duplicate_flow_rename(uint32_t new_to,
+                                                     uint32_t new_from1,
+                                                     uint32_t new_from2) throw()
+    : to(new_to), from1(new_from1), from2(new_from2) { }
+err_duplicate_flow_rename::~err_duplicate_flow_rename() throw() { }
+void err_duplicate_flow_rename::show_to(ostream &out) const {
+    out << "flow " << setfill('0') << hex << setw(8) << from1
+        << " already maps to " << setw(8) << to << "; cannot map "
+        << setw(8) << from2 << " to " << setw(8) << to;
 }
 
 exc_bad_transmission::

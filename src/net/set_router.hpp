@@ -15,12 +15,15 @@ class set_router : public router {
 public:
     set_router(node_id id, logger &log) throw();
     virtual ~set_router() throw();
-    virtual node_id route(node_id src_node_id, flow_id flow) throw(err);
+    virtual tuple<node_id,flow_id> route(node_id src_node_id, flow_id flow)
+        throw(err);
     void add_route(const node_id &prev, const flow_id &flow,
-                   const vector<tuple<node_id,double> > &nodes) throw(err);
+                   const vector<tuple<node_id,flow_id,double> > &next_hops)
+        throw(err);
 private:
     typedef tuple<node_id, flow_id> route_query_t;
-    typedef vector<tuple<node_id,double> > route_nodes_t; // cumulative props
+    // doubles in routes are cumulative propensities
+    typedef vector<tuple<node_id,flow_id,double> > route_nodes_t;
     typedef map<route_query_t, route_nodes_t> routes_t;
     routes_t routes;
 };

@@ -11,6 +11,7 @@
 #include <boost/tuple/tuple_comparison.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include "cstdint.hpp"
+#include "error.hpp"
 #include "flow_id.hpp"
 #include "flit.hpp"
 #include "egress_id.hpp"
@@ -28,19 +29,25 @@ public:
     void receive_flit(const flow_id &, const flit &) throw();
     void register_links(const egress_id &src, const egress_id &dst,
                         unsigned num_links) throw();
+    void register_flow_rename(const flow_id &from,
+                              const flow_id &to) throw(err);
     void switch_links(const egress_id &src, const egress_id &dst,
                       unsigned min_link, unsigned num_links) throw();
     friend ostream &operator<<(ostream &, statistics &);
+private:
+    flow_id get_original_flow(flow_id f) const throw();
 private:
     const uint64_t &system_time;
     const uint64_t start_time;
     ptime sim_start_time;
     ptime sim_end_time;
+    typedef map<flow_id, flow_id> flow_renames_t;
     typedef map<flow_id, uint64_t> flit_counter_t;
     typedef tuple<egress_id, egress_id, unsigned> link_id;
     typedef map<link_id, uint64_t> link_switch_counter_t;
     typedef map<uint64_t, uint64_t> flit_timestamp_t;
     typedef map<flow_id, tuple<double, double> > flit_inc_stats_t;
+    flow_renames_t original_flows;
     flit_counter_t sent_flits;
     uint64_t total_sent_flits;
     flit_counter_t received_flits;

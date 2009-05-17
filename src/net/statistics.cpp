@@ -10,7 +10,8 @@
 statistics::statistics(const uint64_t &sys_time, const uint64_t &start) throw()
     : system_time(sys_time), start_time(start),
       sim_start_time(microsec_clock::local_time()),
-      sim_end_time(sim_start_time), sent_flits(), total_sent_flits(0),
+      sim_end_time(sim_start_time), original_flows(),
+      sent_flits(), total_sent_flits(0),
       received_flits(), total_received_flits(0),
       flit_departures(), flit_inc_stats(), total_inc_stats(0,0),
       link_switches() { }
@@ -24,7 +25,15 @@ void statistics::end_sim() throw() {
     sim_end_time = microsec_clock::local_time();
 }
 
+flow_id statistics::get_original_flow(flow_id f) const throw() {
+    flow_renames_t::const_iterator fri;
+    while ((fri = original_flows.find(f)) != original_flows.end())
+        f = fri->second;
+    return f;
+}
+
 void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
+    assert(get_original_flow(fid) == fid);
     if (system_time >= start_time) {
         total_sent_flits++;
         flit_counter_t::iterator i = sent_flits.find(fid);
@@ -38,7 +47,8 @@ void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
     }
 }
 
-void statistics::receive_flit(const flow_id &fid, const flit &flt) throw() {
+void statistics::receive_flit(const flow_id &org_fid, const flit &flt) throw() {
+    flow_id fid = get_original_flow(org_fid);
     if (system_time >= start_time) {
         flit_timestamp_t::iterator di = flit_departures.find(flt.get_uid());
         if (di != flit_departures.end()) {
@@ -82,6 +92,20 @@ void statistics::register_links(const egress_id &src, const egress_id &dst,
         link_id l(src,dst,n);
         assert(link_switches.find(l) == link_switches.end());
         link_switches[l] = 0;
+    }
+}
+
+void statistics::register_flow_rename(const flow_id &from,
+                                      const flow_id &to) throw (err) {
+    assert(from != to);
+    if (original_flows.find(to) != original_flows.end()) {
+        if (original_flows[to] != from) {
+            throw err_duplicate_flow_rename(to.get_numeric_id(),
+                                            original_flows[to].get_numeric_id(),
+                                            from.get_numeric_id());
+        }
+    } else {
+        original_flows[to] = from;
     }
 }
 

@@ -14,15 +14,16 @@ class bogus_router : public router {
 public:
     bogus_router(node_id id, logger &log) throw();
     virtual ~bogus_router() throw();
-    virtual node_id route(node_id src_id, flow_id flow) throw(err);
+    virtual tuple<node_id,flow_id> route(node_id src_id, flow_id flow)
+        throw(err);
 };
 
 bogus_router::bogus_router(node_id i, logger &l) throw() : router(i,l) { }
 
 bogus_router::~bogus_router() throw() { }
 
-node_id bogus_router::route(node_id n, flow_id f) throw(err) {
-    return get_id();
+tuple<node_id,flow_id> bogus_router::route(node_id n, flow_id f) throw(err) {
+    return make_tuple(get_id(), f);
 }
 
 class bogus_channel_alloc : public channel_alloc {

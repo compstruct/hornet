@@ -341,6 +341,18 @@ private:
     virtual void show_to(ostream &out) const;
 };
 
+class err_duplicate_flow_rename : public err {
+public:
+    explicit err_duplicate_flow_rename(uint32_t to, uint32_t from1,
+                                       uint32_t from2) throw();
+    virtual ~err_duplicate_flow_rename() throw();
+private:
+    const uint32_t to;    // renamed flow (target)
+    const uint32_t from1; // first original flow ID
+    const uint32_t from2; // second original flow ID
+    virtual void show_to(ostream &out) const;
+};
+
 class exc_bad_transmission : public err_runtime_exc {
 public:
     explicit exc_bad_transmission(uint32_t node, uint32_t xmit_id) throw();

@@ -15,6 +15,7 @@ public:
     flow_id() throw();
     uint32_t get_numeric_id() const throw();
     bool operator==(const flow_id &) const throw();
+    bool operator!=(const flow_id &) const throw();
     bool operator<(const flow_id &) const throw();
 private:
     friend ostream &operator<<(ostream &, const flow_id &);
@@ -29,6 +30,10 @@ inline uint32_t flow_id::get_numeric_id() const throw() { return id; }
 
 inline bool flow_id::operator==(const flow_id &o) const throw() {
     return id == o.id;
+}
+
+inline bool flow_id::operator!=(const flow_id &o) const throw() {
+    return !operator==(o);
 }
 
 inline bool flow_id::operator<(const flow_id &o) const throw() {

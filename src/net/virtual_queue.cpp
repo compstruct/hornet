@@ -25,28 +25,34 @@ virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
 void virtual_queue::push(const flit &f) throw(err) {
     assert(!full());
     alloc->alloc();
+    flit new_flit(f);
     if (ingress_remaining == 0) {
         const head_flit &head = reinterpret_cast<const head_flit &>(f);
         ingress_flow = head.get_flow_id();
-        if (q.empty()) egress_flow = ingress_flow;
         ingress_remaining = head.get_length();
-        next_node = rt->route(src_node_id, ingress_flow);
+        tie(next_node, next_flow) = rt->route(src_node_id, ingress_flow);
+        if (q.empty()) egress_flow = next_flow;
         LOG(log,3) << "[queue " << id << "] ingress: " << head
-            << " (flow " << ingress_flow << ")" << endl;
+                   << " (flow " << ingress_flow;
+        if (next_flow != ingress_flow) {
+            new_flit = head_flit(next_flow, head.get_length());
+            LOG(log,3) << " -> " << next_flow;
+        }
+        LOG(log,3) << ")" << endl;
     } else {
         --ingress_remaining;
         LOG(log,3) << "[queue " << id << "] ingress: " << f
             << " (flow " << ingress_flow << ")" << endl;
     }
-    if (egress_vq.is_valid() && q.empty()) { // continuing flit gets to head
+    if (egress_vq.is_valid() && q.empty()) { // continuing flit gets to vq head
         pressures->inc(next_node, egress_vq);
     }
-    q.push(make_tuple(f, next_node));
+    q.push(make_tuple(new_flit, next_node, next_flow));
 }
 
 void virtual_queue::pop() throw(err) {
     assert(!empty());
-    flit f(0); node_id n; tie(f,n) = q.front();
+    flit f(0); node_id n; flow_id nf; tie(f,n,nf) = q.front();
     alloc->dealloc();
     if (egress_remaining == 0) {
         const head_flit &head = reinterpret_cast<const head_flit &>(f);
@@ -95,7 +101,7 @@ void virtual_queue::set_front_vq_id(const virtual_queue_id &vqid) throw(err) {
     assert(!empty());
     assert(!egress_vq.is_valid());
     assert(vqid.is_valid());
-    flit f(0); node_id n; tie(f,n) = q.front();
+    flit f(0); node_id n; flow_id nf; tie(f,n,nf) = q.front();
     LOG(log,3) << "[queue " << id << "] granted next hop "
                << make_tuple(n, vqid)
                << " (flow " << egress_flow << ")" << endl;

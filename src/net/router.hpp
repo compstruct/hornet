@@ -5,6 +5,7 @@
 #define __ROUTER_HPP__
 
 #include <utility>
+#include <boost/tuple/tuple.hpp>
 #include "error.hpp"
 #include "flow_id.hpp"
 #include "node_id.hpp"
@@ -12,11 +13,13 @@
 #include "logger.hpp"
 
 using namespace std;
+using namespace boost;
 
 class router {
 public:
     virtual ~router() throw();
-    virtual node_id route(node_id src_node_id, flow_id flow) throw(err) = 0;
+    virtual tuple<node_id,flow_id> route(node_id src_node_id, flow_id flow)
+        throw(err) = 0;
     const node_id &get_id() const throw();
 protected:
     router(node_id id, logger &log) throw();
