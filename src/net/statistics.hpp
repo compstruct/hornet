@@ -20,6 +20,18 @@ using namespace std;
 using namespace boost;
 using namespace boost::posix_time;
 
+class running_stats {
+public:
+    explicit running_stats() throw();
+    void add(double sample, double weight) throw();
+    double get_mean() const throw();
+    double get_std_dev() const throw();
+private:
+    double mean;
+    double var_numer;
+    double weight_sum;
+};
+
 class statistics {
 public:
     statistics(const uint64_t &system_time, const uint64_t &start_time) throw();
@@ -33,6 +45,9 @@ public:
                               const flow_id &to) throw(err);
     void switch_links(const egress_id &src, const egress_id &dst,
                       unsigned min_link, unsigned num_links) throw();
+    void xbar(node_id id, int flits, double req_frac, double bw_frac) throw();
+    void cxn_xmit(node_id src, node_id dst, unsigned used,
+                  double req_frac, double bw_frac) throw();
     friend ostream &operator<<(ostream &, statistics &);
 private:
     flow_id get_original_flow(flow_id f) const throw();
@@ -43,18 +58,28 @@ private:
     ptime sim_end_time;
     typedef map<flow_id, flow_id> flow_renames_t;
     typedef map<flow_id, uint64_t> flit_counter_t;
-    typedef tuple<egress_id, egress_id, unsigned> link_id;
-    typedef map<link_id, uint64_t> link_switch_counter_t;
+    typedef tuple<egress_id, egress_id, unsigned> sub_link_id;
+    typedef map<sub_link_id, uint64_t> link_switch_counter_t;
     typedef map<uint64_t, uint64_t> flit_timestamp_t;
-    typedef map<flow_id, tuple<double, double> > flit_inc_stats_t;
+    typedef map<node_id, running_stats> node_stats_t;
+    typedef map<flow_id, running_stats> flow_stats_t;
+    typedef tuple<node_id, node_id> cxn_id;
+    typedef map<cxn_id, running_stats> cxn_stats_t;
     flow_renames_t original_flows;
     flit_counter_t sent_flits;
     uint64_t total_sent_flits;
     flit_counter_t received_flits;
     uint64_t total_received_flits;
     flit_timestamp_t flit_departures;
-    flit_inc_stats_t flit_inc_stats;
-    tuple<double,double> total_inc_stats;
+    flow_stats_t flow_lat_stats;
+    running_stats total_lat_stats;
+    node_stats_t xbar_xmit_stats;
+    node_stats_t xbar_demand_stats;
+    node_stats_t xbar_bw_stats;
+    cxn_stats_t cxn_xmit_stats;
+    cxn_stats_t cxn_demand_stats;
+    cxn_stats_t cxn_bw_stats;
+
     link_switch_counter_t link_switches;
 };
 

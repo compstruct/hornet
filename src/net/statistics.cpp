@@ -7,13 +7,32 @@
 #include <iomanip>
 #include "statistics.hpp"
 
+running_stats::running_stats() throw() : mean(0),var_numer(0),weight_sum(0) { }
+
+void running_stats::add(double sample, double weight) throw() {
+    if (!isnan(sample) && !isnan(weight)) { // NaN -> invalid sample
+        double s = weight_sum + weight;
+        double q = sample - mean;
+        double r = q * weight / s;
+        mean += r;
+        var_numer += r * weight_sum * q;
+        weight_sum = s;
+    }
+}
+
+double running_stats::get_mean() const throw() { return mean; }
+
+double running_stats::get_std_dev() const throw() {
+    return weight_sum == 0 ? 0 : sqrt(var_numer/weight_sum);
+}
+
 statistics::statistics(const uint64_t &sys_time, const uint64_t &start) throw()
     : system_time(sys_time), start_time(start),
       sim_start_time(microsec_clock::local_time()),
       sim_end_time(sim_start_time), original_flows(),
       sent_flits(), total_sent_flits(0),
       received_flits(), total_received_flits(0),
-      flit_departures(), flit_inc_stats(), total_inc_stats(0,0),
+      flit_departures(), flow_lat_stats(), total_lat_stats(),
       link_switches() { }
 
 void statistics::start_sim() throw() {
@@ -54,33 +73,13 @@ void statistics::receive_flit(const flow_id &org_fid, const flit &flt) throw() {
         if (di != flit_departures.end()) {
             float flight_time = system_time - di->second;
             total_received_flits++;
-            if (total_received_flits == 1) {
-                total_inc_stats.get<0>() = flight_time;
-            } else {
-                double &mean = total_inc_stats.get<0>();
-                double &var_numer = total_inc_stats.get<1>();
-                double q = flight_time - mean;
-                double r = q / total_received_flits;
-                mean += r;
-                var_numer += r * (total_received_flits - 1) * q;
-            }
+            total_lat_stats.add(flight_time, 1);
             if (received_flits.find(fid) == received_flits.end()) {
                 received_flits[fid] = 1;
             } else {
                 received_flits[fid]++;
             }
-            flit_inc_stats_t::iterator si = flit_inc_stats.find(fid);
-            if (si == flit_inc_stats.end()) {
-                flit_inc_stats[fid] = make_tuple(flight_time, 0);
-            } else {
-                double &mean = si->second.get<0>();
-                double &var_numer = si->second.get<1>();
-                double num_received = received_flits[fid];
-                double q = flight_time - mean;
-                double r = q / num_received;
-                mean += r;
-                var_numer += r * (num_received - 1) * q;
-            }
+            flow_lat_stats[fid].add(flight_time, 1);
             flit_departures.erase(flt.get_uid());
         }
     }
@@ -89,7 +88,7 @@ void statistics::receive_flit(const flow_id &org_fid, const flit &flt) throw() {
 void statistics::register_links(const egress_id &src, const egress_id &dst,
                                 unsigned num_links) throw() {
     for (unsigned n = 0; n < num_links; ++n) {
-        link_id l(src,dst,n);
+        sub_link_id l(src,dst,n);
         assert(link_switches.find(l) == link_switches.end());
         link_switches[l] = 0;
     }
@@ -113,11 +112,26 @@ void statistics::switch_links(const egress_id &src, const egress_id &dst,
                               unsigned min_link, unsigned num_links) throw() {
     if (system_time >= start_time) {
         for (unsigned n = min_link; n < min_link + num_links; ++n) {
-            link_id l(src,dst,n);
+            sub_link_id l(src,dst,n);
             assert(link_switches.find(l) != link_switches.end());
             link_switches[l]++;
         }
     }
+}
+
+void statistics::xbar(node_id xbar_id, int flits, double req_frac,
+                      double bw_frac) throw() {
+    xbar_xmit_stats[xbar_id].add(flits, 1);
+    xbar_demand_stats[xbar_id].add(req_frac, 1);
+    xbar_bw_stats[xbar_id].add(bw_frac, 1);
+}
+
+void statistics::cxn_xmit(node_id src, node_id dst, unsigned used,
+                          double req_frac, double bw_frac) throw() {
+    cxn_id cxn = make_tuple(src,dst);
+    cxn_xmit_stats[cxn].add(used, 1);
+    cxn_demand_stats[cxn].add(req_frac, 1);
+    cxn_bw_stats[cxn].add(bw_frac, 1);
 }
 
 static ostream &operator<<(ostream &out,
@@ -187,18 +201,17 @@ ostream &operator<<(ostream &out, statistics &stats) {
          i != flow_ids.end(); ++i) {
         const flow_id &f = *i;
         if (stats.received_flits.find(f) != stats.received_flits.end()) {
-            assert(stats.flit_inc_stats.find(f) != stats.flit_inc_stats.end());
+            assert(stats.flow_lat_stats.find(f) != stats.flow_lat_stats.end());
             uint64_t received = stats.received_flits[f];
             assert(received > 0);
-            tuple<double,double> &inc_stats = stats.flit_inc_stats[f];
+            running_stats &inc_stats = stats.flow_lat_stats[f];
             out << "    flow " << f << ": "
-                << dec << inc_stats.get<0>() << " +/- "
-                << sqrt(inc_stats.get<1>() / received) << endl;
+                << dec << inc_stats.get_mean() << " +/- "
+                << inc_stats.get_std_dev() << endl;
         }
     }
-    out << "    all flows: " << dec << stats.total_inc_stats.get<0>() << " +/- "
-        << sqrt(stats.total_inc_stats.get<1>() / stats.total_received_flits)
-        << endl << endl;
+    out << "    all flows: " << dec << stats.total_lat_stats.get_mean()
+        << " +/- " << stats.total_lat_stats.get_std_dev() << endl << endl;
     
     out << "link switch counts:" << endl;
     uint64_t total_switches = 0;
@@ -211,6 +224,39 @@ ostream &operator<<(ostream &out, statistics &stats) {
             << endl;
     }
     out << "    all links: bandwidths changed " << dec << total_switches
-        << " time" << (total_switches == 1 ? "" : "s") << endl;
+        << " time" << (total_switches == 1 ? "" : "s") << endl << endl;
+
+    out << "xbar transmission statistics (mean +/- s.d.):" << endl;
+    for (statistics::node_stats_t::const_iterator nsi =
+         stats.xbar_xmit_stats.begin();
+         nsi != stats.xbar_xmit_stats.end(); ++nsi) {
+        const running_stats &xmit = stats.xbar_xmit_stats[nsi->first];
+        const running_stats &dem = stats.xbar_demand_stats[nsi->first];
+        const running_stats &bw = stats.xbar_bw_stats[nsi->first];
+        out << "    xbar " << nsi->first << ":" << fixed << setprecision(2)
+            << " flits " << xmit.get_mean() << " +/- " << xmit.get_std_dev()
+            << setprecision(0) << " demand " << 100 * dem.get_mean() << "% +/- "
+            << 100 * dem.get_std_dev() << "%"
+            << " bw " << 100 * bw.get_mean() << "% +/- "
+            << 100 * bw.get_std_dev() << "%" << endl;
+    }
+    out << endl;
+    out << "link transmission statistics (mean +/- s.d.):" << endl;
+    for (statistics::cxn_stats_t::const_iterator csi =
+         stats.cxn_xmit_stats.begin();
+         csi != stats.cxn_xmit_stats.end(); ++csi) {
+        node_id src, dst; tie(src,dst) = csi->first;
+        const running_stats &xmit = stats.cxn_xmit_stats[csi->first];
+        const running_stats &dem = stats.cxn_demand_stats[csi->first];
+        const running_stats &bw = stats.cxn_bw_stats[csi->first];
+        out << "    link " << src << "->" << dst << ":"
+            << fixed << setprecision(2)
+            << " flits " << xmit.get_mean() << " +/- " << xmit.get_std_dev()
+            << setprecision(0) << " demand " << 100 * dem.get_mean() << "% +/- "
+            << 100 * dem.get_std_dev() << "%"
+            << " bw " << 100 * bw.get_mean() << "% +/- "
+            << 100 * bw.get_std_dev() << "%" << endl;
+    }
     return out;
 }
+

@@ -78,7 +78,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
             b_vca(new set_bridge_channel_alloc(id, log));
         uint32_t flits_per_q = read_word(img);
         shared_ptr<node> n(new node(node_id(id), flits_per_q, n_rt, n_vca,
-                                    log));
+                                    stats, log));
         uint32_t n2b_bw = read_word(img);
         uint32_t b2n_bw = read_word(img);
         uint32_t b2n_xbar_bw = read_word(img);

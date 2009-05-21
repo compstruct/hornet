@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <algorithm>
+#include <iomanip>
 #include "set_channel_alloc.hpp"
 #include "random.hpp"
 
@@ -49,6 +50,18 @@ set_channel_alloc::add_route(const node_id &src,
 }
 
 void set_channel_alloc::allocate() throw(err) {
+    int num_free_eqs = 0;
+    for (egresses_t::const_iterator ei = egresses.begin();
+         ei != egresses.end(); ++ei) {
+        const ingress::queues_t &eqs = ei->second->get_remote_queues();
+        for (ingress::queues_t::const_iterator eqi = eqs.begin();
+             eqi != eqs.end(); ++eqi) {
+            const shared_ptr<virtual_queue> &eq = eqi->second;
+            if (!is_claimed(eq->get_id()) && eq->ingress_new_flow()) {
+                ++num_free_eqs;
+            }
+        }
+    }
     typedef vector<shared_ptr<virtual_queue> > qs_t;
     qs_t in_qs;
     for (ingresses_t::iterator ii = ingresses.begin(); ii != ingresses.end();
@@ -62,6 +75,8 @@ void set_channel_alloc::allocate() throw(err) {
             }
         }
     }
+    int num_reqs = in_qs.size();
+    int num_grants = 0;
     random_shuffle(in_qs.begin(), in_qs.end(), random_range);
     for (qs_t::iterator qi = in_qs.begin(); qi != in_qs.end(); ++qi) {
         shared_ptr<virtual_queue> &iq = *qi;
@@ -87,9 +102,20 @@ void set_channel_alloc::allocate() throw(err) {
                 shared_ptr<virtual_queue> oq; double prop; tie(oq,prop) = *oqi;
                 if (r < prop) {
                     iq->set_front_vq_id(oq->get_id().get<1>());
+                    ++num_grants;
                     break;
                 }
             }
         }
+    }
+    if (num_reqs > 0) {
+        int grant_perc = static_cast<int>(100 * static_cast<double>(num_grants)
+                                          / static_cast<double>(num_reqs));
+        LOG(log,3) << "[vc alloc " << get_id() << "] granted " << dec
+            << num_grants << " of " << num_reqs
+            << " request" << (num_reqs == 1 ? "" : "s") << " from "
+            << num_free_eqs << " free neighbor queue"
+            << (num_free_eqs == 1 ? "" : "s") << " ("
+            << grant_perc << "%)" << endl;
     }
 }

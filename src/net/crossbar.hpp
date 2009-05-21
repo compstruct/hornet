@@ -9,11 +9,12 @@
 #include "virtual_queue.hpp"
 #include "ingress.hpp"
 #include "egress.hpp"
+#include "statistics.hpp"
 #include "logger.hpp"
 
 class crossbar {
 public:
-    crossbar(node_id parent, logger &log) throw();
+    crossbar(node_id parent, shared_ptr<statistics> stats, logger &log) throw();
     void add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err);
     void add_egress(node_id dst, shared_ptr<egress> egress) throw(err);
     void tick_positive_edge() throw(err);
@@ -32,6 +33,7 @@ private:
     nvqs_t ingress_qs;
     typedef vector<shared_ptr<virtual_queue> > vqs_t;
     vqs_t egress_qs;
+    shared_ptr<statistics> stats;
     logger &log;
 };
 

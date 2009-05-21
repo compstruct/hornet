@@ -22,7 +22,7 @@ public:
     explicit node(node_id id, uint32_t flits_per_queue,
                   shared_ptr<router> new_router,
                   shared_ptr<channel_alloc> new_vc_alloc,
-                  logger &log) throw();
+                  shared_ptr<statistics> stats, logger &log) throw();
     const node_id &get_id() const throw();
     void add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err);
     void add_egress(node_id dst, shared_ptr<egress> egress) throw(err);

@@ -5,8 +5,8 @@
 #include "random.hpp"
 #include "crossbar.hpp"
 
-crossbar::crossbar(node_id parent, logger &l) throw()
-    : id(parent), ingresses(), egresses(), log(l) { }
+crossbar::crossbar(node_id parent, shared_ptr<statistics> s, logger &l) throw()
+    : id(parent), ingresses(), egresses(), stats(s), log(l) { }
 
 void crossbar::add_ingress(node_id src, shared_ptr<ingress> ing) throw(err) {
     if (ingresses.find(src) != ingresses.end()) {
@@ -71,6 +71,7 @@ void crossbar::tick_positive_edge() throw(err) {
     LOG(log,12) << "[xbar " << id << "] arbitration" << endl;
     map<node_id, unsigned> ibws; // remaining bandwidths for each ingress port
     map<node_id, unsigned> ebws; // remaining bandwidths for each egress
+    map<node_id, unsigned> egress_demands;
     for (ingresses_t::iterator i = ingresses.begin();
          i != ingresses.end(); ++i) {
         ibws[i->first] = i->second->get_bw_to_xbar();
@@ -80,6 +81,7 @@ void crossbar::tick_positive_edge() throw(err) {
             << i->first << " has bandwidth "
             << dec << i->second->get_bandwidth() << endl;
         ebws[i->first] = i->second->get_bandwidth();
+        egress_demands[i->first] = 0;
     }
     random_shuffle(egress_qs.begin(), egress_qs.end(), random_range);
     random_shuffle(ingress_qs.begin(), ingress_qs.end(), random_range);
@@ -88,11 +90,15 @@ void crossbar::tick_positive_edge() throw(err) {
          iqi != ingress_qs.end(); ++iqi) {
         node_id &in_node = iqi->get<0>();
         shared_ptr<virtual_queue> &iq = iqi->get<1>();
-        if (ibws[in_node] > 0 && !iq->empty()) {
+        if (ibws[in_node] > 0 && iq->egress_ready()) {
+            egress_demands[iq->front_node_id()]++;
             ingress_ready_qs.push_back(iq);
             --ibws[in_node];
         }
     }
+    int num_reqs = ingress_ready_qs.size();
+    int num_sent = 0;
+    int num_eqs = 0;
     for (vqs_t::iterator eqi = egress_qs.begin();
          eqi != egress_qs.end(); ++eqi) {
         node_id out_node; virtual_queue_id out_q;
@@ -101,6 +107,7 @@ void crossbar::tick_positive_edge() throw(err) {
         LOG(log,12) << "[xbar " << id << "]     egress queue "
             << eq->get_id() << endl;
         if (ebws[out_node] > 0 && !eq->full()) {
+            ++num_eqs;
             for (vqs_t::iterator iqi = ingress_ready_qs.begin();
                  iqi != ingress_ready_qs.end(); ++iqi) {
                 shared_ptr<virtual_queue> &iq = *iqi;
@@ -128,11 +135,41 @@ void crossbar::tick_positive_edge() throw(err) {
                     iq->pop();
                     eq->push(f);
                     --ebws[out_node];
+                    ++num_sent;
                     break; // exit ingress_ready_qs loop
                 }
             }
         }
     }
+    unsigned total_bw = 0;
+    for (egresses_t::iterator i = egresses.begin(); i != egresses.end(); ++i) {
+        unsigned total = i->second->get_bandwidth();
+        total_bw += total;
+        unsigned left = ebws[i->first];
+        unsigned demand = egress_demands[i->second->get_target_id()];
+        unsigned used = total - left;
+        double req_frac =
+            static_cast<double>(used) / static_cast<double>(demand);
+        double bw_frac =
+            static_cast<double>(used) / static_cast<double>(total);
+        stats->cxn_xmit(id, i->second->get_target_id(), used,
+                        req_frac, bw_frac);
+    }
+    double req_frac =
+        static_cast<double>(num_sent) / static_cast<double>(num_reqs);
+    double bw_frac =
+        static_cast<double>(num_sent) / static_cast<double>(total_bw);
+    stats->xbar(id, num_sent, req_frac, bw_frac);
+    if (num_reqs > 0) {
+        LOG(log,3) << "[xbar " << id << "] sent " << dec
+            << num_sent << " of " << num_reqs
+            << " flit" << (num_reqs == 1 ? "" : "s")
+            << " (" << static_cast<int>(100 * req_frac) << "%) via "
+            << num_eqs << " free neighbor queue" << (num_eqs == 1 ? "" : "s")
+            << " (" << static_cast<int>(100 * bw_frac) << "% egress bw)"
+            << endl;
+    }
 }
 
 void crossbar::tick_negative_edge() throw(err) { }
+
