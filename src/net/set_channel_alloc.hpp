@@ -16,13 +16,14 @@ public:
     virtual ~set_channel_alloc() throw();
     virtual void allocate() throw(err);
     virtual void add_egress(shared_ptr<egress> egress) throw(err);
-    void add_route(const node_id &src, const node_id &dst, const flow_id &f,
+    void add_route(const node_id &src, const flow_id &f, const node_id &dst, 
+                   const flow_id &nf,
                    const vector<tuple<virtual_queue_id,double> > &qs)
         throw(err);
 private:
     typedef map<node_id, shared_ptr<egress> > egresses_t;
     egresses_t egresses;
-    typedef tuple<node_id, flow_id, node_id> route_query_t;
+    typedef tuple<node_id, flow_id, node_id, flow_id> route_query_t;
     typedef vector<tuple<shared_ptr<virtual_queue>, double> > route_queues_t;
     typedef map<route_query_t, route_queues_t> routes_t;
     routes_t routes;

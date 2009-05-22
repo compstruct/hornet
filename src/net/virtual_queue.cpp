@@ -19,7 +19,7 @@ virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
     : id(make_tuple(new_node_id, new_vq_id)), src_node_id(new_src_node_id),
       q(), rt(new_rt), vc_alloc(new_vc_alloc), pressures(new_pt),
       ingress_remaining(0), ingress_flow(0),
-      egress_remaining(0), egress_flow(0), egress_vq(),
+      egress_remaining(0), egress_flow_old(0), egress_flow_new(0), egress_vq(),
       alloc(new_alloc), stale_size(0), log(l) { }
 
 void virtual_queue::push(const flit &f) throw(err) {
@@ -31,7 +31,10 @@ void virtual_queue::push(const flit &f) throw(err) {
         ingress_flow = head.get_flow_id();
         ingress_remaining = head.get_length();
         tie(next_node, next_flow) = rt->route(src_node_id, ingress_flow);
-        if (q.empty()) egress_flow = next_flow;
+        if (q.empty()) {
+            egress_flow_old = ingress_flow;
+            egress_flow_new = next_flow;
+        }
         LOG(log,3) << "[queue " << id << "] ingress: " << head
                    << " (flow " << ingress_flow;
         if (next_flow != ingress_flow) {
@@ -47,23 +50,35 @@ void virtual_queue::push(const flit &f) throw(err) {
     if (egress_vq.is_valid() && q.empty()) { // continuing flit gets to vq head
         pressures->inc(next_node, egress_vq);
     }
-    q.push(make_tuple(new_flit, next_node, next_flow));
+    q.push(make_tuple(new_flit, next_node, ingress_flow, next_flow));
 }
 
 void virtual_queue::pop() throw(err) {
     assert(!empty());
-    flit f(0); node_id n; flow_id nf; tie(f,n,nf) = q.front();
+    flit f(0); node_id n; flow_id of; flow_id nf; tie(f,n,of,nf) = q.front();
     alloc->dealloc();
     if (egress_remaining == 0) {
         const head_flit &head = reinterpret_cast<const head_flit &>(f);
-        egress_flow = head.get_flow_id();
+        egress_flow_old = of; egress_flow_new = nf;
         egress_remaining = head.get_length();
         LOG(log,3) << "[queue " << id << "] egress:  " << head
-            << " (flow " << egress_flow << ")" << endl;
+            << " (flow ";
+        if (egress_flow_new == egress_flow_old) {
+            LOG(log,3) << egress_flow_old;
+        } else {
+            LOG(log,3) << egress_flow_old << "->" << egress_flow_new;
+        }
+        LOG(log,3) << ")" << endl;
     } else {
         --egress_remaining;
         LOG(log,3) << "[queue " << id << "] egress:  " << f
-            << " (flow " << egress_flow << ")" << endl;
+            << " (flow ";
+        if (egress_flow_new == egress_flow_old) {
+            LOG(log,3) << egress_flow_old;
+        } else {
+            LOG(log,3) << egress_flow_old << "->" << egress_flow_new;
+        }
+        LOG(log,3) << ")" << endl;
     }
     q.pop();
     if (egress_remaining == 0) {
@@ -77,20 +92,34 @@ void virtual_queue::pop() throw(err) {
     --stale_size;
 }
 
-flow_id virtual_queue::get_egress_flow_id() const throw (err) {
+flow_id virtual_queue::get_egress_old_flow_id() const throw (err) {
     assert(!empty());
     if (egress_remaining == 0) {
-        const head_flit &head = reinterpret_cast<const head_flit &>(q.front());
-        return head.get_flow_id();
+        flit f(0); node_id n; flow_id of; flow_id nf;
+        tie(f,n,of,nf) = q.front();
+        return of;
     } else {
-        return egress_flow;
+        return egress_flow_old;
+    }
+}
+
+flow_id virtual_queue::get_egress_new_flow_id() const throw (err) {
+    assert(!empty());
+    if (egress_remaining == 0) {
+        flit f(0); node_id n; flow_id of; flow_id nf;
+        tie(f,n,of,nf) = q.front();
+        return nf;
+    } else {
+        return egress_flow_new;
     }
 }
 
 uint32_t virtual_queue::get_egress_flow_length() const throw (err) {
     assert(!empty());
     if (egress_remaining == 0) {
-        const head_flit &head = reinterpret_cast<const head_flit &>(q.front());
+        flit f(0); node_id n; flow_id of; flow_id nf;
+        tie(f,n,of,nf) = q.front();
+        const head_flit &head = reinterpret_cast<const head_flit &>(f);
         return head.get_length();
     } else {
         return egress_remaining;
@@ -101,10 +130,15 @@ void virtual_queue::set_front_vq_id(const virtual_queue_id &vqid) throw(err) {
     assert(!empty());
     assert(!egress_vq.is_valid());
     assert(vqid.is_valid());
-    flit f(0); node_id n; flow_id nf; tie(f,n,nf) = q.front();
+    flit f(0); node_id n; flow_id of; flow_id nf; tie(f,n,of,nf) = q.front();
     LOG(log,3) << "[queue " << id << "] granted next hop "
-               << make_tuple(n, vqid)
-               << " (flow " << egress_flow << ")" << endl;
+               << make_tuple(n, vqid) << " (flow ";
+    if (egress_flow_new == egress_flow_old) {
+        LOG(log,3) << egress_flow_old;
+    } else {
+        LOG(log,3) << egress_flow_old << "->" << egress_flow_new;
+    }
+    LOG(log,3) << ")" << endl;
     vc_alloc->claim(make_tuple(n, vqid));
     pressures->inc(n, vqid); // increase pressure for a head flit
     egress_vq = vqid;

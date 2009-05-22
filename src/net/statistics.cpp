@@ -231,6 +231,7 @@ ostream &operator<<(ostream &out, statistics &stats) {
          stats.xbar_xmit_stats.begin();
          nsi != stats.xbar_xmit_stats.end(); ++nsi) {
         const running_stats &xmit = stats.xbar_xmit_stats[nsi->first];
+        if (xmit.get_mean() == 0) continue; // no activity, don't report
         const running_stats &dem = stats.xbar_demand_stats[nsi->first];
         const running_stats &bw = stats.xbar_bw_stats[nsi->first];
         out << "    xbar " << nsi->first << ":" << fixed << setprecision(2)
@@ -247,6 +248,7 @@ ostream &operator<<(ostream &out, statistics &stats) {
          csi != stats.cxn_xmit_stats.end(); ++csi) {
         node_id src, dst; tie(src,dst) = csi->first;
         const running_stats &xmit = stats.cxn_xmit_stats[csi->first];
+        if (xmit.get_mean() == 0) continue; // no activity, don't report
         const running_stats &dem = stats.cxn_demand_stats[csi->first];
         const running_stats &bw = stats.cxn_bw_stats[csi->first];
         out << "    link " << src << "->" << dst << ":"

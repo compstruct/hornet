@@ -46,7 +46,7 @@ uint32_t ingress_dma_channel::get_flow_length() const throw(err) {
 }
 
 flow_id ingress_dma_channel::get_flow_id() const throw(err) {
-    return vq->get_egress_flow_id();
+    return vq->get_egress_new_flow_id();
 }
 
 void ingress_dma_channel::tick_positive_edge() throw(err) {
@@ -54,7 +54,7 @@ void ingress_dma_channel::tick_positive_edge() throw(err) {
     for (i = 0; ((bandwidth == 0 || i < bandwidth)
                           && remaining_flits > 0 && vq->egress_ready()); ++i) {
         if (vq->egress_new_flow()) {
-            flow = vq->get_egress_flow_id();
+            flow = vq->get_egress_new_flow_id();
             if (started)
                 throw exc_new_flow_mid_dma(flow.get_numeric_id(),
                                            id.get<0>().get_numeric_id(),

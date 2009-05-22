@@ -77,7 +77,8 @@ public:
     void set_front_vq_id(const virtual_queue_id &vqid) throw(err);
     bool ingress_new_flow() const throw(); // can accept new flit sequence
     bool egress_new_flow() const throw();  // next flit is a head flit
-    flow_id get_egress_flow_id() const throw(err);
+    flow_id get_egress_old_flow_id() const throw(err);
+    flow_id get_egress_new_flow_id() const throw(err);
     uint32_t get_egress_flow_length() const throw(err);
     node_id get_src_node_id() const throw();
     void tick_positive_edge() throw(err);
@@ -85,7 +86,7 @@ public:
 private:
     const virtual_queue_node_id id;
     node_id src_node_id;
-    queue<tuple<flit, node_id, flow_id> > q;
+    queue<tuple<flit, node_id, flow_id, flow_id> > q;
     shared_ptr<router> rt;
     shared_ptr<channel_alloc> vc_alloc;
     shared_ptr<pressure_tracker> pressures;
@@ -94,7 +95,8 @@ private:
     unsigned ingress_remaining;
     flow_id ingress_flow;
     unsigned egress_remaining;
-    flow_id egress_flow; // only valid for non-head flits
+    flow_id egress_flow_old; // only valid for non-head flits
+    flow_id egress_flow_new; // only valid for non-head flits
     virtual_queue_id egress_vq;
     const shared_ptr<common_alloc> alloc;
     size_t stale_size; // resynchronized at negative clock edge

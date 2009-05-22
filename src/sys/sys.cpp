@@ -239,7 +239,8 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
                 }
                 shared_ptr<set_channel_alloc> vca =
                     static_pointer_cast<set_channel_alloc>(n_vcas[cur_n]);
-                vca->add_route(prev_n, next_n, flow_id(next_f), next_qs);
+                vca->add_route(prev_n, flow_id(flow),
+                               next_n, flow_id(next_f), next_qs);
                 if (flow != next_f) stats->register_flow_rename(flow, next_f);
             }
             shared_ptr<set_router> r =

@@ -18,15 +18,15 @@ void set_channel_alloc::add_egress(shared_ptr<egress> egr) throw(err) {
 }
 
 void
-set_channel_alloc::add_route(const node_id &src,
-                             const node_id &dst, const flow_id &f,
+set_channel_alloc::add_route(const node_id &src, const flow_id &f,
+                             const node_id &dst, const flow_id &nf,
                              const vector<tuple<virtual_queue_id,double> > &qis)
     throw(err) {
     if (egresses.find(dst) == egresses.end())
         throw err_bad_next_hop(get_id().get_numeric_id(), f.get_numeric_id(),
                                dst.get_numeric_id());
     const ingress::queues_t &eqs = egresses[dst]->get_remote_queues();
-    route_query_t rq = route_query_t(src,f,dst);
+    route_query_t rq = route_query_t(src,f,dst,nf);
     assert(routes.find(rq) == routes.end());
     if (!qis.empty()) { // add only specified queues with given propensities
         for (vector<tuple<virtual_queue_id,double> >::const_iterator idi =
@@ -81,8 +81,8 @@ void set_channel_alloc::allocate() throw(err) {
     for (qs_t::iterator qi = in_qs.begin(); qi != in_qs.end(); ++qi) {
         shared_ptr<virtual_queue> &iq = *qi;
         assert(!iq->empty());
-        route_query_t rq(iq->get_src_node_id(), iq->get_egress_flow_id(),
-                         iq->front_node_id());
+        route_query_t rq(iq->get_src_node_id(), iq->get_egress_old_flow_id(),
+                         iq->front_node_id(), iq->get_egress_new_flow_id());
         assert(routes.find(rq) != routes.end());
         const route_queues_t &route_qs = routes[rq];
         route_queues_t free_qs;
