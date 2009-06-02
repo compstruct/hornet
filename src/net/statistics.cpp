@@ -7,23 +7,77 @@
 #include <iomanip>
 #include "statistics.hpp"
 
-running_stats::running_stats() throw() : mean(0),var_numer(0),weight_sum(0) { }
+running_stats::running_stats() throw()
+    : minimum(-log(0)), maximum(log(0)),
+      mean(0), var_numer(0), weight_sum(0) { }
 
 void running_stats::add(double sample, double weight) throw() {
     if (!isnan(sample) && !isnan(weight)) { // NaN -> invalid sample
-        double s = weight_sum + weight;
-        double q = sample - mean;
-        double r = q * weight / s;
-        mean += r;
-        var_numer += r * weight_sum * q;
-        weight_sum = s;
+        if (sample < minimum) minimum = sample;
+        if (sample > maximum) maximum = sample;
+        if (weight > 0) {
+            double s = weight_sum + weight;
+            double q = sample - mean;
+            double r = q * weight / s;
+            mean += r;
+            var_numer += r * weight_sum * q;
+            weight_sum = s;
+        }
     }
 }
+
+double running_stats::get_min() const throw() { return minimum; }
+
+double running_stats::get_max() const throw() { return maximum; }
 
 double running_stats::get_mean() const throw() { return mean; }
 
 double running_stats::get_std_dev() const throw() {
     return weight_sum == 0 ? 0 : sqrt(var_numer/weight_sum);
+}
+
+reorder_buffer::reorder_buffer() throw()
+    : sent_packets(), buffered_packets(), buffer_length(0),
+      received_count(0), out_of_order_count(0) { }
+
+void reorder_buffer::send_packet(const head_flit &flt) throw() {
+    sent_packets.push(flt.get_uid());
+}
+
+void reorder_buffer::receive_packet(const head_flit &flt) throw() {
+    if (sent_packets.empty() || (flt.get_uid() < sent_packets.front()))
+        return; // packet sent before statistics collection started
+    assert((buffer_length == 0) == (buffered_packets.empty()));
+    assert(buffered_packets.find(flt.get_uid()) == buffered_packets.end());
+    ++received_count;
+    if (flt.get_uid() != sent_packets.front()) { // out-of-order arrival
+        buffered_packets[flt.get_uid()] = flt.get_length();
+        buffer_length += flt.get_length();
+        ++out_of_order_count;
+    } else { // in-order arrival
+        sent_packets.pop();
+        while (!sent_packets.empty()
+               && (buffered_packets.find(sent_packets.front())
+                   != buffered_packets.end())) { // next packet already buffered
+            assert(buffer_length >= buffered_packets[sent_packets.front()]);
+            buffer_length -= buffered_packets[sent_packets.front()];
+            buffered_packets.erase(sent_packets.front());
+            assert((buffer_length == 0) == (buffered_packets.empty()));
+            sent_packets.pop();
+        }
+    }
+}
+
+uint32_t reorder_buffer::get_buffer_length() const throw() {
+    return buffer_length;
+}
+
+uint32_t reorder_buffer::get_received_count() const throw() {
+    return received_count;
+}
+
+uint32_t reorder_buffer::get_out_of_order_count() const throw() {
+    return out_of_order_count;
 }
 
 statistics::statistics(const uint64_t &sys_time, const uint64_t &start) throw()
@@ -33,7 +87,7 @@ statistics::statistics(const uint64_t &sys_time, const uint64_t &start) throw()
       sent_flits(), total_sent_flits(0),
       received_flits(), total_received_flits(0),
       flit_departures(), flow_lat_stats(), total_lat_stats(),
-      link_switches() { }
+      link_switches(), reorder_buffers(), flow_reorder_stats() { }
 
 void statistics::start_sim() throw() {
     sim_start_time = microsec_clock::local_time();
@@ -42,6 +96,14 @@ void statistics::start_sim() throw() {
 
 void statistics::end_sim() throw() {
     sim_end_time = microsec_clock::local_time();
+    for (flow_stats_t::iterator fsi = flow_reorder_stats.begin();
+         fsi != flow_reorder_stats.end(); ++fsi) {
+        const flow_id &fid = fsi->first;
+        assert(reorder_buffers.find(fid) != reorder_buffers.end());
+        assert(last_received_times.find(fid) != last_received_times.end());
+        fsi->second.add(reorder_buffers[fsi->first].get_buffer_length(),
+                        system_time - last_received_times[fid]);
+    }
 }
 
 flow_id statistics::get_original_flow(flow_id f) const throw() {
@@ -82,6 +144,25 @@ void statistics::receive_flit(const flow_id &org_fid, const flit &flt) throw() {
             flow_lat_stats[fid].add(flight_time, 1);
             flit_departures.erase(flt.get_uid());
         }
+    }
+}
+
+void statistics::send_packet(const flow_id &fid, const head_flit &flt)
+    throw() {
+    if (system_time >= start_time) {
+        reorder_buffers[fid].send_packet(flt);
+    }
+}
+
+void statistics::receive_packet(const flow_id &fid, const head_flit &flt)
+    throw() {
+    if (system_time >= start_time) {
+        if (last_received_times.find(fid) == last_received_times.end())
+            last_received_times[fid] = start_time;
+        flow_reorder_stats[fid].add(reorder_buffers[fid].get_buffer_length(),
+                                    system_time - last_received_times[fid]);
+        reorder_buffers[fid].receive_packet(flt);
+        last_received_times[fid] = system_time;
     }
 }
 
@@ -258,6 +339,33 @@ ostream &operator<<(ostream &out, statistics &stats) {
             << 100 * dem.get_std_dev() << "%"
             << " bw " << 100 * bw.get_mean() << "% +/- "
             << 100 * bw.get_std_dev() << "%" << endl;
+    }
+    bool have_out_of_order = false;
+    out << endl;
+    out << "out-of-order packet counts and reorder buffer sizes "
+        << "(in # flits):" << endl;
+    for (statistics::flow_stats_t::iterator fsi =
+             stats.flow_reorder_stats.begin();
+         fsi != stats.flow_reorder_stats.end(); ++fsi) {
+        const flow_id &fid = fsi->first;
+        assert(stats.reorder_buffers.find(fid) != stats.reorder_buffers.end());
+        const reorder_buffer &rob = stats.reorder_buffers[fid];
+        if (rob.get_out_of_order_count() > 0) {
+            have_out_of_order = true;
+            const running_stats &rs = fsi->second;
+            double frac = (static_cast<double>(rob.get_out_of_order_count()) /
+                           static_cast<double>(rob.get_received_count()));
+            out << "    flow " << fid << ": "
+                << dec << setprecision(0) << rob.get_out_of_order_count()
+                << " of " << rob.get_received_count() << " packet"
+                << (rob.get_received_count() == 1 ? "" : "s")
+                << " (" << (frac * 100) << "%)" << "; buffer max. "
+                << rs.get_max() << setprecision(2) << ", mean "
+                << rs.get_mean() << " +/- " << rs.get_std_dev() << endl;
+        }
+    }
+    if (!have_out_of_order) {
+        out << "    all packets arrived in correct order" << endl;
     }
     return out;
 }

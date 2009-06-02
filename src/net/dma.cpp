@@ -55,10 +55,14 @@ void ingress_dma_channel::tick_positive_edge() throw(err) {
                           && remaining_flits > 0 && vq->egress_ready()); ++i) {
         if (vq->egress_new_flow()) {
             flow = vq->get_egress_new_flow_id();
-            if (started)
+            if (started) {
                 throw exc_new_flow_mid_dma(flow.get_numeric_id(),
                                            id.get<0>().get_numeric_id(),
                                            id.get<1>().get_numeric_id());
+            }
+            const flit f = vq->front();
+            const head_flit &h = reinterpret_cast<const head_flit &>(f);
+            stats->receive_packet(flow, h);
         } else {
             if (mem) *((uint64_t *) mem) = endian(vq->front().get_data());
             mem = mem ? (uint8_t *) mem + sizeof(uint64_t) : mem;
@@ -106,6 +110,7 @@ void egress_dma_channel::tick_positive_edge() throw(err) {
         if (!started) {
             head_flit f(flow, remaining_flits);
             vq->push(f);
+            stats->send_packet(flow, f);
             stats->send_flit(flow, f);
         } else {
             --remaining_flits;

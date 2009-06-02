@@ -11,18 +11,20 @@
 
 using namespace std;
 
+typedef uint64_t flit_id;
+
 class flit {
 public:
     flit(uint64_t data) throw();
     flit(const flit &flit) throw();
     flit &operator=(const flit &flit) throw();
     const uint64_t &get_data() const throw();
-    const uint64_t &get_uid() const throw();
+    const flit_id &get_uid() const throw();
 protected:
     uint64_t data;
-    uint64_t uid;
+    flit_id uid;
 protected:
-    static uint64_t next_uid;
+    static flit_id next_uid;
 };
 
 inline flit::flit(uint64_t new_data) throw() : data(new_data), uid(next_uid++) {

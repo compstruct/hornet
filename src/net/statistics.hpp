@@ -4,9 +4,10 @@
 #ifndef __STATISTICS_HPP__
 #define __STATISTICS_HPP__
 
-#include <map>
-#include <map>
 #include <iostream>
+#include <set>
+#include <map>
+#include <queue>
 #include <boost/tuple/tuple.hpp>
 #include <boost/tuple/tuple_comparison.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
@@ -24,12 +25,32 @@ class running_stats {
 public:
     explicit running_stats() throw();
     void add(double sample, double weight) throw();
+    double get_min() const throw();
+    double get_max() const throw();
     double get_mean() const throw();
     double get_std_dev() const throw();
 private:
+    double minimum;
+    double maximum;
     double mean;
     double var_numer;
     double weight_sum;
+};
+
+class reorder_buffer {
+public:
+    explicit reorder_buffer() throw();
+    void send_packet(const head_flit &flt) throw();
+    void receive_packet(const head_flit &flt) throw();
+    uint32_t get_buffer_length() const throw();
+    uint32_t get_received_count() const throw();
+    uint32_t get_out_of_order_count() const throw();
+private:
+    queue<flit_id> sent_packets; // head flit UIDs
+    map<flit_id, unsigned> buffered_packets; // with length
+    uint32_t buffer_length;
+    uint32_t received_count;
+    uint32_t out_of_order_count;
 };
 
 class statistics {
@@ -39,6 +60,8 @@ public:
     void end_sim() throw();
     void send_flit(const flow_id &, const flit &) throw();
     void receive_flit(const flow_id &, const flit &) throw();
+    void send_packet(const flow_id &fid, const head_flit &flt) throw();
+    void receive_packet(const flow_id &fid, const head_flit &flt) throw();
     void register_links(const egress_id &src, const egress_id &dst,
                         unsigned num_links) throw();
     void register_flow_rename(const flow_id &from,
@@ -79,8 +102,10 @@ private:
     cxn_stats_t cxn_xmit_stats;
     cxn_stats_t cxn_demand_stats;
     cxn_stats_t cxn_bw_stats;
-
     link_switch_counter_t link_switches;
+    map<flow_id, reorder_buffer> reorder_buffers;
+    map<flow_id, uint64_t> last_received_times;
+    flow_stats_t flow_reorder_stats;
 };
 
 ostream &operator<<(ostream &, const statistics &);
