@@ -5,10 +5,11 @@ AR=@MIPSAR@
 RANLIB=@MIPSRANLIB@
 CFLAGS=-Wall -Werror -std=c99 -fno-PIC -march=mips32r2 -mno-mips16 -static -mno-shared -mno-abicalls -nostdlib
 LDFLAGS=-nostdlib -static -fno-PIC
-
 rtsdir=$(libdir)/rts
 rtsincludedir=$(rtsdir)/include
 rtslibdir=$(rtsdir)/lib
+
+if BUILD_MIPS_RTS
 
 bin_SCRIPTS = dar-rts-config
 rtslib_LIBRARIES = librts.a
@@ -27,4 +28,6 @@ cfg_subst = sed -e 's,[@]VERSION[@],$(PACKAGE_VERSION),g' \
 
 dar-rts-config: dar-rts-config.in Makefile
 	$(cfg_subst) < $(srcdir)/dar-rts-config.in > dar-rts-config
+
+endif
 

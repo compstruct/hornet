@@ -16,11 +16,28 @@ AX_BOOST_DATE_TIME
 AX_BOOST_PROGRAM_OPTIONS
 AC_CHECK_LIB([m],[ceil])
 AM_PATH_PYTHON([2.5])
-FANCY_PATH_PROG([MIPSLD], [MIPS linker], [mips-linux-gnu-ld], [mips-ld])
-FANCY_PATH_PROG([MIPSAS], [MIPS assembler], [mips-linux-gnu-as], [mips-as])
-FANCY_PATH_PROG([MIPSCC], [MIPS C compiler], [mips-linux-gnu-gcc], [mips-cc])
-FANCY_PATH_PROG([MIPSAR], [MIPS ar], [mips-linux-gnu-ar], [mips-ar])
-FANCY_PATH_PROG([MIPSRANLIB], [MIPS ranlib], [mips-linux-gnu-ranlib], [mips-ranlib])
+AC_ARG_ENABLE([mips-rts],
+              AC_HELP_STRING([--enable-mips-rts],
+                             [build MIPS runtime system [[default=no]]]),
+              [case "${enableval}" in
+               yes) build_mips_rts=true ;;
+               on) build_mips_rts=true ;;
+               true) build_mips_rts=true ;;
+               no) build_mips_rts=false ;;
+               false) build_mips_rts=false ;;
+               off) build_mips_rts=false ;;
+               *) AC_MSG_ERROR([bad arg to --enable-mips-rts: ${enableval}]) ;;
+               esac], [build_mips_rts=false])
+AM_CONDITIONAL([BUILD_MIPS_RTS], [test x$build_mips_rts = xtrue])
+if test x$build_mips_rts = xtrue; then
+    FANCY_PATH_PROG([MIPSLD], [MIPS linker], [mips-linux-gnu-ld], [mips-ld])
+    FANCY_PATH_PROG([MIPSAS], [MIPS assembler], [mips-linux-gnu-as], [mips-as])
+    FANCY_PATH_PROG([MIPSCC], [MIPS C compiler],
+                    [mips-linux-gnu-gcc], [mips-cc])
+    FANCY_PATH_PROG([MIPSAR], [MIPS ar], [mips-linux-gnu-ar], [mips-ar])
+    FANCY_PATH_PROG([MIPSRANLIB], [MIPS ranlib],
+                    [mips-linux-gnu-ranlib], [mips-ranlib])
+fi
 AC_OUTPUT(\
     Makefile \
     src/Makefile \
