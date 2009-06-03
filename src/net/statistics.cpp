@@ -84,6 +84,8 @@ statistics::statistics(const uint64_t &sys_time, const uint64_t &start) throw()
     : system_time(sys_time), start_time(start),
       sim_start_time(microsec_clock::local_time()),
       sim_end_time(sim_start_time), original_flows(),
+      have_first_flit_id(false), first_flit_id(-1),
+      offered_flits(), total_offered_flits(0),
       sent_flits(), total_sent_flits(0),
       received_flits(), total_received_flits(0),
       flit_departures(), flow_lat_stats(), total_lat_stats(),
@@ -116,6 +118,10 @@ flow_id statistics::get_original_flow(flow_id f) const throw() {
 void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
     assert(get_original_flow(fid) == fid);
     if (system_time >= start_time) {
+        if (!have_first_flit_id) {
+            first_flit_id = flt.get_uid();
+            have_first_flit_id = true;
+        }
         total_sent_flits++;
         flit_counter_t::iterator i = sent_flits.find(fid);
         if (i == sent_flits.end()) {
@@ -130,10 +136,10 @@ void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
 
 void statistics::receive_flit(const flow_id &org_fid, const flit &flt) throw() {
     flow_id fid = get_original_flow(org_fid);
-    if (system_time >= start_time) {
+    if (have_first_flit_id && flt.get_uid() >= first_flit_id) {
         flit_timestamp_t::iterator di = flit_departures.find(flt.get_uid());
         if (di != flit_departures.end()) {
-            float flight_time = system_time - di->second;
+            double flight_time = system_time - di->second;
             total_received_flits++;
             total_lat_stats.add(flight_time, 1);
             if (received_flits.find(fid) == received_flits.end()) {
@@ -143,6 +149,18 @@ void statistics::receive_flit(const flow_id &org_fid, const flit &flt) throw() {
             }
             flow_lat_stats[fid].add(flight_time, 1);
             flit_departures.erase(flt.get_uid());
+        }
+    }
+}
+
+void statistics::offer_flits(const flow_id &fid, const uint32_t num) throw() {
+    if (system_time >= start_time) {
+        total_offered_flits += num;
+        flit_counter_t::iterator i = offered_flits.find(fid);
+        if (i == offered_flits.end()) {
+            offered_flits[fid] = num;
+        } else {
+            offered_flits[fid] += num;
         }
     }
 }
@@ -251,8 +269,14 @@ ostream &operator<<(ostream &out, statistics &stats) {
     for (set<flow_id>::const_iterator i = flow_ids.begin();
          i != flow_ids.end(); ++i) {
         const flow_id &f = *i;
-        uint64_t sent, received;
+        uint64_t offered, sent, received;
         flit_counter_t::const_iterator fci;
+        if ((fci = stats.offered_flits.find(f))
+            != stats.offered_flits.end()) {
+            offered = fci->second;
+        } else {
+            offered = 0;
+        }
         if ((fci = stats.sent_flits.find(f))
             != stats.sent_flits.end()) {
             sent = fci->second;
@@ -266,16 +290,16 @@ ostream &operator<<(ostream &out, statistics &stats) {
             received = 0;
         }
         assert(sent >= received);
-        out << "    flow " << f << ": " << dec << sent
-            << " sent and " << dec << received
-            << " received (" << dec << sent - received
-            << " in flight)" << endl;
+        out << "    flow " << f << ": offered " << dec
+            << offered << ", sent " << sent << ", received "
+            << received << " (" << sent - received << " in flight)"
+            << endl;
     }
     assert(stats.total_sent_flits >= stats.total_received_flits);
-    out << "    all flows: " << dec << stats.total_sent_flits
-        << " sent and " << dec << stats.total_received_flits
-        << " received (" << dec
-        << stats.total_sent_flits - stats.total_received_flits
+    out << "    all flows: offered " << dec << stats.total_offered_flits
+        << ", sent " << stats.total_sent_flits
+        << ", received " << stats.total_received_flits
+        << " (" << stats.total_sent_flits - stats.total_received_flits
         << " in flight)" << endl << endl;
     out << "flit latencies (mean +/- s.d., in # cycles):" << endl;
     for (set<flow_id>::const_iterator i = flow_ids.begin();

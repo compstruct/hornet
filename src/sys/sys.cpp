@@ -121,7 +121,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
             break;
         }
         case PE_INJECTOR: {
-            shared_ptr<injector> inj(new injector(id, time, log));
+            shared_ptr<injector> inj(new injector(id, time, stats, log));
             p = inj;
             (*injectors)[id] = inj;
             break;

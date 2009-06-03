@@ -9,9 +9,10 @@
 #include "random.hpp"
 #include "injector.hpp"
 
-injector::injector(const pe_id &id, uint64_t &t, logger &l) throw(err)
+injector::injector(const pe_id &id, uint64_t &t, shared_ptr<statistics> st,
+                   logger &l) throw(err)
     : pe(id), system_time(t), net(), events(), next_event(events.begin()),
-      flows(), flow_ids(), queue_ids(), log(l) { }
+      flows(), flow_ids(), queue_ids(), stats(st), log(l) { }
 
 injector::~injector() throw() { }
 
@@ -63,12 +64,13 @@ void injector::tick_positive_edge() throw(err) {
          fi != flow_ids.end(); ++fi) {
         tick_t t; len_t l; period_t p;
         tie(t, l, p) = flows[*fi];
-        if (l != 0 && t == system_time) {
+        if (l != 0 && t <= system_time) {
+            if (t + p == system_time) t += p; // forget unsent packet
+            if (t == system_time) stats->offer_flits(*fi, l);
             if (net->send(fi->get_numeric_id(), NULL, l-1)) {
-                flows[*fi].get<0>() += p; // try again in p tics
-            } else {
-                flows[*fi].get<0>()++; // try again in the next cycle
+                t += p; // schedule next packet for p ticks
             }
+            flows[*fi].get<0>() = t;
         }
     }
 }

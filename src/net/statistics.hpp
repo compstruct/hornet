@@ -60,6 +60,7 @@ public:
     void end_sim() throw();
     void send_flit(const flow_id &, const flit &) throw();
     void receive_flit(const flow_id &, const flit &) throw();
+    void offer_flits(const flow_id &fid, const uint32_t num_flits) throw();
     void send_packet(const flow_id &fid, const head_flit &flt) throw();
     void receive_packet(const flow_id &fid, const head_flit &flt) throw();
     void register_links(const egress_id &src, const egress_id &dst,
@@ -89,6 +90,10 @@ private:
     typedef tuple<node_id, node_id> cxn_id;
     typedef map<cxn_id, running_stats> cxn_stats_t;
     flow_renames_t original_flows;
+    bool have_first_flit_id;
+    flit_id first_flit_id; // first flit sent after stats start
+    flit_counter_t offered_flits;
+    uint64_t total_offered_flits;
     flit_counter_t sent_flits;
     uint64_t total_sent_flits;
     flit_counter_t received_flits;

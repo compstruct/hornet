@@ -11,6 +11,7 @@
 #include "cstdint.hpp"
 #include "flow_id.hpp"
 #include "logger.hpp"
+#include "statistics.hpp"
 #include "pe.hpp"
 
 using namespace std;
@@ -18,7 +19,8 @@ using namespace boost;
 
 class injector : public pe {
 public:
-    injector(const pe_id &id, uint64_t &system_time, logger &log) throw(err);
+    injector(const pe_id &id, uint64_t &system_time,
+             shared_ptr<statistics> stats, logger &log) throw(err);
     virtual ~injector() throw();
     virtual void connect(shared_ptr<bridge> net_bridge) throw(err);
     void add_event(const uint64_t &time, const flow_id &flow,
@@ -39,6 +41,7 @@ private:
     flows_t flows;
     vector<flow_id> flow_ids;
     vector<uint32_t> queue_ids;
+    shared_ptr<statistics> stats;
     logger &log;
 };
 
