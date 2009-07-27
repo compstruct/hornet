@@ -20,7 +20,7 @@ virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
       q(), rt(new_rt), vc_alloc(new_vc_alloc), pressures(new_pt),
       ingress_remaining(0), ingress_flow(0),
       egress_remaining(0), egress_flow_old(0), egress_flow_new(0), egress_vq(),
-      alloc(new_alloc), stale_size(0), log(l) { }
+      alloc(new_alloc), old_flows(), stale_size(0), log(l) { }
 
 void virtual_queue::push(const flit &f) throw(err) {
     assert(!full());
@@ -30,6 +30,9 @@ void virtual_queue::push(const flit &f) throw(err) {
         const head_flit &head = reinterpret_cast<const head_flit &>(f);
         ingress_flow = head.get_flow_id();
         ingress_remaining = head.get_length();
+        map<flow_id, unsigned>::const_iterator i = old_flows.find(ingress_flow);
+        if (i == old_flows.end()) old_flows[ingress_flow] = 0;
+        ++old_flows[ingress_flow];
         tie(next_node, next_flow) = rt->route(src_node_id, ingress_flow);
         if (q.empty()) {
             egress_flow_old = ingress_flow;
@@ -41,11 +44,14 @@ void virtual_queue::push(const flit &f) throw(err) {
             new_flit = head_flit(next_flow, head.get_length());
             LOG(log,3) << " -> " << next_flow;
         }
-        LOG(log,3) << ")" << endl;
+        LOG(log,3) << ", #" << hex << setfill('0') << setw(8)
+                   << new_flit.get_uid() << ")" << endl;
     } else {
         --ingress_remaining;
         LOG(log,3) << "[queue " << id << "] ingress: " << f
-            << " (flow " << ingress_flow << ")" << endl;
+                   << " (flow " << ingress_flow << ", #"
+                   << hex << setfill('0') << setw(8)
+                   << new_flit.get_uid() << ")" << endl;
     }
     if (egress_vq.is_valid() && q.empty()) { // continuing flit gets to vq head
         pressures->inc(next_node, egress_vq);
@@ -68,7 +74,8 @@ void virtual_queue::pop() throw(err) {
         } else {
             LOG(log,3) << egress_flow_old << "->" << egress_flow_new;
         }
-        LOG(log,3) << ")" << endl;
+        LOG(log,3) << ", #" << hex << setfill('0') << setw(8)
+                   << f.get_uid() << ")" << endl;
     } else {
         --egress_remaining;
         LOG(log,3) << "[queue " << id << "] egress:  " << f
@@ -78,11 +85,14 @@ void virtual_queue::pop() throw(err) {
         } else {
             LOG(log,3) << egress_flow_old << "->" << egress_flow_new;
         }
-        LOG(log,3) << ")" << endl;
+        LOG(log,3) << ", #" << hex << setfill('0') << setw(8)
+                   << f.get_uid() << ")" << endl;
     }
     q.pop();
     if (egress_remaining == 0) {
         vc_alloc->release(make_tuple(n, egress_vq));
+        assert(old_flows.find(egress_flow_old) != old_flows.end());
+        --old_flows[egress_flow_old];
         egress_vq = virtual_queue_id(); // invalid vqid
     }
     // decrease pressure if next flit is new flow, or VC is empty
@@ -142,4 +152,9 @@ void virtual_queue::set_front_vq_id(const virtual_queue_id &vqid) throw(err) {
     vc_alloc->claim(make_tuple(n, vqid));
     pressures->inc(n, vqid); // increase pressure for a head flit
     egress_vq = vqid;
+}
+
+bool virtual_queue::has_old_flow(const flow_id &flow) const throw(err) {
+    map<flow_id, unsigned>::const_iterator i = old_flows.find(flow);
+    return ((i != old_flows.end()) && (i->second > 0));
 }

@@ -26,9 +26,12 @@ public:
     virtual void add_egress(shared_ptr<egress> egress) throw(err) = 0;
     const node_id &get_id() const throw();
 protected:
-    channel_alloc(node_id src, logger &log) throw();
+    channel_alloc(node_id src, bool one_queue_per_flow, bool one_flow_per_queue,
+                  logger &log) throw();
 protected:
     const node_id id;
+    bool one_queue_per_flow;
+    bool one_flow_per_queue;
     typedef vector<shared_ptr<ingress> > ingresses_t;
     ingresses_t ingresses;
 private:

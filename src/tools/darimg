@@ -8,7 +8,7 @@ import sys, os, optparse, re, subprocess, struct, ConfigParser
 
 objdump = 'objdump'
 file_magic = 'DAR '
-file_version = 200905160
+file_version = 200907220
 
 class Err(Exception):
     pass
@@ -145,11 +145,13 @@ def write_header(out, verbose=False):
     out.write(w2bs(file_version))
 
 def write_pe(out, id, img, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_size,
-             n2b_queues, b2n_queues, verbose=False):
+             n2b_queues, b2n_queues, one_q_per_f, one_f_per_q, verbose=False):
     if verbose:
         print 'writing PE %d' % id
-    out.write(w2bs(id))
     # node
+    out.write(w2bs(id))
+    out.write(w2bs(1 if one_q_per_f else 0))
+    out.write(w2bs(1 if one_f_per_q else 0))
     out.write(w2bs(qmem_size))
     # bridge
     out.write(w2bs(n2b_bw))
@@ -425,6 +427,14 @@ def new_system_config(cfg, verbose=False):
             arb_min_bw = 0
             arb_period = 1
             arb_delay = 0
+        if cfg.has_option('routing', 'one queue per flow'):
+            one_q_per_f = cfg.getboolean('routing', 'one queue per flow')
+        else:
+            one_q_per_f = False
+        if cfg.has_option('routing', 'one flow per queue'):
+            one_f_per_q = cfg.getboolean('routing', 'one flow per queue')
+        else:
+            one_f_per_q = False
         node_routing = cfg.get('routing', 'node')
         if node_routing not in ['table', 'weighted']:
             raise Error('bad node routing type: %s' % node_routing)
@@ -450,6 +460,8 @@ def new_system_config(cfg, verbose=False):
         if get_bw('net')[1] is not None:
             raise Err('from-net bandwidth cannot have crossbar input limit')
         nodes = [{ 'id': id,
+                   'one_q_per_f': one_q_per_f,
+                   'one_f_per_q': one_f_per_q,
                    'img': get_code(progs, id),
                    'n2b_bw': get_bw('cpu')[0],
                    'b2n_bw': get_bw('net')[0],

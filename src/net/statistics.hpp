@@ -16,6 +16,7 @@
 #include "flow_id.hpp"
 #include "flit.hpp"
 #include "egress_id.hpp"
+#include "logger.hpp"
 
 using namespace std;
 using namespace boost;
@@ -55,7 +56,8 @@ private:
 
 class statistics {
 public:
-    statistics(const uint64_t &system_time, const uint64_t &start_time) throw();
+    statistics(const uint64_t &system_time, const uint64_t &start_time,
+               logger &log) throw();
     void start_sim() throw();
     void end_sim() throw();
     void send_flit(const flow_id &, const flit &) throw();
@@ -111,6 +113,7 @@ private:
     map<flow_id, reorder_buffer> reorder_buffers;
     map<flow_id, uint64_t> last_received_times;
     flow_stats_t flow_reorder_stats;
+    logger &log;
 };
 
 ostream &operator<<(ostream &, const statistics &);

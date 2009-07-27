@@ -54,7 +54,6 @@ inline unsigned common_alloc::free_slots() const throw() { return size; }
 
 class channel_alloc;
 
-// virtual queues support one flow at a time
 class virtual_queue {
 public:
     explicit virtual_queue(node_id parent_id, virtual_queue_id queue_id,
@@ -80,6 +79,7 @@ public:
     flow_id get_egress_old_flow_id() const throw(err);
     flow_id get_egress_new_flow_id() const throw(err);
     uint32_t get_egress_flow_length() const throw(err);
+    bool has_old_flow(const flow_id &flow) const throw(err);
     node_id get_src_node_id() const throw();
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
@@ -99,6 +99,7 @@ private:
     flow_id egress_flow_new; // only valid for non-head flits
     virtual_queue_id egress_vq;
     const shared_ptr<common_alloc> alloc;
+    map<flow_id, unsigned> old_flows; // count of packets for a given flow
     size_t stale_size; // resynchronized at negative clock edge
     logger &log;
 };

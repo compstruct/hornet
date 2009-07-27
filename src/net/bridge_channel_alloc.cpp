@@ -3,8 +3,10 @@
 
 #include "bridge_channel_alloc.hpp"
 
-bridge_channel_alloc::bridge_channel_alloc(node_id new_id, logger &l)
-    throw() : id(new_id), in_use(), log(l) { }
+bridge_channel_alloc::bridge_channel_alloc(node_id new_id, bool one_q_per_f,
+                                           bool one_f_per_q, logger &l)
+    throw() : id(new_id), one_queue_per_flow(one_q_per_f),
+              one_flow_per_queue(one_f_per_q), in_use(), log(l) { }
 
 bridge_channel_alloc::~bridge_channel_alloc() throw() { }
 

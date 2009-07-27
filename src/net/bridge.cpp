@@ -28,14 +28,16 @@ tuple<node_id,flow_id> bogus_router::route(node_id n, flow_id f) throw(err) {
 
 class bogus_channel_alloc : public channel_alloc {
 public:
-    bogus_channel_alloc(node_id id, logger &log) throw();
+    bogus_channel_alloc(node_id id, bool one_q_per_f, bool one_f_per_q,
+                        logger &log) throw();
     virtual ~bogus_channel_alloc() throw();
     virtual void add_egress(shared_ptr<egress> egress) throw(err);
     virtual void allocate() throw(err);
 };
 
-bogus_channel_alloc::bogus_channel_alloc(node_id i, logger &l) throw()
-    : channel_alloc(i, l) { }
+bogus_channel_alloc::bogus_channel_alloc(node_id i, bool one_q_per_f,
+                                         bool one_f_per_q, logger &l) throw()
+    : channel_alloc(i, one_q_per_f, one_f_per_q, l) { }
 
 bogus_channel_alloc::~bogus_channel_alloc() throw() { }
 
@@ -52,7 +54,8 @@ bridge::bridge(shared_ptr<node> n,
                const set<virtual_queue_id> &n2b_vq_ids, unsigned n2b_bw,
                const set<virtual_queue_id> &b2n_vq_ids, unsigned b2n_bw,
                unsigned flits_per_queue, unsigned b2n_bw_to_xbar,
-               shared_ptr<statistics> st, logger &l) throw(err)
+               bool one_q_per_f, bool one_f_per_q, shared_ptr<statistics> st,
+               logger &l) throw(err)
     : id(n->get_id()), target(n), vc_alloc(bridge_vca), incoming(), outgoing(),
       ingress_dmas(), egress_dmas(), vqids(), stats(st), log(l) {
     unsigned dma_no = 1;
@@ -87,7 +90,8 @@ bridge::bridge(shared_ptr<node> n,
 
     // node -> bridge
     shared_ptr<router> br_rt(new bogus_router(id, log));
-    shared_ptr<channel_alloc> br_vca(new bogus_channel_alloc(id, log));
+    shared_ptr<channel_alloc> br_vca(new bogus_channel_alloc(id, one_q_per_f,
+                                                             one_f_per_q, log));
     copy(n2b_vq_ids.begin(), n2b_vq_ids.end(),
          back_insert_iterator<vector<virtual_queue_id> >(vqids));
     ingress_id bridge_ingress_id(n->get_id(), "X");

@@ -7,8 +7,21 @@
 #include "set_channel_alloc.hpp"
 #include "random.hpp"
 
-set_channel_alloc::set_channel_alloc(node_id n, logger &l) throw()
-    : channel_alloc(n, l), egresses() { }
+set_channel_alloc::set_channel_alloc(node_id n, bool one_q_per_f,
+                                     bool one_f_per_q, logger &l) throw()
+    : channel_alloc(n, one_q_per_f, one_f_per_q, l), egresses() {
+    if (one_q_per_f || one_f_per_q) {
+        LOG(log,3) << "node " << get_id() << " set channel alloc: ";
+        if (one_q_per_f && !one_f_per_q) {
+            LOG(log,3) << "one queue per flow";
+        } else if (!one_q_per_f && one_f_per_q) {
+            LOG(log,3) << "one flow per queue";
+        } else {
+            LOG(log,3) << "one queue per flow, one flow per queue";
+        }
+        LOG(log,3) << endl;
+    }
+}
 
 set_channel_alloc::~set_channel_alloc() throw() { }
 
@@ -90,7 +103,26 @@ void set_channel_alloc::allocate() throw(err) {
         for (route_queues_t::const_iterator rqi = route_qs.begin();
              rqi != route_qs.end(); ++rqi) {
             shared_ptr<virtual_queue> rq; double prop; tie(rq,prop) = *rqi;
-            if (!is_claimed(rq->get_id()) && rq->ingress_new_flow()) {
+            if (rq->empty()) {
+                if (!is_claimed(rq->get_id()) && rq->ingress_new_flow()) {
+                    prop_sum += prop;
+                    free_qs.push_back(make_tuple(rq, prop_sum));
+                }
+            } else if (one_queue_per_flow
+                       && rq->has_old_flow(iq->get_egress_new_flow_id())) {
+                // VC has current flow; permit only this VC
+                prop_sum = 1.0;
+                free_qs.clear();
+                if (!is_claimed(rq->get_id()) && rq->ingress_new_flow()) {
+                    prop_sum += prop;
+                    free_qs.push_back(make_tuple(rq, prop_sum));
+                }
+                break;
+            } else if (one_flow_per_queue
+                       && !rq->has_old_flow(iq->get_egress_new_flow_id())) {
+                // VC has another flow so cannot have ours
+                continue;
+            } else if (!is_claimed(rq->get_id()) && rq->ingress_new_flow()) {
                 prop_sum += prop;
                 free_qs.push_back(make_tuple(rq, prop_sum));
             }

@@ -80,7 +80,8 @@ uint32_t reorder_buffer::get_out_of_order_count() const throw() {
     return out_of_order_count;
 }
 
-statistics::statistics(const uint64_t &sys_time, const uint64_t &start) throw()
+statistics::statistics(const uint64_t &sys_time, const uint64_t &start,
+                       logger &l) throw()
     : system_time(sys_time), start_time(start),
       sim_start_time(microsec_clock::local_time()),
       sim_end_time(sim_start_time), original_flows(),
@@ -89,7 +90,7 @@ statistics::statistics(const uint64_t &sys_time, const uint64_t &start) throw()
       sent_flits(), total_sent_flits(0),
       received_flits(), total_received_flits(0),
       flit_departures(), flow_lat_stats(), total_lat_stats(),
-      link_switches(), reorder_buffers(), flow_reorder_stats() { }
+      link_switches(), reorder_buffers(), flow_reorder_stats(), log(l) { }
 
 void statistics::start_sim() throw() {
     sim_start_time = microsec_clock::local_time();
@@ -296,7 +297,8 @@ ostream &operator<<(ostream &out, statistics &stats) {
             << endl;
     }
     assert(stats.total_sent_flits >= stats.total_received_flits);
-    out << "    all flows: offered " << dec << stats.total_offered_flits
+    out << "    all flows counts: "
+        << "offered " << dec << stats.total_offered_flits
         << ", sent " << stats.total_sent_flits
         << ", received " << stats.total_received_flits
         << " (" << stats.total_sent_flits - stats.total_received_flits
@@ -315,7 +317,7 @@ ostream &operator<<(ostream &out, statistics &stats) {
                 << inc_stats.get_std_dev() << endl;
         }
     }
-    out << "    all flows: " << dec << stats.total_lat_stats.get_mean()
+    out << "    all flows latency: " << dec << stats.total_lat_stats.get_mean()
         << " +/- " << stats.total_lat_stats.get_std_dev() << endl << endl;
     
     out << "link switch counts:" << endl;

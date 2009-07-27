@@ -24,9 +24,12 @@ public:
     virtual bool is_claimed(const virtual_queue_node_id &q) throw(err);
     const node_id &get_id() const throw();
 protected:
-    bridge_channel_alloc(node_id src, logger &log) throw();
+    bridge_channel_alloc(node_id src, bool one_queue_per_flow,
+                         bool one_flow_per_queue, logger &log) throw();
 protected:
     const node_id id;
+    bool one_queue_per_flow;
+    bool one_flow_per_queue;
 private:
     set<virtual_queue_node_id> in_use;
 protected:

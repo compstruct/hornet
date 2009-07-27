@@ -55,10 +55,10 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
 sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
          shared_ptr<vector<string> > events_files, logger &new_log) throw(err)
     : pes(), bridges(), nodes(), time(0),
-      stats(new statistics(time, stats_start)), log(new_log) {
+      stats(new statistics(time, stats_start, new_log)), log(new_log) {
     uint32_t num_nodes = read_word(img);
     LOG(log,2) << "creating system with " << num_nodes << " node"
-        << (num_nodes == 1 ? "" : "s") << "..." << endl;
+               << (num_nodes == 1 ? "" : "s") << "..." << endl;
     typedef map<unsigned, shared_ptr<router> > routers_t;
     routers_t node_rts;
     typedef map<unsigned, shared_ptr<channel_alloc> > vcas_t;
@@ -72,10 +72,13 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
         shared_ptr<router> n_rt(new set_router(id, log));
+        uint32_t one_q_per_f = read_word(img);
+        uint32_t one_f_per_q = read_word(img);
         shared_ptr<channel_alloc>
-            n_vca(new set_channel_alloc(id, log));
+            n_vca(new set_channel_alloc(id, one_q_per_f, one_f_per_q, log));
         shared_ptr<bridge_channel_alloc>
-            b_vca(new set_bridge_channel_alloc(id, log));
+            b_vca(new set_bridge_channel_alloc(id, one_q_per_f, one_f_per_q,
+                                               log));
         uint32_t flits_per_q = read_word(img);
         shared_ptr<node> n(new node(node_id(id), flits_per_q, n_rt, n_vca,
                                     stats, log));
@@ -94,7 +97,8 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
         }
         shared_ptr<bridge> b(new bridge(n, b_vca,
                                         n2b_queues, n2b_bw, b2n_queues, b2n_bw,
-                                        flits_per_q, b2n_xbar_bw, stats, log));
+                                        flits_per_q, b2n_xbar_bw,
+                                        one_q_per_f, one_f_per_q, stats, log));
         shared_ptr<set_bridge_channel_alloc> vca =
             static_pointer_cast<set_bridge_channel_alloc>(b_vca);
         shared_ptr<ingress> b_n_i = n->get_ingress_from(b->get_id());
@@ -201,7 +205,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
 
     uint32_t num_routes = read_word(img);
     LOG(log,2) << "network contains " << dec << num_routes
-        << " routing " << (num_routes == 1 ? "entry" : "entries") << endl;
+               << " routing " << (num_routes==1 ? "entry" : "entries") << endl;
     for (unsigned i = 0; i < num_routes; ++i) {
         uint32_t flow = read_word(img);
         uint32_t cur_n = read_word(img);

@@ -12,7 +12,8 @@
 
 class set_channel_alloc : public channel_alloc {
 public:
-    set_channel_alloc(node_id src, logger &log) throw();
+    set_channel_alloc(node_id src, bool one_queue_per_flow,
+                      bool one_flow_per_queue, logger &log) throw();
     virtual ~set_channel_alloc() throw();
     virtual void allocate() throw(err);
     virtual void add_egress(shared_ptr<egress> egress) throw(err);

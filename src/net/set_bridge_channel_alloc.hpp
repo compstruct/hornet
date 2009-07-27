@@ -11,7 +11,8 @@ using namespace std;
 
 class set_bridge_channel_alloc : public bridge_channel_alloc {
 public:
-    set_bridge_channel_alloc(node_id src, logger &log) throw();
+    set_bridge_channel_alloc(node_id src, bool one_q_per_f, bool one_f_per_q,
+                             logger &log) throw();
     virtual ~set_bridge_channel_alloc() throw();
     virtual virtual_queue_id request(flow_id flow) throw(err);
     void add_queue(shared_ptr<virtual_queue> q) throw(err);
