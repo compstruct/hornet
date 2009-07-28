@@ -26,15 +26,18 @@ ingress_dma_channel::
 ingress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned new_bw,
                     shared_ptr<virtual_queue> q,
                     shared_ptr<statistics> s, logger &l) throw()
-    : dma_channel(n_id, d_id, new_bw, q, s, l) { }
+    : dma_channel(n_id, d_id, new_bw, q, s, l), pid_p(NULL) { }
 
 ingress_dma_channel::~ingress_dma_channel() { }
 
-void ingress_dma_channel::receive(void *dst, uint32_t len) throw(err) {
+void ingress_dma_channel::receive(void *dst, packet_id *pid,
+                                  uint32_t len) throw(err) {
     assert(!busy());
     started = false;
     mem = dst;
     remaining_flits = len;
+    pid_p = pid;
+    if (pid_p) *pid_p = 0xffffffffffffffffULL;
 }
 
 bool ingress_dma_channel::has_waiting_flow() const throw() {
@@ -52,7 +55,7 @@ flow_id ingress_dma_channel::get_flow_id() const throw(err) {
 void ingress_dma_channel::tick_positive_edge() throw(err) {
     unsigned i;
     for (i = 0; ((bandwidth == 0 || i < bandwidth)
-                          && remaining_flits > 0 && vq->egress_ready()); ++i) {
+                 && remaining_flits > 0 && vq->egress_ready()); ++i) {
         if (vq->egress_new_flow()) {
             flow = vq->get_egress_new_flow_id();
             if (started) {
@@ -68,13 +71,14 @@ void ingress_dma_channel::tick_positive_edge() throw(err) {
             mem = mem ? (uint8_t *) mem + sizeof(uint64_t) : mem;
             --remaining_flits;
         }
+        if (pid_p) *pid_p = vq->front().get_packet_id();
         stats->receive_flit(flow, vq->front());
         vq->pop();
         started = true;
     }
     if (i > 0) {
         LOG(log,3) << "[dma " << id << "] received "
-            << dec << i << " flit" << (i == 1 ? "" : "s") << endl;
+                   << dec << i << " flit" << (i == 1 ? "" : "s") << endl;
     }
 }
 
@@ -89,16 +93,18 @@ egress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned new_bw,
                    shared_ptr<virtual_queue> q,
                    shared_ptr<bridge_channel_alloc> vca,
                    shared_ptr<statistics> s, logger &l) throw()
-    : dma_channel(n_id, d_id, new_bw, q, s, l), vc_alloc(vca) { }
+    : dma_channel(n_id, d_id, new_bw, q, s, l), pid(0), vc_alloc(vca) { }
 
 egress_dma_channel::~egress_dma_channel() { }
 
-void egress_dma_channel::send(flow_id f, void *src, uint32_t len) throw(err) {
+void egress_dma_channel::send(flow_id f, void *src, uint32_t len,
+                              const packet_id &new_pid) throw(err) {
     assert(!busy());
     started = false;
     flow = f;
     mem = src;
     remaining_flits = len;
+    pid = new_pid;
     vc_alloc->claim(vq->get_id());
 }
 
@@ -108,7 +114,7 @@ void egress_dma_channel::tick_positive_edge() throw(err) {
                  && remaining_flits > 0 && !vq->full()
                  && (started || vq->ingress_new_flow())); ++i) {
         if (!started) {
-            head_flit f(flow, remaining_flits);
+            head_flit f(flow, remaining_flits, pid);
             vq->push(f);
             stats->send_packet(flow, f);
             stats->send_flit(flow, f);
@@ -117,7 +123,7 @@ void egress_dma_channel::tick_positive_edge() throw(err) {
             uint64_t v = (mem ? *((uint64_t *) mem)
                           : ((((uint64_t) flow.get_numeric_id()) << 32)
                              | remaining_flits));
-            flit f(endian(v));
+            flit f(endian(v), pid);
             vq->push(f);
             stats->send_flit(flow, f);
             mem = mem ? (uint8_t *) mem + sizeof(uint64_t) : mem;

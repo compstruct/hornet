@@ -89,7 +89,9 @@ statistics::statistics(const uint64_t &sys_time, const uint64_t &start,
       offered_flits(), total_offered_flits(0),
       sent_flits(), total_sent_flits(0),
       received_flits(), total_received_flits(0),
-      flit_departures(), flow_lat_stats(), total_lat_stats(),
+      flit_departures(), flow_flit_lat_stats(), total_flit_lat_stats(),
+      packet_flows(), packet_offers(), packet_sends(),
+      flow_packet_lat_stats(), total_packet_lat_stats(),
       link_switches(), reorder_buffers(), flow_reorder_stats(), log(l) { }
 
 void statistics::start_sim() throw() {
@@ -107,6 +109,16 @@ void statistics::end_sim() throw() {
         fsi->second.add(reorder_buffers[fsi->first].get_buffer_length(),
                         system_time - last_received_times[fid]);
     }
+    for (packet_timestamp_t::iterator poi = packet_offers.begin();
+         poi != packet_offers.end(); ++poi) {
+        const packet_id &pid = poi->first;
+        double flight_time = system_time - poi->second;
+        total_packet_lat_stats.add(flight_time, 1);
+        assert(packet_flows.find(pid) != packet_flows.end());
+        flow_packet_lat_stats[packet_flows[pid]].add(flight_time, 1);
+        packet_offers.erase(pid);
+        packet_flows.erase(pid);
+    }
 }
 
 flow_id statistics::get_original_flow(flow_id f) const throw() {
@@ -118,7 +130,7 @@ flow_id statistics::get_original_flow(flow_id f) const throw() {
 
 void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
     assert(get_original_flow(fid) == fid);
-    if (system_time >= start_time) {
+    if (system_time >= start_time) { // count as sent flit
         if (!have_first_flit_id) {
             first_flit_id = flt.get_uid();
             have_first_flit_id = true;
@@ -130,9 +142,16 @@ void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
         } else {
             sent_flits[fid]++;
         }
+        assert(total_offered_flits >= total_sent_flits);
         assert(flit_departures.find(flt.get_uid()) == flit_departures.end());
         flit_departures[flt.get_uid()] = system_time;
+    } else { //
+        assert(offered_flits.find(fid) != offered_flits.end());
+        --offered_flits[fid];
+        --total_offered_flits;
     }
+    assert(offered_flits[fid] >= sent_flits[fid]);
+    assert(total_offered_flits >= total_sent_flits);
 }
 
 void statistics::receive_flit(const flow_id &org_fid, const flit &flt) throw() {
@@ -142,39 +161,53 @@ void statistics::receive_flit(const flow_id &org_fid, const flit &flt) throw() {
         if (di != flit_departures.end()) {
             double flight_time = system_time - di->second;
             total_received_flits++;
-            total_lat_stats.add(flight_time, 1);
+            total_flit_lat_stats.add(flight_time, 1);
             if (received_flits.find(fid) == received_flits.end()) {
                 received_flits[fid] = 1;
             } else {
                 received_flits[fid]++;
             }
-            flow_lat_stats[fid].add(flight_time, 1);
+            flow_flit_lat_stats[fid].add(flight_time, 1);
             flit_departures.erase(flt.get_uid());
         }
     }
 }
 
-void statistics::offer_flits(const flow_id &fid, const uint32_t num) throw() {
-    if (system_time >= start_time) {
-        total_offered_flits += num;
-        flit_counter_t::iterator i = offered_flits.find(fid);
-        if (i == offered_flits.end()) {
-            offered_flits[fid] = num;
-        } else {
-            offered_flits[fid] += num;
-        }
+void statistics::offer_packet(const flow_id &fid, const uint32_t orig_len,
+                              const packet_id &pid) throw() {
+    const uint32_t len = orig_len + 1; // original length plus head flit
+    assert(packet_flows.find(pid) == packet_flows.end());
+    packet_flows[pid] = fid;
+    assert(packet_offers.find(pid) == packet_offers.end());
+    packet_offers[pid] = system_time;
+    // count flits as offered but forget them if they're sent before stats start
+    total_offered_flits += len;
+    flit_counter_t::iterator i = offered_flits.find(fid);
+    if (i == offered_flits.end()) {
+        offered_flits[fid] = len;
+    } else {
+        offered_flits[fid] += len;
     }
 }
 
-void statistics::send_packet(const flow_id &fid, const head_flit &flt)
-    throw() {
+void statistics::send_packet(const flow_id &fid, const head_flit &flt) throw() {
+    const uint32_t len = flt.get_length() + 1; // original length plus head flit
+    const packet_id &pid = flt.get_packet_id();
+    assert(packet_offers.find(pid) != packet_offers.end());
     if (system_time >= start_time) {
+        assert(packet_sends.find(pid) == packet_sends.end());
+        packet_sends[pid] = system_time;
         reorder_buffers[fid].send_packet(flt);
+    } else { // pretend packet was never offered
+        packet_offers.erase(pid);
+        packet_flows.erase(pid);
+        assert(offered_flits.find(flt.get_flow_id()) != offered_flits.end());
+        assert(offered_flits[flt.get_flow_id()] >= len);
     }
 }
 
-void statistics::receive_packet(const flow_id &fid, const head_flit &flt)
-    throw() {
+void statistics::receive_packet(const flow_id &fid,
+                                const head_flit &flt) throw() {
     if (system_time >= start_time) {
         if (last_received_times.find(fid) == last_received_times.end())
             last_received_times[fid] = start_time;
@@ -182,6 +215,21 @@ void statistics::receive_packet(const flow_id &fid, const head_flit &flt)
                                     system_time - last_received_times[fid]);
         reorder_buffers[fid].receive_packet(flt);
         last_received_times[fid] = system_time;
+    }
+}
+
+void statistics::complete_packet(const flow_id &fid, const uint32_t len,
+                                 const packet_id &pid) throw() {
+    if (system_time >= start_time) {
+        packet_timestamp_t::iterator poi = packet_offers.find(pid);
+        packet_timestamp_t::iterator psi = packet_sends.find(pid);
+        if (poi != packet_offers.end() && psi != packet_sends.end()) {
+            double flight_time = system_time - poi->second;
+            total_packet_lat_stats.add(flight_time, 1);
+            flow_packet_lat_stats[fid].add(flight_time, 1);
+            packet_offers.erase(pid);
+            packet_flows.erase(pid);
+        }
     }
 }
 
@@ -249,6 +297,10 @@ ostream &operator<<(ostream &out, statistics &stats) {
     uint64_t stats_time = stats.system_time - stats.start_time;
     set<flow_id> flow_ids;
     typedef statistics::flit_counter_t flit_counter_t;
+    for (flit_counter_t::const_iterator i = stats.offered_flits.begin();
+         i != stats.offered_flits.end(); ++i) {
+        flow_ids.insert(i->first);
+    }
     for (flit_counter_t::const_iterator i = stats.sent_flits.begin();
          i != stats.sent_flits.end(); ++i) {
         flow_ids.insert(i->first);
@@ -290,12 +342,14 @@ ostream &operator<<(ostream &out, statistics &stats) {
         } else {
             received = 0;
         }
+        assert(offered >= sent);
         assert(sent >= received);
         out << "    flow " << f << ": offered " << dec
             << offered << ", sent " << sent << ", received "
             << received << " (" << sent - received << " in flight)"
             << endl;
     }
+    assert(stats.total_offered_flits >= stats.total_sent_flits);
     assert(stats.total_sent_flits >= stats.total_received_flits);
     out << "    all flows counts: "
         << "offered " << dec << stats.total_offered_flits
@@ -303,22 +357,41 @@ ostream &operator<<(ostream &out, statistics &stats) {
         << ", received " << stats.total_received_flits
         << " (" << stats.total_sent_flits - stats.total_received_flits
         << " in flight)" << endl << endl;
-    out << "flit latencies (mean +/- s.d., in # cycles):" << endl;
+
+    out << "end-to-end injected packet latencies (mean +/- s.d., in # cycles):"
+        << endl;
     for (set<flow_id>::const_iterator i = flow_ids.begin();
          i != flow_ids.end(); ++i) {
         const flow_id &f = *i;
-        if (stats.received_flits.find(f) != stats.received_flits.end()) {
-            assert(stats.flow_lat_stats.find(f) != stats.flow_lat_stats.end());
-            uint64_t received = stats.received_flits[f];
-            assert(received > 0);
-            running_stats &inc_stats = stats.flow_lat_stats[f];
+        if (stats.flow_packet_lat_stats.find(f) != stats.flow_packet_lat_stats.end()) {
+            running_stats &inc_stats = stats.flow_packet_lat_stats[f];
             out << "    flow " << f << ": "
                 << dec << inc_stats.get_mean() << " +/- "
                 << inc_stats.get_std_dev() << endl;
         }
     }
-    out << "    all flows latency: " << dec << stats.total_lat_stats.get_mean()
-        << " +/- " << stats.total_lat_stats.get_std_dev() << endl << endl;
+    out << "    all flows end-to-end packet latency: "
+        << dec << stats.total_packet_lat_stats.get_mean()
+        << " +/- " << stats.total_packet_lat_stats.get_std_dev() << endl << endl;
+
+    out << "in-network sent flit latencies (mean +/- s.d., in # cycles):"
+        << endl;
+    for (set<flow_id>::const_iterator i = flow_ids.begin();
+         i != flow_ids.end(); ++i) {
+        const flow_id &f = *i;
+        if (stats.received_flits.find(f) != stats.received_flits.end()) {
+            assert(stats.flow_flit_lat_stats.find(f) != stats.flow_flit_lat_stats.end());
+            uint64_t received = stats.received_flits[f];
+            assert(received > 0);
+            running_stats &inc_stats = stats.flow_flit_lat_stats[f];
+            out << "    flow " << f << ": "
+                << dec << inc_stats.get_mean() << " +/- "
+                << inc_stats.get_std_dev() << endl;
+        }
+    }
+    out << "    all flows in-network flit latency: "
+        << dec << stats.total_flit_lat_stats.get_mean()
+        << " +/- " << stats.total_flit_lat_stats.get_std_dev() << endl << endl;
     
     out << "link switch counts:" << endl;
     uint64_t total_switches = 0;

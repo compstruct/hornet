@@ -12,26 +12,31 @@
 using namespace std;
 
 typedef uint64_t flit_id;
+typedef uint64_t packet_id;
 
 class flit {
 public:
-    flit(uint64_t data) throw();
+    flit(uint64_t data, packet_id pid=0xffffffffffffffffULL) throw();
     flit(const flit &flit) throw();
     flit &operator=(const flit &flit) throw();
     const uint64_t &get_data() const throw();
     const flit_id &get_uid() const throw();
+    const packet_id &get_packet_id() const throw();
 protected:
     uint64_t data;
     flit_id uid;
+    packet_id pid;
 protected:
     static flit_id next_uid;
 };
 
-inline flit::flit(uint64_t new_data) throw() : data(new_data), uid(next_uid++) {
+inline flit::flit(uint64_t new_data, packet_id new_pid) throw()
+    : data(new_data), uid(next_uid++), pid(new_pid) {
     assert(next_uid != 0);
 }
 
-inline flit::flit(const flit &f) throw() : data(f.data), uid(f.uid) { }
+inline flit::flit(const flit &f) throw()
+    : data(f.data), uid(f.uid), pid(f.pid) { }
 
 inline flit &flit::operator=(const flit &f) throw() {
     data = f.data;
@@ -43,16 +48,19 @@ inline const uint64_t &flit::get_data() const throw() { return data; }
 
 inline const uint64_t &flit::get_uid() const throw() { return uid; }
 
+inline const uint64_t &flit::get_packet_id() const throw() { return pid; }
+
 // for head flits, length is the number of packets that follow the head
 class head_flit : public flit {
 public:
-    head_flit(flow_id id, uint32_t length) throw();
+    head_flit(flow_id id, uint32_t length,
+              packet_id pid=0xffffffffffffffffULL) throw();
     flow_id get_flow_id() const throw();
     uint32_t get_length() const throw();
 };
 
-inline head_flit::head_flit(flow_id id, uint32_t length) throw()
-    : flit((((uint64_t) id.get_numeric_id()) << 32) | length) { 
+inline head_flit::head_flit(flow_id id, uint32_t length, packet_id pid) throw()
+    : flit((((uint64_t) id.get_numeric_id()) << 32) | length, pid) {
     assert(id.get_numeric_id() == (id.get_numeric_id() & 0xffffffffUL));
 }
 
@@ -69,4 +77,3 @@ ostream &operator<<(ostream &out, const flit &f);
 ostream &operator<<(ostream &out, const head_flit &f);
 
 #endif // __FLIT_HPP__
-

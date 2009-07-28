@@ -178,7 +178,8 @@ uint32_t bridge::get_queue_length(uint32_t queue) throw(err) {
     return len;
 }
 
-uint32_t bridge::send(uint32_t flow, void *src, uint32_t len) throw(err) {
+uint32_t bridge::send(uint32_t flow, void *src, uint32_t len,
+                      packet_id pid) throw(err) {
     LOG(log,3) << "[bridge " << id << "] sending " << dec << len
                << " flits on flow " << flow_id(flow);
     virtual_queue_id q = vc_alloc->request(flow);
@@ -192,11 +193,12 @@ uint32_t bridge::send(uint32_t flow, void *src, uint32_t len) throw(err) {
     uint32_t xmit_id = q.get_numeric_id() + 1;
     LOG(log,3) << ": started (transmission ID " << dec << xmit_id << ")"
         << endl;
-    di->second->send(flow, src, len);
+    di->second->send(flow, src, len, pid);
     return xmit_id;
 }
 
-uint32_t bridge::receive(void *dst, uint32_t queue, uint32_t len) throw(err) {
+uint32_t bridge::receive(void *dst, uint32_t queue, uint32_t len,
+                         packet_id *pid_p) throw(err) {
     assert(vqids.size() <= 32);
     if (queue >= vqids.size())
         throw exc_bad_queue(id.get_numeric_id(), queue);
@@ -212,7 +214,7 @@ uint32_t bridge::receive(void *dst, uint32_t queue, uint32_t len) throw(err) {
     uint32_t xmit_id = vq_id.get_numeric_id() + 1;
     LOG(log,3) << ": started (transmission ID " << dec << xmit_id << ")"
                << endl;
-    ingress_dmas[vq_id]->receive(dst, len);
+    ingress_dmas[vq_id]->receive(dst, pid_p, len);
     return xmit_id;
 }
 

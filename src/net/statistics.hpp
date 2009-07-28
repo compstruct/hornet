@@ -62,9 +62,12 @@ public:
     void end_sim() throw();
     void send_flit(const flow_id &, const flit &) throw();
     void receive_flit(const flow_id &, const flit &) throw();
-    void offer_flits(const flow_id &fid, const uint32_t num_flits) throw();
+    void offer_packet(const flow_id &fid, const uint32_t num_data_flits,
+                      const packet_id &pid) throw();
     void send_packet(const flow_id &fid, const head_flit &flt) throw();
     void receive_packet(const flow_id &fid, const head_flit &flt) throw();
+    void complete_packet(const flow_id &fid, const uint32_t num_data_flits,
+                         const packet_id &pid) throw();
     void register_links(const egress_id &src, const egress_id &dst,
                         unsigned num_links) throw();
     void register_flow_rename(const flow_id &from,
@@ -86,7 +89,9 @@ private:
     typedef map<flow_id, uint64_t> flit_counter_t;
     typedef tuple<egress_id, egress_id, unsigned> sub_link_id;
     typedef map<sub_link_id, uint64_t> link_switch_counter_t;
-    typedef map<uint64_t, uint64_t> flit_timestamp_t;
+    typedef map<flit_id, uint64_t> flit_timestamp_t;
+    typedef map<packet_id, uint64_t> packet_timestamp_t;
+    typedef map<packet_id, flow_id> packet_flows_t;
     typedef map<node_id, running_stats> node_stats_t;
     typedef map<flow_id, running_stats> flow_stats_t;
     typedef tuple<node_id, node_id> cxn_id;
@@ -101,8 +106,13 @@ private:
     flit_counter_t received_flits;
     uint64_t total_received_flits;
     flit_timestamp_t flit_departures;
-    flow_stats_t flow_lat_stats;
-    running_stats total_lat_stats;
+    flow_stats_t flow_flit_lat_stats;
+    running_stats total_flit_lat_stats;
+    packet_flows_t packet_flows;
+    packet_timestamp_t packet_offers;
+    packet_timestamp_t packet_sends;
+    flow_stats_t flow_packet_lat_stats;
+    running_stats total_packet_lat_stats;
     node_stats_t xbar_xmit_stats;
     node_stats_t xbar_demand_stats;
     node_stats_t xbar_bw_stats;

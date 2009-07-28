@@ -9,10 +9,13 @@
 #include "random.hpp"
 #include "injector.hpp"
 
+packet_id injector::next_packet_id = 0;
+
 injector::injector(const pe_id &id, uint64_t &t, shared_ptr<statistics> st,
                    logger &l) throw(err)
     : pe(id), system_time(t), net(), events(), next_event(events.begin()),
-      flows(), flow_ids(), queue_ids(), stats(st), log(l) { }
+      waiting_packets(), incoming_packets(), flows(), flow_ids(), queue_ids(),
+      stats(st), log(l) { }
 
 injector::~injector() throw() { }
 
@@ -49,28 +52,50 @@ void injector::tick_positive_edge() throw(err) {
                        << dec << p << " tick" << (p == 1 ? "" : "s") << endl;
         }
     }
+    for (uint32_t i = 0; i < 32; ++i) {
+        if (incoming_packets.find(i) != incoming_packets.end()) {
+            incoming_packet &ip = incoming_packets[i];
+            if (net->get_transmission_done(ip.xmit)) {
+                stats->complete_packet(ip.flow, ip.len, ip.id);
+                incoming_packets.erase(i);
+            }
+        }
+    }
     uint32_t waiting = net->get_waiting_queues();
     if (waiting != 0) {
         random_shuffle(queue_ids.begin(), queue_ids.end(), random_range);
         for (vector<uint32_t>::iterator i = queue_ids.begin();
              i != queue_ids.end(); ++i) {
-            if ((waiting >> *i) & 1) {
-                net->receive(NULL, *i, net->get_queue_length(*i));
+            if (((waiting >> *i) & 1)
+                && (incoming_packets.find(*i) == incoming_packets.end())) {
+                incoming_packet &ip = incoming_packets[*i];
+                ip.flow = net->get_queue_flow_id(*i);
+                ip.len = net->get_queue_length(*i);
+                ip.xmit = net->receive(NULL, *i, net->get_queue_length(*i),
+                                       &ip.id);
             }
         }
     }
     random_shuffle(flow_ids.begin(), flow_ids.end(), random_range);
-    for (vector<flow_id>::iterator fi = flow_ids.begin();
-         fi != flow_ids.end(); ++fi) {
+    for (vector<flow_id>::iterator fi = flow_ids.begin(); fi != flow_ids.end(); ++fi) {
         tick_t t; len_t l; period_t p;
         tie(t, l, p) = flows[*fi];
-        if (l != 0 && t <= system_time) {
-            if (t + p == system_time) t += p; // forget unsent packet
-            if (t == system_time) stats->offer_flits(*fi, l);
-            if (net->send(fi->get_numeric_id(), NULL, l-1)) {
-                t += p; // schedule next packet for p ticks
+        if (l != 0 && t == system_time) {
+            waiting_packet pkt = { next_packet_id++, *fi, l };
+            waiting_packets[*fi].push(pkt);
+            stats->offer_packet(*fi, l, pkt.id);
+            flows[*fi].get<0>() = t + p;
+        }
+    }
+    unsigned num_qs = net->get_egress()->get_remote_queues().size();
+    for (unsigned i = 0; i < num_qs; ++i) { // allow one flow multi-queue bursts
+        for (vector<flow_id>::iterator fi = flow_ids.begin();
+             fi != flow_ids.end(); ++fi) {
+            queue<waiting_packet> &q = waiting_packets[*fi];
+            if (!q.empty()) {
+                waiting_packet &pkt = q.front();
+                if (net->send(fi->get_numeric_id(), NULL, pkt.len, pkt.id)) q.pop();
             }
-            flows[*fi].get<0>() = t;
         }
     }
 }

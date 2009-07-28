@@ -63,7 +63,7 @@ public:
                         shared_ptr<virtual_queue> vq,
                         shared_ptr<statistics> stats, logger &log) throw();
     virtual ~ingress_dma_channel();
-    void receive(void *dst, uint32_t num_flits) throw(err);
+    void receive(void *dst, packet_id *pid, uint32_t num_flits) throw(err);
     bool has_waiting_flow() const throw();
     uint32_t get_flow_length() const throw(err);
     flow_id get_flow_id() const throw(err);
@@ -72,6 +72,8 @@ public:
 private:
     ingress_dma_channel(); // not defined
     ingress_dma_channel(const ingress_dma_channel &); // not defined
+private:
+    packet_id *pid_p;
 };
 
 class egress_dma_channel : public dma_channel {
@@ -81,10 +83,12 @@ public:
                        shared_ptr<bridge_channel_alloc> vca,
                        shared_ptr<statistics> stats, logger &log) throw();
     virtual ~egress_dma_channel();
-    void send(flow_id flow, void *src, uint32_t num_flits) throw(err);
+    void send(flow_id flow, void *src, uint32_t num_flits,
+              const packet_id &pid) throw(err);
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
 private:
+    packet_id pid;
     shared_ptr<bridge_channel_alloc> vc_alloc;
 private:
     egress_dma_channel(); // not defined
