@@ -193,7 +193,9 @@ void statistics::offer_packet(const flow_id &fid, const uint32_t orig_len,
 void statistics::send_packet(const flow_id &fid, const head_flit &flt) throw() {
     const uint32_t len = flt.get_length() + 1; // original length plus head flit
     const packet_id &pid = flt.get_packet_id();
-    assert(packet_offers.find(pid) != packet_offers.end());
+    if (packet_offers.find(pid) == packet_offers.end()) { // no separate offer
+        offer_packet(fid, len - 1, pid);
+    }
     if (system_time >= start_time) {
         assert(packet_sends.find(pid) == packet_sends.end());
         packet_sends[pid] = system_time;
