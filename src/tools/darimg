@@ -84,10 +84,10 @@ def read_section_headers(file, objdump_cmd='objdump', verbose=False):
     return file, format, entry, sections.values()
 
 def sort_sections(all_secs, verbose=False):
-    loadable = [s for s in all_secs if 'LOAD' in s['flags']]
-    if len(loadable) < 1:
-        raise Err('there are no loadable sections')
-    ordered = sorted(loadable, lambda s, t: cmp(s['lma'], t['lma']))
+    allocatable = [s for s in all_secs if 'ALLOC' in s['flags']]
+    if len(allocatable) < 1:
+        raise Err('there are no sections to allocate')
+    ordered = sorted(allocatable, lambda s, t: cmp(s['lma'], t['lma']))
     for s in ordered:
         if 'RELOC' in s['flags']:
             raise Err('relocatable sections not supported (section %s)' % s)
@@ -124,15 +124,16 @@ def write_mem_image(out, file, start, size, entry, ordered_sections,
         if verbose: print 'processing section:', sec['name']
         assert (sec['lma'] - where) >= 0
         where += write_zeros(out, sec['lma'] - where)
-        proc = subprocess.Popen([objdump_cmd, '-j', sec['name'], '-s',
-                                 file], stdout=subprocess.PIPE)
-        for l in proc.stdout:
-            m = contents_pat.match(l.strip())
-            if m:
-                addr = int(m.group(1), 16)
-                assert addr >= where
-                where += write_zeros(out, addr - where)
-                where += write_hexs(''.join(m.groups()[1:5]))
+        if 'LOAD' in sec['flags']:
+            proc = subprocess.Popen([objdump_cmd, '-j', sec['name'], '-s',
+                                     file], stdout=subprocess.PIPE)
+            for l in proc.stdout:
+                m = contents_pat.match(l.strip())
+                if m:
+                    addr = int(m.group(1), 16)
+                    assert addr >= where
+                    where += write_zeros(out, addr - where)
+                    where += write_hexs(''.join(m.groups()[1:5]))
     where += write_zeros(out, start + size - where)
     out.write(w2bs(entry)) # entry point (initial PC)
     out.write(w2bs(sp))    # initial stack pointer
