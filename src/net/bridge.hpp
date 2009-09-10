@@ -12,6 +12,7 @@
 #include <boost/shared_ptr.hpp>
 #include "error.hpp"
 #include "logger.hpp"
+#include "id_factory.hpp"
 #include "statistics.hpp"
 #include "virtual_queue.hpp"
 #include "router.hpp"
@@ -32,6 +33,7 @@ public:
                     const set<virtual_queue_id> &bridge_vq_ids, unsigned b2n_bw,
                     unsigned flits_per_queue, unsigned b2n_bw_to_xbar,
                     bool one_queue_per_flow, bool one_flow_per_queue,
+                    shared_ptr<id_factory<packet_id> > packet_id_factory,
                     shared_ptr<statistics> stats,
                     logger &new_log) throw(err);
     const node_id &get_id() const throw();
@@ -42,11 +44,11 @@ public:
     // both() send and receive() return 0 on failure (no transfer started)
     // or transfer ID which can be used to check for completion later
     // which can be used later to check status
+    uint32_t send(uint32_t flow_id, void *src, uint32_t num_flits) throw(err);
     uint32_t send(uint32_t flow_id, void *src, uint32_t num_flits,
-                  packet_id pid=0xffffffffffffffffULL) throw(err);
+                  packet_id pid) throw(err);
     uint32_t receive(void *dst, uint32_t queue, uint32_t num_flits,
                      packet_id *pid=NULL) throw(err);
-
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
     shared_ptr<egress> get_egress() throw();
@@ -71,7 +73,7 @@ private:
     ingress_dmas_t ingress_dmas;
     egress_dmas_t egress_dmas;
     vector<virtual_queue_id> vqids; // [0..31] queue index -> real queue id
-    
+    shared_ptr<id_factory<packet_id> > packet_id_factory;
     shared_ptr<statistics> stats;
     logger &log;
 private:

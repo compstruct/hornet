@@ -54,10 +54,12 @@ bridge::bridge(shared_ptr<node> n,
                const set<virtual_queue_id> &n2b_vq_ids, unsigned n2b_bw,
                const set<virtual_queue_id> &b2n_vq_ids, unsigned b2n_bw,
                unsigned flits_per_queue, unsigned b2n_bw_to_xbar,
-               bool one_q_per_f, bool one_f_per_q, shared_ptr<statistics> st,
-               logger &l) throw(err)
+               bool one_q_per_f, bool one_f_per_q,
+               shared_ptr<id_factory<packet_id> > pif,
+               shared_ptr<statistics> st, logger &l) throw(err)
     : id(n->get_id()), target(n), vc_alloc(bridge_vca), incoming(), outgoing(),
-      ingress_dmas(), egress_dmas(), vqids(), stats(st), log(l) {
+      ingress_dmas(), egress_dmas(), vqids(), packet_id_factory(pif),
+      stats(st), log(l) {
     unsigned dma_no = 1;
     if (n2b_vq_ids.size() > 32)
         throw err_too_many_bridge_queues(id.get_numeric_id(),
@@ -176,6 +178,10 @@ uint32_t bridge::get_queue_length(uint32_t queue) throw(err) {
                << virtual_queue_id(queue) << " as "
                << dec << len << " flits" << endl;
     return len;
+}
+
+uint32_t bridge::send(uint32_t flow, void *src, uint32_t len) throw(err) {
+    return send(flow, src, len, packet_id_factory->get_fresh_id());
 }
 
 uint32_t bridge::send(uint32_t flow, void *src, uint32_t len,

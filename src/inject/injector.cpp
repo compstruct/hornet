@@ -9,13 +9,12 @@
 #include "random.hpp"
 #include "injector.hpp"
 
-packet_id injector::next_packet_id = 0;
-
-injector::injector(const pe_id &id, uint64_t &t, shared_ptr<statistics> st,
-                   logger &l) throw(err)
+injector::injector(const pe_id &id, uint64_t &t,
+                   shared_ptr<id_factory<packet_id> > pif,
+                   shared_ptr<statistics> st, logger &l) throw(err)
     : pe(id), system_time(t), net(), events(), next_event(events.begin()),
       waiting_packets(), incoming_packets(), flows(), flow_ids(), queue_ids(),
-      stats(st), log(l) { }
+      packet_id_factory(pif), stats(st), log(l) { }
 
 injector::~injector() throw() { }
 
@@ -81,7 +80,7 @@ void injector::tick_positive_edge() throw(err) {
         tick_t t; len_t l; period_t p;
         tie(t, l, p) = flows[*fi];
         if (l != 0 && t == system_time) {
-            waiting_packet pkt = { next_packet_id++, *fi, l };
+            waiting_packet pkt = { packet_id_factory->get_fresh_id(), *fi, l };
             waiting_packets[*fi].push(pkt);
             stats->offer_packet(*fi, l, pkt.id);
             flows[*fi].get<0>() = t + p;

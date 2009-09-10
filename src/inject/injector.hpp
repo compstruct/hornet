@@ -9,6 +9,7 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/tuple/tuple.hpp>
 #include "cstdint.hpp"
+#include "id_factory.hpp"
 #include "flow_id.hpp"
 #include "flit.hpp"
 #include "logger.hpp"
@@ -36,6 +37,7 @@ public:
 class injector : public pe {
 public:
     injector(const pe_id &id, uint64_t &system_time,
+             shared_ptr<id_factory<packet_id> > packet_id_factory,
              shared_ptr<statistics> stats, logger &log) throw(err);
     virtual ~injector() throw();
     virtual void connect(shared_ptr<bridge> net_bridge) throw(err);
@@ -61,9 +63,9 @@ private:
     flows_t flows;
     vector<flow_id> flow_ids;
     vector<uint32_t> queue_ids;
+    shared_ptr<id_factory<packet_id> > packet_id_factory;
     shared_ptr<statistics> stats;
     logger &log;
-    static packet_id next_packet_id;
 };
 
 #endif // __INJECTOR_HPP__

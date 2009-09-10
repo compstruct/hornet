@@ -9,6 +9,7 @@ libdarcommon_la_SOURCES =  \
     bits.hpp \
     endian.hpp \
     cstdint.hpp \
+    id_factory.hpp id_factory.cpp \
     random.hpp random.cpp \
     error.hpp error.cpp \
     logger.hpp logger.cpp \
