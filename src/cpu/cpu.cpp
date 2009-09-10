@@ -77,7 +77,8 @@ void cpu::syscall(uint32_t call_no) throw(err) {
     case SYSCALL_SEND:
         if (!net) throw exc_no_network(get_id().get_numeric_id());
         set(gpr(2), net->send(get(gpr(4)), ram->ptr(get(gpr(5))),
-                              get(gpr(6)) >> 3));
+                              ((get(gpr(6)) >> 3) +
+                               ((get(gpr(6)) & 0x7) != 0 ? 1 : 0))));
         break;
     case SYSCALL_RECEIVE:
         if (!net) throw exc_no_network(get_id().get_numeric_id());
