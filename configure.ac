@@ -16,6 +16,7 @@ AX_BOOST_DATE_TIME
 AX_BOOST_PROGRAM_OPTIONS
 AC_CHECK_LIB([m],[ceil])
 AM_PATH_PYTHON([2.5])
+FANCY_PATH_PROG([QMTEST], [QMTest test infrastructure], [qmtest])
 AC_ARG_ENABLE([mips-rts],
               AC_HELP_STRING([--enable-mips-rts],
                              [build MIPS runtime system [[default=no]]]),
@@ -50,5 +51,6 @@ AC_OUTPUT(\
     src/sim/Makefile \
     src/tools/Makefile \
     src/rts/Makefile \
+    tests/Makefile \
     )
 

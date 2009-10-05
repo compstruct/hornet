@@ -80,8 +80,8 @@ int main(int argc, char **argv) {
          "read event schedule from file arg")
         ("log", po::value<vector<string> >()->composing(),
          "write a log to file arg")
-        ("verbosity", po::value<unsigned>(), "set console verbosity")
-        ("log-verbosity", po::value<unsigned>(), "set log verbosity")
+        ("verbosity", po::value<int>(), "set console verbosity")
+        ("log-verbosity", po::value<int>(), "set log verbosity")
         ("random-seed", po::value<uint32_t>(),
          "set random seed (default: use system entropy)")
         ("version", po::value<vector<bool> >()->zero_tokens()->composing(),
@@ -116,12 +116,12 @@ int main(int argc, char **argv) {
         exit(1);
     }
     string mem_image = opts["mem_image"].as<string>();
-    unsigned verb = (opts.count("verbosity") ?
-                     opts["verbosity"].as<unsigned>() : 0);
+    int verb = (opts.count("verbosity") ?
+                     opts["verbosity"].as<int>() : 0);
     syslog.add(cout, verb);
     if (opts.count("log")) {
-        unsigned log_verb = (opts.count("log-verbosity") ?
-                             opts["log-verbosity"].as<unsigned>() : verb);
+        int log_verb = (opts.count("log-verbosity") ?
+                             opts["log-verbosity"].as<int>() : verb);
         vector<string> fns = opts["log"].as<vector<string> >();
         for (vector<string>::const_iterator fn = fns.begin();
              fn != fns.end(); ++fn) {

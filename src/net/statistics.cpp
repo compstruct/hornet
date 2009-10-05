@@ -197,7 +197,6 @@ void statistics::send_packet(const flow_id &fid, const head_flit &flt) throw() {
         offer_packet(fid, len - 1, pid);
     }
     if (system_time >= start_time) {
-        cerr << "packet send " << hex << pid << endl;
         assert(packet_sends.find(pid) == packet_sends.end());
         packet_sends[pid] = system_time;
         reorder_buffers[fid].send_packet(flt);

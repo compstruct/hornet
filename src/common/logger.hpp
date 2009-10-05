@@ -16,46 +16,46 @@ class logstreambuf : public streambuf {
 public:
     logstreambuf() throw();
     virtual ~logstreambuf() throw();
-    void add(streambuf *, unsigned verbosity) throw();
-    void set_message_verbosity(unsigned verbosity) throw();
+    void add(streambuf *, int verbosity) throw();
+    void set_message_verbosity(int verbosity) throw();
 protected:
     virtual int overflow(int);
 private:
-    vector<tuple<unsigned, streambuf *> > streams;
-    unsigned msg_verb; // current message verbosity
+    vector<tuple<int, streambuf *> > streams;
+    int msg_verb; // current message verbosity
 };
 
 class logger : public ostream {
 public:
     logger() throw();
     virtual ~logger() throw();
-    void add(ostream &, unsigned) throw();
-    void add(shared_ptr<ostream>, unsigned) throw();
-    void set_message_verbosity(unsigned) throw();
-    unsigned get_max_verbosity() const throw();
+    void add(ostream &, int) throw();
+    void add(shared_ptr<ostream>, int) throw();
+    void set_message_verbosity(int) throw();
+    int get_max_verbosity() const throw();
 private:
-    unsigned max_verbosity;
+    int max_verbosity;
     logstreambuf buf;
     vector<shared_ptr<ostream> > owned_streams;
 };
 
 inline int logstreambuf::overflow(int ch) {
-    for (vector<tuple<unsigned, streambuf *> >::iterator si = streams.begin();
+    for (vector<tuple<int, streambuf *> >::iterator si = streams.begin();
          si != streams.end(); ++si) {
         if (msg_verb <= si->get<0>()) si->get<1>()->sputc(ch);
     }
     return 0;
 }
 
-inline void logstreambuf::set_message_verbosity(unsigned v) throw() {
+inline void logstreambuf::set_message_verbosity(int v) throw() {
     msg_verb = v;
 }
 
-inline void logger::set_message_verbosity(unsigned verb) throw() {
+inline void logger::set_message_verbosity(int verb) throw() {
     buf.set_message_verbosity(verb);
 }
 
-inline unsigned logger::get_max_verbosity() const throw() {
+inline int logger::get_max_verbosity() const throw() {
     return max_verbosity;
 }
 

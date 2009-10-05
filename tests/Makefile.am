@@ -1,0 +1,4 @@
+all:
+
+check:
+	$(QMTEST) run

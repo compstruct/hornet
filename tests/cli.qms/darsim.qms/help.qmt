@@ -1,0 +1,12 @@
+<?xml version="1.0" ?><!DOCTYPE extension  PUBLIC '-//QM/2.6/Extension//EN'  'http://www.codesourcery.com/qm/dtds/2.6/-//qm/2.6/extension//en.dtd'><extension class="command.ShellCommandTest" kind="test"><argument name="target_group"><text>.*</text></argument><argument name="timeout"><integer>-1</integer></argument><argument name="stdout"><text>Usage: darsim SYSTEM_IMAGE
+Options:
+  --cycles arg          simulate for arg cycles (default: forever)
+  --stats-start arg     start statistics after cycle arg (default: 0)
+  --events arg          read event schedule from file arg
+  --log arg             write a log to file arg
+  --verbosity arg       set console verbosity
+  --log-verbosity arg   set log verbosity
+  --random-seed arg     set random seed (default: use system entropy)
+  --version             show program version and exit
+  -h [ --help ]         show this help message and exit
+</text></argument><argument name="prerequisites"><set/></argument><argument name="stdin"><text/></argument><argument name="exit_code"><integer>0</integer></argument><argument name="environment"><set/></argument><argument name="command"><text>../src/sim/darsim --help</text></argument><argument name="stderr"><text/></argument><argument name="resources"><set/></argument></extension>

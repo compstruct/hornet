@@ -3,5 +3,5 @@ AUTOMAKE_OPTIONS = foreign
 
 EXTRA_DIST = bootstrap LICENSE
 
-SUBDIRS = src
+SUBDIRS = src tests
 
