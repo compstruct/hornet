@@ -27,11 +27,14 @@ typedef void (*custom_signal_handler_t)(int);
 
 static logger syslog;
 static shared_ptr<statistics> stats;
+static bool report_stats = true;
 
 void sig_int_handler(int signo) {
     stats->end_sim();
-    LOG(syslog,0) << endl << "simulation ended on keyboard interrupt" << endl
-        << endl << *stats << endl;
+    LOG(syslog,0) << endl << "simulation ended on keyboard interrupt" << endl;
+    if (report_stats) {
+        LOG(syslog,0) << endl << *stats << endl;
+    }
     exit(1);
 }
 
@@ -76,6 +79,8 @@ int main(int argc, char **argv) {
          "simulate for arg cycles (default: forever)")
         ("stats-start", po::value<uint64_t>(),
          "start statistics after cycle arg (default: 0)")
+        ("no-stats", po::value<vector<bool> >()->zero_tokens()->composing(),
+         "do not report statistics")
         ("events", po::value<vector<string> >()->composing(),
          "read event schedule from file arg")
         ("log", po::value<vector<string> >()->composing(),
@@ -161,6 +166,9 @@ int main(int argc, char **argv) {
         copy(fns.begin(), fns.end(),
              back_insert_iterator<vector<string> >(*events_files));
     }
+    if (opts.count("no-stats")) {
+        report_stats = false;
+    }
     LOG(syslog,0) << dar_full_version << endl << endl;
     shared_ptr<sys> s;
     try {
@@ -190,12 +198,16 @@ int main(int argc, char **argv) {
             s->tick_negative_edge();
         }
         stats->end_sim();
-        LOG(syslog,0) << endl << "simulation ended successfully" << endl
-            << endl << *stats << endl;
+        LOG(syslog,0) << endl << "simulation ended successfully" << endl;
+        if (report_stats) {
+            LOG(syslog,0) << endl << *stats << endl;
+        }
     } catch (const exc_syscall_exit &e) {
         stats->end_sim();
-        LOG(syslog,0) << endl << "simulation ended on CPU exit()" << endl
-            << endl << *stats << endl;
+        LOG(syslog,0) << endl << "simulation ended on CPU exit()" << endl;
+        if (report_stats) {
+            LOG(syslog,0) << endl << *stats << endl;
+        }
         exit(e.exit_code);
     } catch (const err &e) {
         cerr << "ERROR: " << e << endl;

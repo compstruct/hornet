@@ -2,6 +2,7 @@
 Options:
   --cycles arg          simulate for arg cycles (default: forever)
   --stats-start arg     start statistics after cycle arg (default: 0)
+  --no-stats            do not report statistics
   --events arg          read event schedule from file arg
   --log arg             write a log to file arg
   --verbosity arg       set console verbosity
