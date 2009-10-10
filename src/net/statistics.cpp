@@ -109,16 +109,16 @@ void statistics::end_sim() throw() {
         fsi->second.add(reorder_buffers[fsi->first].get_buffer_length(),
                         system_time - last_received_times[fid]);
     }
-    for (packet_timestamp_t::iterator poi = packet_offers.begin();
+    for (packet_timestamp_t::const_iterator poi = packet_offers.begin();
          poi != packet_offers.end(); ++poi) {
         const packet_id &pid = poi->first;
         double flight_time = system_time - poi->second;
         total_packet_lat_stats.add(flight_time, 1);
         assert(packet_flows.find(pid) != packet_flows.end());
         flow_packet_lat_stats[packet_flows[pid]].add(flight_time, 1);
-        packet_offers.erase(pid);
         packet_flows.erase(pid);
     }
+    packet_offers.clear();
 }
 
 flow_id statistics::get_original_flow(flow_id f) const throw() {
@@ -145,7 +145,7 @@ void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
         assert(total_offered_flits >= total_sent_flits);
         assert(flit_departures.find(flt.get_uid()) == flit_departures.end());
         flit_departures[flt.get_uid()] = system_time;
-    } else { //
+    } else {
         assert(offered_flits.find(fid) != offered_flits.end());
         --offered_flits[fid];
         --total_offered_flits;
