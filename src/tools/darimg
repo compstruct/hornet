@@ -75,6 +75,8 @@ def read_section_headers(file, objdump_cmd='objdump', verbose=False):
                 sections[name]['flags'] = l.split(', ')
     except StopIteration:
         pass
+    except OSError as e:
+        raise Err('Failed to run %s: %s' % (objdump, e))
     if verbose:
         print 'file %s format %s' % (file, format)
         print '  entry point 0x%08x' % entry
@@ -404,7 +406,7 @@ def new_system_config(cfg, verbose=False):
                       'via \'[arbitration] scheme\'')
         try:
             arb = cfg.get('arbitration', 'scheme')
-        except Exception, e:
+        except ConfigParser.Error:
             arb = 'off'
         arbs = { 'off': 0, 'proportional': 1 }
         if arb not in arbs:
@@ -499,7 +501,7 @@ def new_system_config(cfg, verbose=False):
             routes = flows_to_routes(flows)
         else:
             raise Err('bad queue routing type: %s' % queue_routing)
-    except ConfigParser.Error, e:
+    except ConfigParser.Error as e:
         raise Err('bad config: %s' % e)
     return settings, nodes, links, routes
 
@@ -518,21 +520,22 @@ def main():
         cfg = ConfigParser.SafeConfigParser()
         try:
             cfg.read(args)
-        except Exception, e:
+        except Exception as e:
             raise Err('bad config: %s' % e)
         with open(out_file, 'wb') as out:
             write_complete_image(out, cfg, verbose=opts.verbose)
-    except Err, e:
+    except Err as e:
         print >>sys.stderr, 'ERROR:', e
         try:
             os.remove(out_file)
         except:
             pass
         sys.exit(1)
-    except:
+    except Exception as e:
         try:
             os.remove(out_file)
         except:
             pass
+        raise e
 
 if __name__ == '__main__': main()
