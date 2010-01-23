@@ -89,6 +89,8 @@ statistics::statistics(const uint64_t &sys_time, const uint64_t &start,
       offered_flits(), total_offered_flits(0),
       sent_flits(), total_sent_flits(0),
       received_flits(), total_received_flits(0),
+      total_offered_packets(0), total_sent_packets(0),
+      total_received_packets(0),
       flit_departures(), flow_flit_lat_stats(), total_flit_lat_stats(),
       packet_flows(), packet_offers(), packet_sends(),
       flow_packet_lat_stats(), total_packet_lat_stats(),
@@ -127,6 +129,10 @@ flow_id statistics::get_original_flow(flow_id f) const throw() {
     while ((fri = original_flows.find(f)) != original_flows.end())
         f = fri->second;
     return f;
+}
+
+uint64_t statistics::get_received_packet_count() const throw() {
+    return total_received_packets;
 }
 
 void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
@@ -181,7 +187,7 @@ void statistics::offer_packet(const flow_id &fid, const uint32_t orig_len,
     packet_flows[pid] = fid;
     assert(packet_offers.find(pid) == packet_offers.end());
     packet_offers[pid] = system_time;
-    // count flits as offered but forget them if they're sent before stats start
+    // count packet/flits as offered but forget if sent before stats start
     total_offered_flits += len;
     flit_counter_t::iterator i = offered_flits.find(fid);
     if (i == offered_flits.end()) {
@@ -189,6 +195,7 @@ void statistics::offer_packet(const flow_id &fid, const uint32_t orig_len,
     } else {
         offered_flits[fid] += len;
     }
+    ++total_offered_packets;
 }
 
 void statistics::send_packet(const flow_id &fid, const head_flit &flt) throw() {
@@ -201,11 +208,13 @@ void statistics::send_packet(const flow_id &fid, const head_flit &flt) throw() {
         assert(packet_sends.find(pid) == packet_sends.end());
         packet_sends[pid] = system_time;
         reorder_buffers[fid].send_packet(flt);
+        ++total_sent_packets;
     } else { // pretend packet was never offered
         packet_offers.erase(pid);
         packet_flows.erase(pid);
         assert(offered_flits.find(flt.get_flow_id()) != offered_flits.end());
         assert(offered_flits[flt.get_flow_id()] >= len);
+        --total_offered_packets;
     }
 }
 
@@ -218,6 +227,7 @@ void statistics::receive_packet(const flow_id &fid,
                                     system_time - last_received_times[fid]);
         reorder_buffers[fid].receive_packet(flt);
         last_received_times[fid] = system_time;
+        ++total_received_packets;
     }
 }
 
@@ -320,7 +330,7 @@ ostream &operator<<(ostream &out, statistics &stats) {
         << "total statistics cycles: " << dec << stats_time
         << " (statistics start after cycle " << dec << stats.start_time
         << ")" << endl << endl;
-    
+
     out << "flit counts:" << endl;
     for (set<flow_id>::const_iterator i = flow_ids.begin();
          i != flow_ids.end(); ++i) {
@@ -361,6 +371,16 @@ ostream &operator<<(ostream &out, statistics &stats) {
         << " (" << stats.total_sent_flits - stats.total_received_flits
         << " in flight)" << endl << endl;
 
+    out << "packet counts:" << endl;
+    assert(stats.total_offered_packets >= stats.total_sent_packets);
+    assert(stats.total_sent_packets >= stats.total_received_packets);
+    out << "    all flows counts: "
+        << "offered " << dec << stats.total_offered_packets
+        << ", sent " << stats.total_sent_packets
+        << ", received " << stats.total_received_packets
+        << " (" << stats.total_sent_packets - stats.total_received_packets
+        << " in flight)" << endl << endl;
+
     out << "end-to-end injected packet latencies (mean +/- s.d., in # cycles):"
         << endl;
     for (set<flow_id>::const_iterator i = flow_ids.begin();
@@ -395,7 +415,7 @@ ostream &operator<<(ostream &out, statistics &stats) {
     out << "    all flows in-network flit latency: "
         << dec << stats.total_flit_lat_stats.get_mean()
         << " +/- " << stats.total_flit_lat_stats.get_std_dev() << endl << endl;
-    
+
     out << "link switch counts:" << endl;
     uint64_t total_switches = 0;
     typedef statistics::link_switch_counter_t link_switch_counter_t;

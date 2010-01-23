@@ -73,7 +73,9 @@ int main(int argc, char **argv) {
     po::options_description all_opts_desc;
     opts_desc.add_options()
         ("cycles", po::value<uint64_t>(),
-         "simulate for arg cycles (default: forever)")
+         "simulate for arg cycles (0 = forever)")
+        ("packets", po::value<uint64_t>(),
+         "simulate until arg packets arrive (0 = forever)")
         ("stats-start", po::value<uint64_t>(),
          "start statistics after cycle arg (default: 0)")
         ("events", po::value<vector<string> >()->composing(),
@@ -133,12 +135,14 @@ int main(int argc, char **argv) {
             syslog.add(f, log_verb);
         }
     }
-    bool forever = true;
     uint64_t num_cycles = 0;
+    uint64_t num_packets = 0;
     uint64_t stats_start = 0;
     if (opts.count("cycles")) {
-        forever = false;
         num_cycles = opts["cycles"].as<uint64_t>();
+    }
+    if (opts.count("packets")) {
+        num_packets = opts["packets"].as<uint64_t>();
     }
     if (opts.count("stats-start")) {
         stats_start = opts["stats-start"].as<uint64_t>();
@@ -178,14 +182,29 @@ int main(int argc, char **argv) {
     if (prev_sig_int_handler == SIG_IGN) signal(SIGINT, prev_sig_int_handler);
     stats->start_sim();
     try {
-        if (forever) {
+        if (num_cycles == 0 && num_packets == 0) {
             LOG(syslog,0) << "simulating forever" << endl;
         } else {
-            LOG(syslog,0) << "simulating for " << dec << num_cycles
-                << " cycle" << (num_cycles == 1 ? "" : "s") << endl;
+        	ostringstream oss;
+            if (num_cycles > 0) {
+                oss << " for " << dec << num_cycles
+                    << " cycle" << (num_cycles == 1 ? "" : "s");
+            }
+            if (num_cycles > 0 && num_packets >> 0) {
+                oss << " or";
+            }
+            if (num_packets > 0) {
+                oss << " until " << dec << num_packets
+                    << " packet" << (num_packets == 1 ? "" : "s") << " arrive";
+            }
+            LOG(syslog,0) << "simulating" << oss.str() << endl;
         }
         LOG(syslog,0) << endl;
-        for (unsigned cycle = 0; forever || cycle < num_cycles; ++cycle) {
+        for (unsigned cycle = 0;
+             ((num_cycles == 0 || cycle < num_cycles)
+              && (num_packets == 0
+                  || stats->get_received_packet_count() < num_packets));
+             ++cycle) {
             s->tick_positive_edge();
             s->tick_negative_edge();
         }
