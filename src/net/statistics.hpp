@@ -77,6 +77,7 @@ public:
     void xbar(node_id id, int flits, double req_frac, double bw_frac) throw();
     void cxn_xmit(node_id src, node_id dst, unsigned used,
                   double req_frac, double bw_frac) throw();
+    uint64_t get_received_packet_count() const throw();
     friend ostream &operator<<(ostream &, statistics &);
 private:
     flow_id get_original_flow(flow_id f) const throw();
@@ -105,6 +106,9 @@ private:
     uint64_t total_sent_flits;
     flit_counter_t received_flits;
     uint64_t total_received_flits;
+    uint64_t total_offered_packets;
+    uint64_t total_sent_packets;
+    uint64_t total_received_packets;
     flit_timestamp_t flit_departures;
     flow_stats_t flow_flit_lat_stats;
     running_stats total_flit_lat_stats;

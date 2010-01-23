@@ -1,6 +1,7 @@
 <?xml version="1.0" ?><!DOCTYPE extension  PUBLIC '-//QM/2.6/Extension//EN'  'http://www.codesourcery.com/qm/dtds/2.6/-//qm/2.6/extension//en.dtd'><extension class="command.ShellCommandTest" kind="test"><argument name="target_group"><text>.*</text></argument><argument name="timeout"><integer>-1</integer></argument><argument name="stdout"><text>Usage: darsim SYSTEM_IMAGE
 Options:
-  --cycles arg          simulate for arg cycles (default: forever)
+  --cycles arg          simulate for arg cycles (0 = forever)
+  --packets arg         simulate until arg packets arrive (0 = forever)
   --stats-start arg     start statistics after cycle arg (default: 0)
   --no-stats            do not report statistics
   --events arg          read event schedule from file arg
