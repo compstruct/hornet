@@ -116,9 +116,10 @@ void statistics::end_sim() throw() {
         total_packet_lat_stats.add(flight_time, 1);
         assert(packet_flows.find(pid) != packet_flows.end());
         flow_packet_lat_stats[packet_flows[pid]].add(flight_time, 1);
-        packet_offers.erase(pid);
         packet_flows.erase(pid);
     }
+    packet_offers.clear();
+    assert(packet_flows.empty());
 }
 
 flow_id statistics::get_original_flow(flow_id f) const throw() {
