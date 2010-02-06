@@ -38,6 +38,7 @@ public:
                       unsigned bw_to_xbar) throw(err);
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
+    bool is_drained() const throw();
 private:
     const node_id id;
     unsigned flits_per_queue;

@@ -99,3 +99,11 @@ void node::tick_negative_edge() throw(err) {
     vc_alloc->allocate();
 }
 
+bool node::is_drained() const throw() {
+    bool drained = true;
+    for (ingresses_t::const_iterator n = ingresses.begin();
+         n != ingresses.end(); ++n) {
+        drained &= n->second->is_drained();
+    }
+    return drained;
+}

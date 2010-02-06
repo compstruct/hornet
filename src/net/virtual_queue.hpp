@@ -83,6 +83,7 @@ public:
     node_id get_src_node_id() const throw();
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
+    bool is_drained() const throw(); // uses real size
 private:
     const virtual_queue_node_id id;
     node_id src_node_id;
@@ -150,6 +151,10 @@ inline void virtual_queue::tick_positive_edge() throw(err) { }
 
 inline void virtual_queue::tick_negative_edge() throw(err) {
     stale_size = q.size();
+}
+
+inline bool virtual_queue::is_drained() const throw() {
+    return q.empty();
 }
 
 #endif // __VIRTUAL_QUEUE_HPP__

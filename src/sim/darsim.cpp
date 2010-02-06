@@ -76,9 +76,9 @@ int main(int argc, char **argv) {
     po::options_description all_opts_desc;
     opts_desc.add_options()
         ("cycles", po::value<uint64_t>(),
-         "simulate for arg cycles (0 = forever)")
+         "simulate for arg cycles (0 = until drained)")
         ("packets", po::value<uint64_t>(),
-         "simulate until arg packets arrive (0 = forever)")
+         "simulate until arg packets arrive (0 = until drained)")
         ("stats-start", po::value<uint64_t>(),
          "start statistics after cycle arg (default: 0)")
         ("no-stats", po::value<vector<bool> >()->zero_tokens()->composing(),
@@ -191,7 +191,7 @@ int main(int argc, char **argv) {
     stats->start_sim();
     try {
         if (num_cycles == 0 && num_packets == 0) {
-            LOG(syslog,0) << "simulating forever" << endl;
+            LOG(syslog,0) << "simulating until drained" << endl;
         } else {
         	ostringstream oss;
             if (num_cycles > 0) {
@@ -209,7 +209,7 @@ int main(int argc, char **argv) {
         }
         LOG(syslog,0) << endl;
         for (unsigned cycle = 0;
-             ((num_cycles == 0 || cycle < num_cycles)
+             (((num_cycles == 0 && !s->is_drained()) || cycle < num_cycles)
               && (num_packets == 0
                   || stats->get_received_packet_count() < num_packets));
              ++cycle) {

@@ -100,3 +100,24 @@ void injector::tick_positive_edge() throw(err) {
 }
 
 void injector::tick_negative_edge() throw(err) { }
+
+bool injector::is_drained() const throw() {
+    bool drained = true;
+    drained &= next_event == events.end();
+    drained &= net->get_waiting_queues() == 0;
+    for (uint32_t i = 0; i < 32; ++i) {
+        drained &= incoming_packets.find(i) == incoming_packets.end();
+    }
+    for (vector<flow_id>::const_iterator fi = flow_ids.begin();
+         fi != flow_ids.end(); ++fi) {
+        tick_t t; len_t l; period_t p;
+        flows_t::const_iterator fli = flows.find(*fi);
+        if (fli != flows.end()) {
+            tie(t, l, p) = fli->second;
+            drained &= l == 0;
+            waiting_packets_t::const_iterator wpi = waiting_packets.find(*fi);
+            drained &= ((wpi == waiting_packets.end()) || wpi->second.empty());
+        }
+    }
+    return drained;
+}

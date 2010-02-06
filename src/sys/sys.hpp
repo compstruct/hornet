@@ -27,6 +27,7 @@ public:
     shared_ptr<statistics> get_statistics() throw();
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
+    bool is_drained() const throw();
 private:
     typedef map<unsigned, shared_ptr<pe> > pes_t;
     typedef map<unsigned, shared_ptr<bridge> > bridges_t;

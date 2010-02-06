@@ -45,6 +45,7 @@ public:
                    uint32_t len, const uint64_t &period) throw(err);
     virtual void tick_positive_edge() throw(err);
     virtual void tick_negative_edge() throw(err);
+    virtual bool is_drained() const throw();
 private:
     typedef uint64_t tick_t;
     typedef uint32_t len_t;

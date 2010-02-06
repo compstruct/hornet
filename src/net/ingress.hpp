@@ -29,6 +29,7 @@ public:
     void add_queue(shared_ptr<virtual_queue> q) throw(err);
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
+    bool is_drained() const throw();
     const queues_t &get_queues() const throw();
     const ingress_id &get_id() const throw();
     const node_id &get_src_node_id() const throw();

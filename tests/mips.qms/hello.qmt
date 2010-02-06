@@ -1,11 +1,11 @@
 <?xml version="1.0" ?><!DOCTYPE extension  PUBLIC '-//QM/2.6/Extension//EN'  'http://www.codesourcery.com/qm/dtds/2.6/-//qm/2.6/extension//en.dtd'><extension class="command.ShellCommandTest" kind="test"><argument name="stdin"><text/></argument><argument name="timeout"><integer>-1</integer></argument><argument name="stdout"><text>dar version 0.05 (miyakowasure)
 
-simulating forever
+simulating until drained
 
 [cpu 00 out] hello from cpu 0
 [cpu 01 out] hello from cpu 1
 [cpu 02 out] hello from cpu 2
 [cpu 03 out] hello from cpu 3
 
-simulation ended on CPU exit()
+simulation ended successfully
 </text></argument><argument name="prerequisites"><set/></argument><argument name="target_group"><text>.*</text></argument><argument name="exit_code"><integer>0</integer></argument><argument name="environment"><set/></argument><argument name="command"><text>../src/tools/darimg -o data/hello.img data/hello.cfg &amp;&amp; ../src/sim/darsim data/hello.img --no-stats</text></argument><argument name="stderr"><text/></argument><argument name="resources"><set/></argument></extension>

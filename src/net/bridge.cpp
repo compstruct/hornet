@@ -248,6 +248,20 @@ void bridge::tick_negative_edge() throw(err) {
     }
 }
 
+bool bridge::is_drained() const throw() {
+    bool drained = true;
+    for (ingress_dmas_t::const_iterator i = ingress_dmas.begin();
+         i != ingress_dmas.end(); ++i) {
+        drained &= !i->second->busy();
+    }
+    for (egress_dmas_t::const_iterator i = egress_dmas.begin();
+         i != egress_dmas.end(); ++i) {
+        drained &= !i->second->busy();
+    }
+    drained &= incoming->is_drained();
+    return drained;
+}
+
 shared_ptr<egress> bridge::get_egress() throw() { return outgoing; }
 
 shared_ptr<ingress> bridge::get_ingress() throw() { return incoming; }

@@ -15,7 +15,7 @@ ingress::ingress(const ingress_id &new_id, const node_id &new_src_node_id,
     const node_id &parent_id = id.get_node_id().get_numeric_id();
     for (set<virtual_queue_id>::const_iterator i = vq_ids.begin();
          i != vq_ids.end(); ++i) {
-        shared_ptr<common_alloc> alloc = 
+        shared_ptr<common_alloc> alloc =
             shared_ptr<common_alloc>(new common_alloc(flits_per_queue));
         if (vqs.find(*i) != vqs.end())
             throw err_duplicate_queue(parent_id.get_numeric_id(),
@@ -48,6 +48,14 @@ void ingress::tick_negative_edge() throw(err) {
     for (queues_t::iterator qi = vqs.begin(); qi != vqs.end(); ++qi) {
         qi->second->tick_negative_edge();
     }
+}
+
+bool ingress::is_drained() const throw() {
+    bool drained = true;
+    for (queues_t::const_iterator qi = vqs.begin(); qi != vqs.end(); ++qi) {
+        drained &= qi->second->is_drained();
+    }
+    return drained;
 }
 
 ostream &operator<<(ostream &out, const ingress &i) {

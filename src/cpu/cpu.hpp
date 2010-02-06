@@ -19,12 +19,13 @@ using namespace boost;
 
 class cpu : public pe {
 public:
-    explicit cpu(const pe_id &id, shared_ptr<mem> ram,
+    explicit cpu(const pe_id &id, const uint64_t &time, shared_ptr<mem> ram,
                  uint32_t pc, uint32_t stack_pointer, logger &log) throw(err);
     virtual ~cpu() throw();
     virtual void connect(shared_ptr<bridge> net_bridge) throw();
     virtual void tick_positive_edge() throw(err);
     virtual void tick_negative_edge() throw(err);
+    virtual bool is_drained() const throw();
 
 private:
     uint32_t get(const gpr &r) const throw();
@@ -34,7 +35,8 @@ private:
     void execute() throw(err);
 
 private:
-    uint32_t time; // increments every cycle
+    bool running;
+    const uint64_t &time; // system clock
     uint32_t pc;
     uint32_t gprs[32];
     uint64_t hi_lo;

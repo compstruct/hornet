@@ -51,6 +51,7 @@ public:
                      packet_id *pid=NULL) throw(err);
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
+    bool is_drained() const throw();
     shared_ptr<egress> get_egress() throw();
     shared_ptr<ingress> get_ingress() throw();
     shared_ptr<vector<uint32_t> > get_ingress_queue_ids() throw();

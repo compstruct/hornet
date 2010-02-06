@@ -12,12 +12,12 @@
 
 using namespace std;
 
-cpu::cpu(const pe_id &new_id, shared_ptr<mem> new_ram, uint32_t entry_point,
-         uint32_t stack_ptr, logger &l) throw(err)
-    : pe(new_id), time(0), pc(entry_point), ram(new_ram), net(),
-      jump_active(false), interrupts_enabled(false), stdout_buffer(), log(l) {
+cpu::cpu(const pe_id &new_id, const uint64_t &new_time, shared_ptr<mem> new_ram,
+         uint32_t entry_point, uint32_t stack_ptr, logger &l) throw(err)
+    : pe(new_id), running(true), time(new_time), pc(entry_point), ram(new_ram),
+      net(), jump_active(false), interrupts_enabled(false), stdout_buffer(),
+      log(l) {
     assert(ram);
-
     pc = entry_point;
     gprs[29] = stack_ptr;
     LOG(log,3) << "cpu " << get_id() << " created with entry point at "
@@ -30,19 +30,23 @@ cpu::~cpu() throw() { }
 void cpu::connect(shared_ptr<bridge> net_bridge) throw() { net = net_bridge; }
 
 void cpu::tick_positive_edge() throw(err) {
-    assert(ram);
-    execute();
-    if (jump_active && (jump_time == time)) {
-        LOG(log,5) << "[cpu " << get_id() << "]     pc <- "
-                   << hex << setfill('0') << setw(8) << jump_target << endl;
-        pc = jump_target;
-    } else {
-        pc += 4;
+    if (running) {
+        assert(ram);
+        execute();
+        if (jump_active && (jump_time == time)) {
+            LOG(log,5) << "[cpu " << get_id() << "]     pc <- "
+                    << hex << setfill('0') << setw(8) << jump_target << endl;
+            pc = jump_target;
+        } else {
+            pc += 4;
+        }
     }
 }
 
-void cpu::tick_negative_edge() throw(err) {
-    time += 1;
+void cpu::tick_negative_edge() throw(err) { }
+
+bool cpu::is_drained() const throw() {
+    return !running;
 }
 
 void cpu::flush_stdout() throw() {
@@ -71,9 +75,9 @@ void cpu::syscall(uint32_t call_no) throw(err) {
         break;
     }
     case SYSCALL_EXIT_SUCCESS:
-        flush_stdout(); throw exc_syscall_exit(0); break;
+        flush_stdout(); running = false; break;
     case SYSCALL_EXIT:
-        flush_stdout(); throw exc_syscall_exit(get(gpr(4))); break;
+        flush_stdout(); running = false; break;
     case SYSCALL_SEND:
         if (!net) throw exc_no_network(get_id().get_numeric_id());
         set(gpr(2), net->send(get(gpr(4)), ram->ptr(get(gpr(5))),

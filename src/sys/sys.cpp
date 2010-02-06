@@ -121,10 +121,10 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
             uint32_t mem_size = read_word(img);
             shared_ptr<mem> m(new mem(id, mem_start, mem_size, log));
             read_mem(m->ptr(mem_start), mem_size, img);
-            
+
             uint32_t cpu_entry_point = read_word(img);
             uint32_t cpu_stack_pointer = read_word(img);
-            p = shared_ptr<pe>(new cpu(pe_id(id), m, cpu_entry_point,
+            p = shared_ptr<pe>(new cpu(pe_id(id), time, m, cpu_entry_point,
                                        cpu_stack_pointer, log));
             break;
         }
@@ -293,4 +293,18 @@ void sys::tick_negative_edge() throw(err) {
     for (bridges_t::iterator i = bridges.begin(); i != bridges.end(); ++i) {
         i->second->tick_negative_edge();
     }
+}
+
+bool sys::is_drained() const throw() {
+    bool drained = true;
+    for (pes_t::const_iterator i = pes.begin(); i != pes.end(); ++i) {
+        drained &= i->second->is_drained();
+    }
+    for (nodes_t::const_iterator i = nodes.begin(); i != nodes.end(); ++i) {
+        drained &= i->second->is_drained();
+    }
+    for (bridges_t::const_iterator i = bridges.begin(); i != bridges.end(); ++i) {
+        drained &= i->second->is_drained();
+    }
+    return drained;
 }
