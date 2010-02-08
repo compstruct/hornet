@@ -53,10 +53,13 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
     if (in->bad()) throw err_bad_mem_img();
 }
 
-sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
-         shared_ptr<vector<string> > events_files, logger &new_log) throw(err)
-    : pes(), bridges(), nodes(), time(0),
-      stats(new statistics(time, stats_start, new_log)), log(new_log) {
+sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
+         uint64_t stats_start, shared_ptr<vector<string> > events_files,
+         shared_ptr<statistics> new_stats,
+         logger &new_log, shared_ptr<vcd_writer> new_vcd) throw(err)
+    : pes(), bridges(), nodes(), time(sys_time),
+      stats(new_stats), log(new_log),
+      vcd(new_vcd) {
     shared_ptr<id_factory<packet_id> >
         packet_id_factory(new id_factory<packet_id>("packet id"));
     uint32_t num_nodes = read_word(img);
@@ -84,7 +87,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
                                                log));
         uint32_t flits_per_q = read_word(img);
         shared_ptr<node> n(new node(node_id(id), flits_per_q, n_rt, n_vca,
-                                    stats, log));
+                                    stats, log, vcd));
         uint32_t n2b_bw = read_word(img);
         uint32_t b2n_bw = read_word(img);
         uint32_t b2n_xbar_bw = read_word(img);
@@ -102,7 +105,7 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
                                         n2b_queues, n2b_bw, b2n_queues, b2n_bw,
                                         flits_per_q, b2n_xbar_bw,
                                         one_q_per_f, one_f_per_q,
-                                        packet_id_factory, stats, log));
+                                        packet_id_factory, stats, log, vcd));
         shared_ptr<set_bridge_channel_alloc> vca =
             static_pointer_cast<set_bridge_channel_alloc>(b_vca);
         shared_ptr<ingress> b_n_i = n->get_ingress_from(b->get_id());
@@ -125,12 +128,12 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
             uint32_t cpu_entry_point = read_word(img);
             uint32_t cpu_stack_pointer = read_word(img);
             p = shared_ptr<pe>(new cpu(pe_id(id), time, m, cpu_entry_point,
-                                       cpu_stack_pointer, log));
+                                       cpu_stack_pointer, log, vcd));
             break;
         }
         case PE_INJECTOR: {
             shared_ptr<injector> inj(new injector(id, time, packet_id_factory,
-                                                  stats, log));
+                                                  stats, log, vcd));
             p = inj;
             (*injectors)[id] = inj;
             break;
@@ -203,7 +206,8 @@ sys::sys(shared_ptr<ifstream> img, uint64_t stats_start,
                     shared_ptr<arbiter>(new arbiter(time, nodes[from],
                                                     nodes[to], arb_scheme,
                                                     arb_min_bw, arb_period,
-                                                    arb_delay, stats, log));
+                                                    arb_delay, stats,
+                                                    log, vcd));
             }
         }
     }
@@ -277,7 +281,6 @@ void sys::tick_positive_edge() throw(err) {
     for (bridges_t::iterator i = bridges.begin(); i != bridges.end(); ++i) {
         i->second->tick_positive_edge();
     }
-    ++time;
 }
 
 void sys::tick_negative_edge() throw(err) {

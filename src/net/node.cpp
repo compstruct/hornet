@@ -9,10 +9,11 @@
 
 node::node(node_id new_id, uint32_t memsz, shared_ptr<router> new_rt,
            shared_ptr<channel_alloc> new_vca,
-           shared_ptr<statistics> stats, logger &l) throw()
+           shared_ptr<statistics> stats, logger &l,
+           shared_ptr<vcd_writer> v) throw()
     : id(new_id), flits_per_queue(memsz), rt(new_rt), vc_alloc(new_vca),
       pressures(new pressure_tracker(new_id, l)), ingresses(), egresses(),
-      xbar(new_id, stats, l), queue_ids(), log(l) {
+      xbar(new_id, stats, l, v), queue_ids(), log(l), vcd(v) {
     LOG(log,3) << "node " << id << " created with " << dec << memsz
         << " flit" << (memsz == 1 ? "" : "s") << " per queue" << endl;
 }

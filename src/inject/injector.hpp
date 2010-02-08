@@ -13,6 +13,7 @@
 #include "flow_id.hpp"
 #include "flit.hpp"
 #include "logger.hpp"
+#include "vcd.hpp"
 #include "statistics.hpp"
 #include "pe.hpp"
 
@@ -36,9 +37,10 @@ public:
 
 class injector : public pe {
 public:
-    injector(const pe_id &id, uint64_t &system_time,
+    injector(const pe_id &id, const uint64_t &system_time,
              shared_ptr<id_factory<packet_id> > packet_id_factory,
-             shared_ptr<statistics> stats, logger &log) throw(err);
+             shared_ptr<statistics> stats,
+             logger &log, shared_ptr<vcd_writer> vcd) throw(err);
     virtual ~injector() throw();
     virtual void connect(shared_ptr<bridge> net_bridge) throw(err);
     void add_event(const uint64_t &time, const flow_id &flow,
@@ -55,7 +57,7 @@ private:
     typedef map<flow_id, queue<waiting_packet> > waiting_packets_t;
     typedef map<uint32_t, incoming_packet> incoming_packets_t;
 
-    tick_t &system_time;
+    const tick_t &system_time;
     shared_ptr<bridge> net;
     events_t events;
     events_t::iterator next_event;
@@ -67,6 +69,7 @@ private:
     shared_ptr<id_factory<packet_id> > packet_id_factory;
     shared_ptr<statistics> stats;
     logger &log;
+    shared_ptr<vcd_writer> vcd;
 };
 
 #endif // __INJECTOR_HPP__

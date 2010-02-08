@@ -9,12 +9,13 @@
 #include "random.hpp"
 #include "injector.hpp"
 
-injector::injector(const pe_id &id, uint64_t &t,
+injector::injector(const pe_id &id, const uint64_t &t,
                    shared_ptr<id_factory<packet_id> > pif,
-                   shared_ptr<statistics> st, logger &l) throw(err)
+                   shared_ptr<statistics> st,
+                   logger &l, shared_ptr<vcd_writer> v) throw(err)
     : pe(id), system_time(t), net(), events(), next_event(events.begin()),
       waiting_packets(), incoming_packets(), flows(), flow_ids(), queue_ids(),
-      packet_id_factory(pif), stats(st), log(l) { }
+      packet_id_factory(pif), stats(st), log(l), vcd(v) { }
 
 injector::~injector() throw() { }
 

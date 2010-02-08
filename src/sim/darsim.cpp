@@ -13,6 +13,7 @@
 #include "endian.hpp"
 #include "version.hpp"
 #include "logger.hpp"
+#include "vcd.hpp"
 #include "statistics.hpp"
 #include "sys.hpp"
 
@@ -46,9 +47,10 @@ static uint32_t fresh_random_seed() {
     return random_seed;
 }
 
-shared_ptr<sys> new_system(string file, uint64_t stats_start,
-                           shared_ptr<vector<string> > events_files)
-    throw(err) {
+shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
+                           uint64_t stats_start,
+                           shared_ptr<vector<string> > evt_files,
+                           shared_ptr<vcd_writer> vcd) throw(err) {
     shared_ptr<ifstream> img(new ifstream(file.c_str(), ios::in | ios::binary));
     if (img->fail()) throw err_parse(file, "cannot read file");
     char file_magic[5] = { 0, 0, 0, 0, 0 };
@@ -63,7 +65,8 @@ shared_ptr<sys> new_system(string file, uint64_t stats_start,
             << "does not match simulator (" << version << ")";
         throw err_parse(file, msg.str());
     }
-    shared_ptr<sys> s(new sys(img, stats_start, events_files, syslog));
+    shared_ptr<sys> s(new sys(sys_time, img, stats_start,
+                              evt_files, stats, syslog, vcd));
     img->close();
     return s;
 }
@@ -87,6 +90,8 @@ int main(int argc, char **argv) {
          "read event schedule from file arg")
         ("log", po::value<vector<string> >()->composing(),
          "write a log to file arg")
+        ("vcd", po::value<vector<string> >()->composing(),
+         "write waveforms to file arg")
         ("verbosity", po::value<int>(), "set console verbosity")
         ("log-verbosity", po::value<int>(), "set log verbosity")
         ("random-seed", po::value<uint32_t>(),
@@ -143,6 +148,7 @@ int main(int argc, char **argv) {
     uint64_t num_cycles = 0;
     uint64_t num_packets = 0;
     uint64_t stats_start = 0;
+    uint64_t sys_time = 0;
     if (opts.count("cycles")) {
         num_cycles = opts["cycles"].as<uint64_t>();
     }
@@ -174,9 +180,24 @@ int main(int argc, char **argv) {
         report_stats = false;
     }
     LOG(syslog,0) << dar_full_version << endl << endl;
+    shared_ptr<vcd_writer> vcd = shared_ptr<vcd_writer>();
+    if (opts.count("vcd") == 1) {
+        string fn = opts["vcd"].as<string>();
+        shared_ptr<ofstream> f(new ofstream(fn.c_str()));
+        if (f->fail()) {
+            cerr << "failed to write VCD: " << fn << endl;
+            exit(1);
+        }
+        vcd = shared_ptr<vcd_writer>(new vcd_writer(sys_time, f));
+    } else if (opts.count("vcd") > 1) {
+        cerr << "ERROR: option --vcd admits only one argument" << endl;
+        exit(1);
+    }
+    stats = shared_ptr<statistics>(new statistics(sys_time, stats_start,
+                                                  syslog));
     shared_ptr<sys> s;
     try {
-        s = new_system(mem_image, stats_start, events_files);
+        s = new_system(sys_time, mem_image, stats_start, events_files, vcd);
     } catch (const err_parse &e) {
         cerr << e << endl;
         exit(1);
@@ -184,7 +205,6 @@ int main(int argc, char **argv) {
         cerr << "ERROR: " << e << endl;
         exit(1);
     }
-    stats = s->get_statistics();
     custom_signal_handler_t prev_sig_int_handler =
         signal(SIGINT, sig_int_handler);
     if (prev_sig_int_handler == SIG_IGN) signal(SIGINT, prev_sig_int_handler);
@@ -215,6 +235,7 @@ int main(int argc, char **argv) {
              ++cycle) {
             s->tick_positive_edge();
             s->tick_negative_edge();
+            ++sys_time;
         }
         stats->end_sim();
         LOG(syslog,0) << endl << "simulation ended successfully" << endl;

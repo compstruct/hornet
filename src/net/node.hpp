@@ -8,6 +8,7 @@
 #include <iostream>
 #include <boost/shared_ptr.hpp>
 #include "logger.hpp"
+#include "vcd.hpp"
 #include "virtual_queue.hpp"
 #include "router.hpp"
 #include "ingress.hpp"
@@ -22,7 +23,8 @@ public:
     explicit node(node_id id, uint32_t flits_per_queue,
                   shared_ptr<router> new_router,
                   shared_ptr<channel_alloc> new_vc_alloc,
-                  shared_ptr<statistics> stats, logger &log) throw();
+                  shared_ptr<statistics> stats, logger &log,
+                  shared_ptr<vcd_writer> vcd) throw();
     const node_id &get_id() const throw();
     void add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err);
     void add_egress(node_id dst, shared_ptr<egress> egress) throw(err);
@@ -52,6 +54,7 @@ private:
     crossbar xbar;
     set<virtual_queue_id> queue_ids;
     logger &log;
+    shared_ptr<vcd_writer> vcd;
 };
 
 inline const node_id &node::get_id() const throw() { return id; }

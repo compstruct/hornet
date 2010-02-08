@@ -56,10 +56,11 @@ bridge::bridge(shared_ptr<node> n,
                unsigned flits_per_queue, unsigned b2n_bw_to_xbar,
                bool one_q_per_f, bool one_f_per_q,
                shared_ptr<id_factory<packet_id> > pif,
-               shared_ptr<statistics> st, logger &l) throw(err)
+               shared_ptr<statistics> st, logger &l,
+               shared_ptr<vcd_writer> v) throw(err)
     : id(n->get_id()), target(n), vc_alloc(bridge_vca), incoming(), outgoing(),
       ingress_dmas(), egress_dmas(), vqids(), packet_id_factory(pif),
-      stats(st), log(l) {
+      stats(st), log(l), vcd(v) {
     unsigned dma_no = 1;
     if (n2b_vq_ids.size() > 32)
         throw err_too_many_bridge_queues(id.get_numeric_id(),

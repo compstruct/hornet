@@ -14,5 +14,6 @@ libdarcommon_la_SOURCES =  \
     par_random.hpp par_random.cpp \
     error.hpp error.cpp \
     logger.hpp logger.cpp \
+    vcd.hpp vcd.cpp \
     version.hpp version.cpp
 

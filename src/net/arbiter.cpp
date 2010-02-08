@@ -6,17 +6,19 @@
 #include <iomanip>
 #include "arbiter.hpp"
 
-arbiter::arbiter(uint64_t &time, shared_ptr<node> src, shared_ptr<node> dst,
+arbiter::arbiter(const uint64_t &time,
+                 shared_ptr<node> src, shared_ptr<node> dst,
                  arbitration_t new_sch, unsigned new_min_bw,
                  unsigned new_period, unsigned new_delay,
-                 shared_ptr<statistics> new_stats, logger &l) throw(err)
+                 shared_ptr<statistics> new_stats,
+                 logger &l, shared_ptr<vcd_writer> v) throw(err)
     : system_time(time), scheme(new_sch), min_bw(new_min_bw),
       period(new_period), delay(new_delay), next_arb(time), arb_queue(),
       src_to_dst(src->get_egress_to(dst->get_id())),
       dst_to_src(dst->get_egress_to(src->get_id())),
       total_bw(src_to_dst->get_bandwidth() + dst_to_src->get_bandwidth()),
       last_queued_src_to_dst_bw(src_to_dst->get_bandwidth()),
-      stats(new_stats), log(l) {
+      stats(new_stats), log(l), vcd(v) {
     if (scheme != AS_NONE && scheme != AS_DUMB)
         throw err_bad_arb_scheme(scheme);
     if (total_bw < 2 * min_bw) {

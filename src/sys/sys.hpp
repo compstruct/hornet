@@ -11,6 +11,7 @@
 #include <boost/shared_ptr.hpp>
 #include "cstdint.hpp"
 #include "logger.hpp"
+#include "vcd.hpp"
 #include "statistics.hpp"
 #include "pe.hpp"
 #include "node.hpp"
@@ -22,8 +23,10 @@ using namespace boost;
 
 class sys {
 public:
-    sys(shared_ptr<ifstream> image, uint64_t stats_t0,
-        shared_ptr<vector<string> > event_files, logger &log) throw(err);
+    sys(const uint64_t &time, shared_ptr<ifstream> image, uint64_t stats_t0,
+        shared_ptr<vector<string> > event_files,
+        shared_ptr<statistics> stats, logger &log,
+        shared_ptr<vcd_writer> vcd) throw(err);
     shared_ptr<statistics> get_statistics() throw();
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
@@ -39,9 +42,10 @@ private:
     nodes_t nodes;
     arbiters_t arbiters;
 
-    uint64_t time;
+    const uint64_t &time;
     shared_ptr<statistics> stats;
     logger &log;
+    shared_ptr<vcd_writer> vcd;
 };
 
 #endif // __SYS_HPP__

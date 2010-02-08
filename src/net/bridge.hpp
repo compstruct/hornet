@@ -12,6 +12,7 @@
 #include <boost/shared_ptr.hpp>
 #include "error.hpp"
 #include "logger.hpp"
+#include "vcd.hpp"
 #include "id_factory.hpp"
 #include "statistics.hpp"
 #include "virtual_queue.hpp"
@@ -35,7 +36,7 @@ public:
                     bool one_queue_per_flow, bool one_flow_per_queue,
                     shared_ptr<id_factory<packet_id> > packet_id_factory,
                     shared_ptr<statistics> stats,
-                    logger &new_log) throw(err);
+                    logger &new_log, shared_ptr<vcd_writer> vcd) throw(err);
     const node_id &get_id() const throw();
     uint32_t get_transmission_done(uint32_t transmission) throw();
     uint32_t get_waiting_queues() throw();
@@ -77,6 +78,7 @@ private:
     shared_ptr<id_factory<packet_id> > packet_id_factory;
     shared_ptr<statistics> stats;
     logger &log;
+    shared_ptr<vcd_writer> vcd;
 private:
     bridge(); // not defined
     bridge(const bridge &); // not defined

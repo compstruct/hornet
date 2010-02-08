@@ -5,6 +5,8 @@
 #define __ARBITER_HPP__
 
 #include <queue>
+#include "logger.hpp"
+#include "vcd.hpp"
 #include "statistics.hpp"
 #include "node.hpp"
 
@@ -16,13 +18,14 @@ typedef enum {
 
 class arbiter {
 public:
-    arbiter(uint64_t &time, shared_ptr<node> src, shared_ptr<node> dst,
+    arbiter(const uint64_t &time, shared_ptr<node> src, shared_ptr<node> dst,
             arbitration_t scheme, unsigned min_bw, unsigned period,
-            unsigned delay, shared_ptr<statistics> stats, logger &log) throw(err);
+            unsigned delay, shared_ptr<statistics> stats,
+            logger &log, shared_ptr<vcd_writer> vcd) throw(err);
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
 private:
-    uint64_t &system_time;
+    const uint64_t &system_time;
     arbitration_t scheme;
     unsigned min_bw;    // guarantee minimum bandwidth in each direction
     unsigned period;    // run arbitration every sample_period ticks
@@ -35,6 +38,7 @@ private:
     unsigned last_queued_src_to_dst_bw;
     shared_ptr<statistics> stats;
     logger &log;
+    shared_ptr<vcd_writer> vcd;
 private:
     arbiter();                // not implemented
     arbiter(const arbiter &); // not implemented

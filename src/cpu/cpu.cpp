@@ -13,10 +13,11 @@
 using namespace std;
 
 cpu::cpu(const pe_id &new_id, const uint64_t &new_time, shared_ptr<mem> new_ram,
-         uint32_t entry_point, uint32_t stack_ptr, logger &l) throw(err)
+         uint32_t entry_point, uint32_t stack_ptr,
+         logger &l, shared_ptr<vcd_writer> v) throw(err)
     : pe(new_id), running(true), time(new_time), pc(entry_point), ram(new_ram),
       net(), jump_active(false), interrupts_enabled(false), stdout_buffer(),
-      log(l) {
+      log(l), vcd(v) {
     assert(ram);
     pc = entry_point;
     gprs[29] = stack_ptr;

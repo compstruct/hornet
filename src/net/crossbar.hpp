@@ -11,10 +11,12 @@
 #include "egress.hpp"
 #include "statistics.hpp"
 #include "logger.hpp"
+#include "vcd.hpp"
 
 class crossbar {
 public:
-    crossbar(node_id parent, shared_ptr<statistics> stats, logger &log) throw();
+    crossbar(node_id parent, shared_ptr<statistics> stats,
+             logger &log, shared_ptr<vcd_writer> vcd) throw();
     void add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err);
     void add_egress(node_id dst, shared_ptr<egress> egress) throw(err);
     void tick_positive_edge() throw(err);
@@ -35,6 +37,7 @@ private:
     vqs_t egress_qs;
     shared_ptr<statistics> stats;
     logger &log;
+    shared_ptr<vcd_writer> vcd;
 };
 
 inline const node_id &crossbar::get_id() throw() { return id; }
