@@ -5,9 +5,9 @@
 #include "random.hpp"
 #include "crossbar.hpp"
 
-crossbar::crossbar(node_id parent, shared_ptr<statistics> s,
-                   logger &l, shared_ptr<vcd_writer> v) throw()
-    : id(parent), ingresses(), egresses(), stats(s), log(l), vcd(v) { }
+crossbar::crossbar(node_id parent, shared_ptr<statistics> s, logger &l, 
+                   shared_ptr<BoostRand> r, shared_ptr<vcd_writer> v) throw()
+    : id(parent), ingresses(), egresses(), stats(s), log(l), ran(r), vcd(v) { }
 
 void crossbar::add_ingress(node_id src, shared_ptr<ingress> ing) throw(err) {
     if (ingresses.find(src) != ingresses.end()) {

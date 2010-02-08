@@ -8,12 +8,13 @@
 #include "boost/tuple/tuple.hpp"
 #include "boost/tuple/tuple_comparison.hpp"
 #include "router.hpp"
+#include "par_random.hpp"
 
 using namespace boost;
 
 class set_router : public router {
 public:
-    set_router(node_id id, logger &log) throw();
+    set_router(node_id id, logger &log, shared_ptr<BoostRand> ran) throw();
     virtual ~set_router() throw();
     virtual tuple<node_id,flow_id> route(node_id src_node_id, flow_id flow)
         throw(err);
@@ -26,6 +27,7 @@ private:
     typedef vector<tuple<node_id,flow_id,double> > route_nodes_t;
     typedef map<route_query_t, route_nodes_t> routes_t;
     routes_t routes;
+    shared_ptr<BoostRand> ran;
 };
 
 #endif // __SET_ROUTER_HPP__

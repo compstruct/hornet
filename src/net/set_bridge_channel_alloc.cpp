@@ -6,9 +6,10 @@
 
 set_bridge_channel_alloc::set_bridge_channel_alloc(node_id n, bool one_q_per_f,
                                                    bool one_f_per_q,
-                                                   logger &l) throw()
+                                                   logger &l,
+                                                   shared_ptr<BoostRand> r) throw()
     : bridge_channel_alloc(n, one_q_per_f, one_f_per_q, l), queues(),
-      routes() { }
+      routes(), ran(r) { }
 
 set_bridge_channel_alloc::~set_bridge_channel_alloc() throw() { }
 
@@ -78,7 +79,8 @@ virtual_queue_id set_bridge_channel_alloc::request(flow_id f) throw(err) {
     }
     if (!free_qs.empty()) {
         virtual_queue_id vqid;
-        double r = random_range_double(prop_sum);
+        //double r = random_range_double(prop_sum);
+        double r = ran->random_range_double(prop_sum);
         for (route_queues_t::const_iterator oqi = free_qs.begin();
              oqi != free_qs.end(); ++oqi) {
             shared_ptr<virtual_queue> oq; double prop; tie(oq,prop) = *oqi;

@@ -17,6 +17,7 @@
 #include "node.hpp"
 #include "arbiter.hpp"
 #include "bridge.hpp"
+#include "par_random.hpp"
 
 using namespace std;
 using namespace boost;
@@ -26,17 +27,19 @@ public:
     sys(const uint64_t &time, shared_ptr<ifstream> image, uint64_t stats_t0,
         shared_ptr<vector<string> > event_files,
         shared_ptr<statistics> stats, logger &log,
-        shared_ptr<vcd_writer> vcd) throw(err);
+        shared_ptr<vcd_writer> vcd, uint32_t seed) throw(err);
     shared_ptr<statistics> get_statistics() throw();
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
     bool is_drained() const throw();
 private:
+    typedef map<unsigned, shared_ptr<BoostRand> > rand_t;
     typedef map<unsigned, shared_ptr<pe> > pes_t;
     typedef map<unsigned, shared_ptr<bridge> > bridges_t;
     typedef map<unsigned, shared_ptr<node> > nodes_t;
     typedef map<tuple<unsigned, unsigned>, shared_ptr<arbiter> > arbiters_t;
 
+    rand_t rand;
     pes_t pes;
     bridges_t bridges;
     nodes_t nodes;
@@ -49,4 +52,3 @@ private:
 };
 
 #endif // __SYS_HPP__
-

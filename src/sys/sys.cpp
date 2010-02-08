@@ -56,7 +56,8 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
 sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
          uint64_t stats_start, shared_ptr<vector<string> > events_files,
          shared_ptr<statistics> new_stats,
-         logger &new_log, shared_ptr<vcd_writer> new_vcd) throw(err)
+         logger &new_log, shared_ptr<vcd_writer> new_vcd,
+         uint32_t seed) throw(err)
     : pes(), bridges(), nodes(), time(sys_time),
       stats(new_stats), log(new_log),
       vcd(new_vcd) {
@@ -77,17 +78,18 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
     shared_ptr<flow_starts_t> flow_starts(new flow_starts_t());
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
-        shared_ptr<router> n_rt(new set_router(id, log));
+        shared_ptr<BoostRand> ran(new BoostRand(seed+id));
+        shared_ptr<router> n_rt(new set_router(id, log, ran));
         uint32_t one_q_per_f = read_word(img);
         uint32_t one_f_per_q = read_word(img);
         shared_ptr<channel_alloc>
-            n_vca(new set_channel_alloc(id, one_q_per_f, one_f_per_q, log));
+            n_vca(new set_channel_alloc(id, one_q_per_f, one_f_per_q, log, ran));
         shared_ptr<bridge_channel_alloc>
             b_vca(new set_bridge_channel_alloc(id, one_q_per_f, one_f_per_q,
-                                               log));
+                                               log, ran));
         uint32_t flits_per_q = read_word(img);
         shared_ptr<node> n(new node(node_id(id), flits_per_q, n_rt, n_vca,
-                                    stats, log, vcd));
+                                    stats, log, ran, vcd));
         uint32_t n2b_bw = read_word(img);
         uint32_t b2n_bw = read_word(img);
         uint32_t b2n_xbar_bw = read_word(img);
@@ -133,7 +135,7 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
         }
         case PE_INJECTOR: {
             shared_ptr<injector> inj(new injector(id, time, packet_id_factory,
-                                                  stats, log, vcd));
+                                                  stats, log, ran, vcd));
             p = inj;
             (*injectors)[id] = inj;
             break;
@@ -142,6 +144,7 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
             throw err_bad_mem_img();
         }
         p->connect(b);
+        rand[id] = ran;
         pes[id] = p;
         bridges[id] = b;
         nodes[id] = n;

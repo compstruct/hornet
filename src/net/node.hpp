@@ -24,6 +24,7 @@ public:
                   shared_ptr<router> new_router,
                   shared_ptr<channel_alloc> new_vc_alloc,
                   shared_ptr<statistics> stats, logger &log,
+                  shared_ptr<BoostRand> ran,
                   shared_ptr<vcd_writer> vcd) throw();
     const node_id &get_id() const throw();
     void add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err);

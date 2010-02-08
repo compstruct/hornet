@@ -9,11 +9,12 @@
 #include <boost/tuple/tuple_comparison.hpp>
 #include "channel_alloc.hpp"
 #include "egress.hpp"
+#include "par_random.hpp"
 
 class set_channel_alloc : public channel_alloc {
 public:
     set_channel_alloc(node_id src, bool one_queue_per_flow,
-                      bool one_flow_per_queue, logger &log) throw();
+                      bool one_flow_per_queue, logger &log, shared_ptr<BoostRand> ran) throw();
     virtual ~set_channel_alloc() throw();
     virtual void allocate() throw(err);
     virtual void add_egress(shared_ptr<egress> egress) throw(err);
@@ -28,6 +29,7 @@ private:
     typedef vector<tuple<shared_ptr<virtual_queue>, double> > route_queues_t;
     typedef map<route_query_t, route_queues_t> routes_t;
     routes_t routes;
+    shared_ptr<BoostRand> ran;
 };
 
 #endif // __SET_CHANNEL_ALLOC_HPP__

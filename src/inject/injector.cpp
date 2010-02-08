@@ -11,11 +11,11 @@
 
 injector::injector(const pe_id &id, const uint64_t &t,
                    shared_ptr<id_factory<packet_id> > pif,
-                   shared_ptr<statistics> st,
-                   logger &l, shared_ptr<vcd_writer> v) throw(err)
+                   shared_ptr<statistics> st, logger &l,
+                   shared_ptr<BoostRand> r, shared_ptr<vcd_writer> v) throw(err)
     : pe(id), system_time(t), net(), events(), next_event(events.begin()),
       waiting_packets(), incoming_packets(), flows(), flow_ids(), queue_ids(),
-      packet_id_factory(pif), stats(st), log(l), vcd(v) { }
+      packet_id_factory(pif), stats(st), log(l), ran(r), vcd(v) { }
 
 injector::~injector() throw() { }
 

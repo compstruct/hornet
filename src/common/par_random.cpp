@@ -10,7 +10,7 @@ BoostRand::BoostRand( const uint32_t seed )
      rng.seed (seed);
 }
 
-int BoostRand::random_range (int max) {
+int BoostRand::random_range_p (int max) {
    double uniform_random = gen();
    return static_cast<int>(max * uniform_random);
 }

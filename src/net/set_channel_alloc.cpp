@@ -8,8 +8,9 @@
 #include "random.hpp"
 
 set_channel_alloc::set_channel_alloc(node_id n, bool one_q_per_f,
-                                     bool one_f_per_q, logger &l) throw()
-    : channel_alloc(n, one_q_per_f, one_f_per_q, l), egresses() {
+                                     bool one_f_per_q, logger &l,
+                                     shared_ptr<BoostRand> r) throw()
+    : channel_alloc(n, one_q_per_f, one_f_per_q, l), egresses(), ran(r) {
     if (one_q_per_f || one_f_per_q) {
         LOG(log,3) << "node " << get_id() << " set channel alloc: ";
         if (one_q_per_f && !one_f_per_q) {
@@ -128,7 +129,8 @@ void set_channel_alloc::allocate() throw(err) {
             }
         }
         if (!free_qs.empty()) {
-            double r = random_range_double(prop_sum);
+            //double r = random_range_double(prop_sum);
+            double r = ran->random_range_double(prop_sum);
             for (route_queues_t::const_iterator oqi = free_qs.begin();
                  oqi != free_qs.end(); ++oqi) {
                 shared_ptr<virtual_queue> oq; double prop; tie(oq,prop) = *oqi;

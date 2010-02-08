@@ -16,6 +16,7 @@
 #include "vcd.hpp"
 #include "statistics.hpp"
 #include "pe.hpp"
+#include "par_random.hpp"
 
 using namespace std;
 using namespace boost;
@@ -39,8 +40,8 @@ class injector : public pe {
 public:
     injector(const pe_id &id, const uint64_t &system_time,
              shared_ptr<id_factory<packet_id> > packet_id_factory,
-             shared_ptr<statistics> stats,
-             logger &log, shared_ptr<vcd_writer> vcd) throw(err);
+             shared_ptr<statistics> stats, logger &log,
+             shared_ptr<BoostRand> ran, shared_ptr<vcd_writer> vcd) throw(err);
     virtual ~injector() throw();
     virtual void connect(shared_ptr<bridge> net_bridge) throw(err);
     void add_event(const uint64_t &time, const flow_id &flow,
@@ -69,6 +70,7 @@ private:
     shared_ptr<id_factory<packet_id> > packet_id_factory;
     shared_ptr<statistics> stats;
     logger &log;
+    shared_ptr<BoostRand> ran;
     shared_ptr<vcd_writer> vcd;
 };
 

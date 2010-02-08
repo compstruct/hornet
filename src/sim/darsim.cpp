@@ -50,7 +50,8 @@ static uint32_t fresh_random_seed() {
 shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
                            uint64_t stats_start,
                            shared_ptr<vector<string> > evt_files,
-                           shared_ptr<vcd_writer> vcd) throw(err) {
+                           shared_ptr<vcd_writer> vcd,
+                           uint32_t g_random_seed) throw(err) {
     shared_ptr<ifstream> img(new ifstream(file.c_str(), ios::in | ios::binary));
     if (img->fail()) throw err_parse(file, "cannot read file");
     char file_magic[5] = { 0, 0, 0, 0, 0 };
@@ -66,7 +67,7 @@ shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
         throw err_parse(file, msg.str());
     }
     shared_ptr<sys> s(new sys(sys_time, img, stats_start,
-                              evt_files, stats, syslog, vcd));
+                              evt_files, stats, syslog, vcd, g_random_seed));
     img->close();
     return s;
 }
@@ -149,6 +150,7 @@ int main(int argc, char **argv) {
     uint64_t num_packets = 0;
     uint64_t stats_start = 0;
     uint64_t sys_time = 0;
+    uint32_t g_random_seed = 0xdeadbeef;
     if (opts.count("cycles")) {
         num_cycles = opts["cycles"].as<uint64_t>();
     }
@@ -166,8 +168,10 @@ int main(int argc, char **argv) {
     }
     if (opts.count("random-seed")) {
         srandom(opts["random-seed"].as<uint32_t>());
+        g_random_seed = opts["random-seed"].as<uint32_t>();
     } else {
         srandom(fresh_random_seed());
+        g_random_seed = fresh_random_seed();
     }
     shared_ptr<vector<string> > events_files;
     if (opts.count("events")) {
@@ -197,7 +201,7 @@ int main(int argc, char **argv) {
                                                   syslog));
     shared_ptr<sys> s;
     try {
-        s = new_system(sys_time, mem_image, stats_start, events_files, vcd);
+        s = new_system(sys_time, mem_image, stats_start, events_files, vcd, g_random_seed);
     } catch (const err_parse &e) {
         cerr << e << endl;
         exit(1);

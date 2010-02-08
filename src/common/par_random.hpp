@@ -19,12 +19,13 @@ public:
    BoostRand(const uint32_t seed);
    
    // return a natural number selected u.a.r. from [0..max)
-   int random_range(int max);
+   int random_range_p (int max);
    
    // return a real number selected u.a.r. from [0..max)
    double random_range_double(double max);
 
    int getUniform();
+
 };
 
 inline int BoostRand::getUniform() {

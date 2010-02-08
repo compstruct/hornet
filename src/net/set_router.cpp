@@ -6,7 +6,8 @@
 #include "random.hpp"
 #include "set_router.hpp"
 
-set_router::set_router(node_id i, logger &l) throw() : router(i,l), routes() { }
+set_router::set_router(node_id i, logger &l, shared_ptr<BoostRand> r) throw() 
+    : router(i,l), routes(), ran(r) { }
 
 set_router::~set_router() throw() { }
 
@@ -18,7 +19,8 @@ tuple<node_id,flow_id> set_router::route(node_id src, flow_id f) throw(err) {
                                 f.get_numeric_id());
     const route_nodes_t &nodes = ri->second;
     assert(!nodes.empty());
-    double r = random_range_double(nodes.back().get<2>());
+    //double r = random_range_double(nodes.back().get<2>());
+    double r = ran->random_range_double(nodes.back().get<2>());
     node_id dst_n(0xdeadbeef);
     flow_id dst_f(0xdeadbeef);
     for (route_nodes_t::const_iterator ni = nodes.begin();
