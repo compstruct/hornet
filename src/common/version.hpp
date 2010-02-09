@@ -5,7 +5,7 @@
 #define __VERSION_HPP__
 
 #include <string>
-#include "config.hpp"
+#include "dconfig.hpp"
 
 extern const std::string dar_name;
 extern const std::string dar_version;

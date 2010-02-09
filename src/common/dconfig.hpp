@@ -5,7 +5,7 @@
 #define __CONFIG_HPP__
 
 extern "C" {
-#include "config.h"
+#include "dconfig.h"
 }
 
 #endif // __CONFIG_HPP__

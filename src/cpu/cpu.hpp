@@ -25,8 +25,11 @@ public:
                  shared_ptr<vcd_writer> vcd) throw(err);
     virtual ~cpu() throw();
     virtual void connect(shared_ptr<bridge> net_bridge) throw();
+    virtual void add_packet(uint64_t time, const flow_id &flow, uint32_t len) throw(err);
+    virtual bool work_queued() throw(err);
     virtual void tick_positive_edge() throw(err);
     virtual void tick_negative_edge() throw(err);
+    virtual bool is_ready_to_offer() throw(err);
     virtual bool is_drained() const throw();
 
 private:

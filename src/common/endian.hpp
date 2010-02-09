@@ -4,7 +4,7 @@
 #ifndef __ENDIAN_HPP__
 #define __ENDIAN_HPP__
 
-#include "config.hpp"
+#include "dconfig.hpp"
 #include "cstdint.hpp"
 
 inline uint32_t endian(uint32_t word) {

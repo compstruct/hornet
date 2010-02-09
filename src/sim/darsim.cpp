@@ -67,7 +67,7 @@ shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
         throw err_parse(file, msg.str());
     }
     shared_ptr<sys> s(new sys(sys_time, img, stats_start,
-                              evt_files, stats, syslog, vcd, g_random_seed));
+                              evt_files, stats, syslog, vcd, g_random_seed, false));
     img->close();
     return s;
 }

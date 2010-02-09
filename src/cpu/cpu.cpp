@@ -46,6 +46,16 @@ void cpu::tick_positive_edge() throw(err) {
 
 void cpu::tick_negative_edge() throw(err) { }
 
+void cpu::add_packet(uint64_t time, const flow_id &flow, uint32_t len) throw(err) { }
+
+bool cpu::work_queued() throw(err) {
+    return 0;
+}
+
+bool cpu::is_ready_to_offer() throw(err) {
+    return 0;
+}
+
 bool cpu::is_drained() const throw() {
     return !running;
 }

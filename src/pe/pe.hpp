@@ -42,8 +42,11 @@ class pe {
 public:
     virtual ~pe() throw();
     virtual void connect(shared_ptr<bridge> net_bridge) throw(err) = 0;
+    virtual void add_packet(uint64_t time, const flow_id &f, unsigned l) throw(err) = 0;
+    virtual bool work_queued() throw(err) = 0;
     virtual void tick_positive_edge() throw(err) = 0;
     virtual void tick_negative_edge() throw(err) = 0;
+    virtual bool is_ready_to_offer() throw(err) = 0;
     virtual bool is_drained() const throw() = 0;
     pe_id get_id() const throw();
 protected:

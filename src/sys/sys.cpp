@@ -20,6 +20,7 @@
 #include "event_parser.hpp"
 #include "id_factory.hpp"
 #include "sys.hpp"
+#include "ginj.hpp"
 
 typedef enum {
     PE_CPU = 0,
@@ -57,7 +58,7 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
          uint64_t stats_start, shared_ptr<vector<string> > events_files,
          shared_ptr<statistics> new_stats,
          logger &new_log, shared_ptr<vcd_writer> new_vcd,
-         uint32_t seed) throw(err)
+         uint32_t seed, bool use_graphite_inj) throw(err)
     : pes(), bridges(), nodes(), time(sys_time),
       stats(new_stats), log(new_log),
       vcd(new_vcd) {
@@ -136,7 +137,14 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
         case PE_INJECTOR: {
             shared_ptr<injector> inj(new injector(id, time, packet_id_factory,
                                                   stats, log, ran, vcd));
-            p = inj;
+            shared_ptr<ginj> g_inj(new ginj(id, time, packet_id_factory, 
+                                            stats, log, ran));
+            if (use_graphite_inj) {
+               p = g_inj;
+            }
+            else {
+               p = inj;
+            }
             (*injectors)[id] = inj;
             break;
         }
@@ -145,7 +153,8 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
         }
         p->connect(b);
         rand[id] = ran;
-        pes[id] = p;
+        //pes[id] = p;
+        pes.push_back(p);
         bridges[id] = b;
         nodes[id] = n;
         br_vcas[id] = b_vca;
@@ -275,8 +284,11 @@ void sys::tick_positive_edge() throw(err) {
     for (arbiters_t::iterator i = arbiters.begin(); i != arbiters.end(); ++i) {
         i->second->tick_positive_edge();
     }
-    for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
-        i->second->tick_positive_edge();
+    //for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
+    //    i->second->tick_positive_edge();
+    //}
+    for (uint32_t i = 0; i < pes.size(); i++) {
+        pes[i]->tick_positive_edge();
     }
     for (nodes_t::iterator i = nodes.begin(); i != nodes.end(); ++i) {
         i->second->tick_positive_edge();
@@ -290,8 +302,11 @@ void sys::tick_negative_edge() throw(err) {
     for (arbiters_t::iterator i = arbiters.begin(); i != arbiters.end(); ++i) {
         i->second->tick_negative_edge();
     }
-    for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
-        i->second->tick_negative_edge();
+    //for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
+    //    i->second->tick_negative_edge();
+    //}
+    for (uint32_t i = 0; i < pes.size(); i++) {
+        pes[i]->tick_negative_edge();
     }
     for (nodes_t::iterator i = nodes.begin(); i != nodes.end(); ++i) {
         i->second->tick_negative_edge();
@@ -301,10 +316,33 @@ void sys::tick_negative_edge() throw(err) {
     }
 }
 
+bool sys::work_tbd_darsim() throw(err) {
+    for (uint32_t i = 0; i < pes.size(); i++) {
+       if (pes[i]->work_queued()) {
+          return true;
+       }
+    }
+    return false;
+}
+
+bool sys::nothing_to_offer() throw(err) {
+    bool offer = false;
+    for (uint32_t i = 0; i < pes.size(); i++) {
+       offer = pes[i]->is_ready_to_offer();
+       if (offer) {
+          return false;
+       }
+    }
+    return true;
+}
+
 bool sys::is_drained() const throw() {
     bool drained = true;
-    for (pes_t::const_iterator i = pes.begin(); i != pes.end(); ++i) {
-        drained &= i->second->is_drained();
+    //for (pes_t::const_iterator i = pes.begin(); i != pes.end(); ++i) {
+    //   drained &= i->second->is_drained();
+    //}
+    for (uint32_t i = 0; i < pes.size(); i++) {
+        drained &= pes[i]->is_drained();
     }
     for (nodes_t::const_iterator i = nodes.begin(); i != nodes.end(); ++i) {
         drained &= i->second->is_drained();

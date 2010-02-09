@@ -7,4 +7,5 @@ AM_CXXFLAGS = -Wall -Werror
 noinst_LTLIBRARIES = libdarinject.la
 
 libdarinject_la_SOURCES = \
-    injector.hpp injector.cpp
+    injector.hpp injector.cpp \
+    ginj.hpp ginj.cpp

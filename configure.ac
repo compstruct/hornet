@@ -2,7 +2,7 @@ AC_PREREQ(2.61)
 AC_INIT([dar], [0.05])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])
-AC_CONFIG_HEADER([src/common/config.h])
+AC_CONFIG_HEADER([src/common/dconfig.h])
 AM_INIT_AUTOMAKE([foreign])
 PACKAGE_RELEASE_NAME="miyakowasure"
 AC_DEFINE_UNQUOTED(PACKAGE_RELEASE_NAME, "$PACKAGE_RELEASE_NAME", [Release])

@@ -102,6 +102,16 @@ void injector::tick_positive_edge() throw(err) {
 
 void injector::tick_negative_edge() throw(err) { }
 
+void injector::add_packet(uint64_t time, const flow_id &flow, uint32_t len) throw(err) { }
+
+bool injector::work_queued() throw(err) {
+    return 0;
+}
+
+bool injector::is_ready_to_offer() throw(err) {
+    return 0;
+}
+
 bool injector::is_drained() const throw() {
     bool drained = true;
     drained &= next_event == events.end();
