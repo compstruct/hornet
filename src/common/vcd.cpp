@@ -2,6 +2,7 @@
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
 #include <cassert>
+#include <cstdio>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include "version.hpp"
 #include "vcd.hpp"
