@@ -30,6 +30,8 @@ cpu::~cpu() throw() { }
 
 void cpu::connect(shared_ptr<bridge> net_bridge) throw() { net = net_bridge; }
 
+void cpu::set_stop_darsim() throw(err) { }
+
 void cpu::tick_positive_edge() throw(err) {
     if (running) {
         assert(ram);

@@ -27,6 +27,7 @@ public:
     virtual bool work_queued() throw(err);
     virtual void tick_positive_edge() throw(err);
     virtual void tick_negative_edge() throw(err);
+    virtual void set_stop_darsim() throw(err);
     virtual bool is_ready_to_offer() throw(err);
     virtual bool is_drained() const throw();
 

@@ -38,6 +38,8 @@ void injector::add_event(const uint64_t &t, const flow_id &f,
     }
 }
 
+void injector::set_stop_darsim() throw(err) { }
+
 void injector::tick_positive_edge() throw(err) {
     for (; next_event != events.end() && next_event->get<0>() == system_time;
          ++next_event) {

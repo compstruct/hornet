@@ -49,9 +49,11 @@ public:
     virtual bool work_queued() throw(err);
     virtual void tick_positive_edge() throw(err);
     virtual void tick_negative_edge() throw(err);
+    virtual void set_stop_darsim() throw(err);
     virtual bool is_ready_to_offer() throw(err);
     virtual bool is_drained() const throw();
     uint32_t pkt_accounting;
+    bool stop_darsim;
 private:
     typedef uint64_t tick_t;
     typedef uint32_t len_t;
