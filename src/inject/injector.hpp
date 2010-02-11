@@ -13,7 +13,6 @@
 #include "flow_id.hpp"
 #include "flit.hpp"
 #include "logger.hpp"
-#include "vcd.hpp"
 #include "statistics.hpp"
 #include "pe.hpp"
 #include "par_random.hpp"
@@ -41,7 +40,7 @@ public:
     injector(const pe_id &id, const uint64_t &system_time,
              shared_ptr<id_factory<packet_id> > packet_id_factory,
              shared_ptr<statistics> stats, logger &log,
-             shared_ptr<BoostRand> ran, shared_ptr<vcd_writer> vcd) throw(err);
+             shared_ptr<BoostRand> ran) throw(err);
     virtual ~injector() throw();
     virtual void connect(shared_ptr<bridge> net_bridge) throw(err);
     virtual void add_packet(uint64_t time, const flow_id &flow, uint32_t len) throw(err);
@@ -74,7 +73,6 @@ private:
     shared_ptr<statistics> stats;
     logger &log;
     shared_ptr<BoostRand> ran;
-    shared_ptr<vcd_writer> vcd;
 };
 
 #endif // __INJECTOR_HPP__

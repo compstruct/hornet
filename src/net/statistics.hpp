@@ -14,8 +14,11 @@
 #include "cstdint.hpp"
 #include "error.hpp"
 #include "flow_id.hpp"
+#include "node_id.hpp"
 #include "flit.hpp"
+#include "virtual_queue_id.hpp"
 #include "egress_id.hpp"
+#include "vcd.hpp"
 #include "logger.hpp"
 
 using namespace std;
@@ -57,7 +60,7 @@ private:
 class statistics {
 public:
     statistics(const uint64_t &system_time, const uint64_t &start_time,
-               logger &log) throw();
+               logger &log, shared_ptr<vcd_writer> vcd) throw();
     void start_sim() throw();
     void end_sim() throw();
     void send_flit(const flow_id &, const flit &) throw();
@@ -70,13 +73,18 @@ public:
                          const packet_id &pid) throw();
     void register_links(const egress_id &src, const egress_id &dst,
                         unsigned num_links) throw();
+    void register_flow(const flow_id &id) throw(err);
     void register_flow_rename(const flow_id &from,
                               const flow_id &to) throw(err);
+    void register_node(const node_id &id) throw(err);
+    void register_queue(const virtual_queue_node_id &id) throw(err);
     void switch_links(const egress_id &src, const egress_id &dst,
                       unsigned min_link, unsigned num_links) throw();
-    void xbar(node_id id, int flits, double req_frac, double bw_frac) throw();
+    void xbar(node_id id, int transmitted_flits, int requested_flits,
+              double req_frac, double bw_frac) throw();
     void cxn_xmit(node_id src, node_id dst, unsigned used,
                   double req_frac, double bw_frac) throw();
+    void virtual_queue(const virtual_queue_node_id &id, size_t size) throw();
     uint64_t get_received_packet_count() const throw();
     friend ostream &operator<<(ostream &, statistics &);
 private:
@@ -128,6 +136,26 @@ private:
     map<flow_id, uint64_t> last_received_times;
     flow_stats_t flow_reorder_stats;
     logger &log;
+    shared_ptr<vcd_writer> vcd;
+private:
+    typedef struct {
+        char v_offered;
+        char v_sent;
+        char v_received;
+    } vcd_flow_hooks_t;
+    typedef map<flow_id, vcd_flow_hooks_t> vcd_flows_t;
+    vcd_flows_t vcd_flows;
+    typedef struct {
+        char v_xbar_demand;
+        char v_xbar_use;
+    } vcd_node_hooks_t;
+    typedef map<node_id, vcd_node_hooks_t> vcd_nodes_t;
+    vcd_nodes_t vcd_nodes;
+    typedef struct {
+        char v_size;
+    } vcd_vq_hooks_t;
+    typedef map<virtual_queue_node_id, vcd_vq_hooks_t> vcd_vqs_t;
+    vcd_vqs_t vcd_vqs;
 };
 
 ostream &operator<<(ostream &, const statistics &);

@@ -6,7 +6,6 @@
 
 #include <queue>
 #include "logger.hpp"
-#include "vcd.hpp"
 #include "statistics.hpp"
 #include "node.hpp"
 
@@ -21,7 +20,7 @@ public:
     arbiter(const uint64_t &time, shared_ptr<node> src, shared_ptr<node> dst,
             arbitration_t scheme, unsigned min_bw, unsigned period,
             unsigned delay, shared_ptr<statistics> stats,
-            logger &log, shared_ptr<vcd_writer> vcd) throw(err);
+            logger &log) throw(err);
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
 private:
@@ -38,7 +37,6 @@ private:
     unsigned last_queued_src_to_dst_bw;
     shared_ptr<statistics> stats;
     logger &log;
-    shared_ptr<vcd_writer> vcd;
 private:
     arbiter();                // not implemented
     arbiter(const arbiter &); // not implemented

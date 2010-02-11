@@ -9,7 +9,6 @@
 #include <iomanip>
 #include <boost/shared_ptr.hpp>
 #include "logger.hpp"
-#include "vcd.hpp"
 #include "reg.hpp"
 #include "mem.hpp"
 #include "bridge.hpp"
@@ -21,8 +20,7 @@ using namespace boost;
 class cpu : public pe {
 public:
     explicit cpu(const pe_id &id, const uint64_t &time, shared_ptr<mem> ram,
-                 uint32_t pc, uint32_t stack_pointer, logger &log,
-                 shared_ptr<vcd_writer> vcd) throw(err);
+                 uint32_t pc, uint32_t stack_pointer, logger &log) throw(err);
     virtual ~cpu() throw();
     virtual void connect(shared_ptr<bridge> net_bridge) throw();
     virtual void add_packet(uint64_t time, const flow_id &flow, uint32_t len) throw(err);
@@ -53,7 +51,6 @@ private:
     uint32_t jump_target;
     ostringstream stdout_buffer;
     logger &log;
-    shared_ptr<vcd_writer> vcd;
 private:
     void syscall(uint32_t syscall_no) throw(err);
     void flush_stdout() throw();

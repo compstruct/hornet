@@ -29,22 +29,48 @@ static void insert_node(const vcd_id_t &id,
 vcd_node::vcd_node() throw() : id(0), children() { }
 
 vcd_writer::vcd_writer(const uint64_t &new_time,
-                       const shared_ptr<ostream> new_out) throw(err)
-    : time(new_time), last_timestamp(0), ids(), types(), last_values(),
-      last_id(""), paths(), initialized(false), out(new_out) {
+                       const shared_ptr<ofstream> new_out,
+                       uint64_t start, uint64_t end) throw(err)
+    : time(new_time), start_time(start), end_time(end),
+      last_timestamp(0), ids(), widths(),
+      cur_values(), last_values(), dirty(), last_id(""), paths(),
+      def_locs(), init_locs(), initialized(false), finalized(false),
+      out(new_out) {
     assert(out);
 }
 
-vcd_writer::~vcd_writer() { }
+void vcd_writer::finalize() throw(err) {
+    assert(!finalized);
+    *out << endl;
+    // erase definitions for signals that never changed
+    for (stream_locs_t::const_iterator sli = def_locs.begin();
+         sli != def_locs.end(); ++sli) {
+        streampos start, end; tie(start,end) = sli->second;
+        out->seekp(start);
+        while (out->tellp() != end) {
+            *out << ' ';
+        }
+    }
+    // erase initial values for signals that never changed
+    for (stream_locs_t::const_iterator sli = init_locs.begin();
+         sli != init_locs.end(); ++sli) {
+        streampos start, end; tie(start,end) = sli->second;
+        out->seekp(start);
+        while (out->tellp() != end) {
+            *out << ' ';
+        }
+    }
+    finalized = true;
+}
 
 string vcd_writer::get_fresh_id() throw() {
     for (string::reverse_iterator i = last_id.rbegin();
          i != last_id.rend(); ++i) {
-        if (*i > max_vcd_id_char) {
+        if (*i >= max_vcd_id_char) {
+            *i = min_vcd_id_char;
+        } else {
             ++(*i);
             return string(last_id);
-        } else {
-            *i = min_vcd_id_char;
         }
     }
     last_id = string(1, min_vcd_id_char) + last_id;
@@ -52,23 +78,27 @@ string vcd_writer::get_fresh_id() throw() {
 }
 
 void vcd_writer::new_signal(const vcd_id_t &id, const vector<string> &path,
-                            vcd_writer::val_t val_type) throw(err) {
+                            unsigned width) throw(err) {
+    assert(!initialized);
+    assert(!finalized);
     assert(id != 0);
     assert(path.size() > 0);
     assert(ids.find(id) == ids.end());
-    assert(types.find(id) == types.end());
+    assert(cur_values.find(id) == cur_values.end());
     assert(last_values.find(id) == last_values.end());
     ids[id] = get_fresh_id();
-    types[id] = val_type;
+    widths[id] = width;
+    last_values[id] = 0;
     insert_node(id, path, 0, paths);
 }
 
-void vcd_writer::write_val(const string &id, vcd_writer::val_t val_type,
-                           uint64_t val) throw(err) {
-    if (val_type == vcd_writer::VCD_32 || val_type == vcd_writer::VCD_64) {
-        *out << 'b';
+void vcd_writer::write_val(const string &id, uint64_t val) throw(err) {
+    *out << 'b';
+    if (val == 0) {
+        *out << '0';
+    } else {
         bool print_zeros = false;
-        for (int i = (val_type == VCD_32 ? 31 : 63); i >= 0; --i) {
+        for (int i = 63; i >= 0; --i) {
             int d = (val >> i) & 1;
             if (d) {
                 *out << '1';
@@ -77,61 +107,59 @@ void vcd_writer::write_val(const string &id, vcd_writer::val_t val_type,
                 *out << '0';
             }
         }
-        *out << ' ' << id << '\n';
-    } else if (val_type == vcd_writer::VCD_REAL) {
-        double d = (double) val;
-        char s[32];
-        snprintf(s, 32, "%.16g", d);
-        *out << 'r' << s << ' ' << id << '\n';
+    }
+    *out << ' ' << id;
+}
+
+void vcd_writer::writeln_val(const string &id, uint64_t val) throw(err) {
+    write_val(id, val);
+    *out << '\n';
+}
+
+void vcd_writer::add_value(vcd_id_t id, uint64_t val) throw(err) {
+    if (time < start_time || time > end_time) return;
+    assert(ids.find(id) != ids.end());
+    assert(last_values.find(id) != last_values.end());
+    cur_values_t::iterator cvi = cur_values.find(id);
+    if (cvi == cur_values.end()) {
+        cur_values[id] = val;
     } else {
-        assert(false);
+        cvi->second += val;
     }
 }
 
-void vcd_writer::write_x(const string &id) throw(err) {
-    *out << "bX " << id << '\n';
-}
-
-void vcd_writer::set_value_full(vcd_id_t id, vcd_writer::val_t type,
-                                uint64_t val) throw(err) {
-    assert(ids.find(id) != ids.end());
-    assert(types.find(id) != types.end());
-    assert(types[id] == type);
+void vcd_writer::commit() throw(err) {
+    if (time < start_time || time > end_time) return;
     check_header();
-    last_values_t::iterator lvi = last_values.find(id);
-    if (lvi == last_values.end() || lvi->second != val) {
-        if (time > last_timestamp) {
-            *out << '#' << dec << time << '\n';
-            last_timestamp = time;
+    for (set<vcd_id_t>::iterator di = dirty.begin();
+         di != dirty.end(); ++di) {
+        if (cur_values.find(*di) == cur_values.end()) {
+            check_timestamp();
+            writeln_val(ids[*di], 0); // reset to default
+            last_values[*di] = 0;
         }
-        write_val(ids[id], type, val);
-        last_values[id] = val;
     }
+    dirty.clear();
+    for (cur_values_t::iterator cvi = cur_values.begin();
+         cvi != cur_values.end(); ++cvi) {
+        last_values_t::iterator lvi = last_values.find(cvi->first);
+        assert(lvi != last_values.end());
+        if (cvi->second != lvi->second) {
+            check_timestamp();
+            writeln_val(ids[cvi->first], cvi->second);
+            lvi->second = cvi->second;
+            if (cvi->second != 0) {
+                dirty.insert(cvi->first);
+            }
+            def_locs.erase(cvi->first);
+            init_locs.erase(cvi->first);
+        }
+    }
+    cur_values.clear();
 }
 
-void vcd_writer::set_value(vcd_id_t id, uint32_t val) throw(err) {
-    set_value_full(id, VCD_32, val);
-}
-
-void vcd_writer::set_value(vcd_id_t id, uint64_t val) throw(err) {
-    set_value_full(id, VCD_64, val);
-}
-
-void vcd_writer::set_value(vcd_id_t id, double val) throw(err) {
-    set_value_full(id, VCD_REAL, val);
-}
-
-void vcd_writer::unset(vcd_id_t id) throw(err) {
-    assert(ids.find(id) != ids.end());
-    assert(types.find(id) != types.end());
-    check_header();
-    write_x(ids[id]);
-    last_values.erase(id);
-}
-
-static void declare_vars(shared_ptr<ostream> out,
-                         const vcd_node::nodes_t &nodes,
-                         const map<vcd_id_t, string> &ids) throw(err) {
+void vcd_writer::declare_vars(const vcd_node::nodes_t &nodes,
+                              const map<vcd_id_t, string> &ids) throw(err) {
     assert(out);
     for (vcd_node::nodes_t::const_iterator ni = nodes.begin();
          ni != nodes.end(); ++ni) {
@@ -139,11 +167,16 @@ static void declare_vars(shared_ptr<ostream> out,
             assert(ni->second.children.empty());
             map<vcd_id_t, string>::const_iterator ii = ids.find(ni->second.id);
             assert(ii != ids.end());
+            assert(def_locs.find(ni->second.id) == def_locs.end());
+            streampos start = out->tellp();
             *out << "$var integer 32 " << ii->second
-                 << ' ' << ni->first << " $end\n";
+                 << ' ' << ni->first << " $end";
+            streampos end = out->tellp();
+            *out << '\n';
+            def_locs[ni->second.id] = make_tuple(start, end);
         } else {
             *out << "$scope module " << ni->first << " $end\n";
-            declare_vars(out, ni->second.children, ids);
+            declare_vars(ni->second.children, ids);
             *out << "$upscope $end\n";
         }
     }
@@ -152,19 +185,50 @@ static void declare_vars(shared_ptr<ostream> out,
 void vcd_writer::check_header() throw(err) {
     if (!initialized) {
         assert(out);
+        assert(dirty.empty());
+        assert(def_locs.empty());
         ptime now = second_clock::local_time();
-        *out << "$date\n"
-            << "    " << now << '\n'
-            << "$end\n"
-            << "$version\n"
-            << "    " << dar_full_version << '\n'
-            << "$end\n"
-            << "$timescale 1ns $end\n";
-        declare_vars(out, paths, ids);
+        *out << "$date " << now << " $end\n"
+             << "$version " << dar_full_version << " $end\n"
+             << "$timescale 1ns $end\n";
+        declare_vars(paths, ids);
         *out << "$enddefinitions $end\n";
         initialized = true;
-        if (time == 0) {
-            *out << "#0\n";
+        *out << '#' << dec << time << '\n';
+        last_timestamp = time;
+        *out << "$dumpvars\n";
+        for (last_values_t::iterator lvi = last_values.begin();
+             lvi != last_values.end(); ++lvi) {
+            cur_values_t::iterator cvi = cur_values.find(lvi->first);
+            if (cvi != cur_values.end()) {
+                assert(cvi->first == lvi->first);
+                writeln_val(ids[cvi->first], cvi->second);
+                lvi->second = cvi->second;
+                def_locs.erase(lvi->first);
+                if (cvi->second != 0) {
+                    dirty.insert(lvi->first);
+                }
+            } else {
+                streampos start = out->tellp();
+                write_val(ids[lvi->first], lvi->second);
+                streampos end = out->tellp();
+                *out << '\n';
+                init_locs[lvi->first] = make_tuple(start, end);
+            }
         }
+        cur_values.clear();
+        *out << "$end\n";
     }
 }
+
+void vcd_writer::check_timestamp() throw(err) {
+    if (time > last_timestamp) {
+        *out << '#' << dec << time << '\n';
+        last_timestamp = time;
+    }
+}
+
+bool vcd_writer::is_drained() const throw() {
+    return cur_values.empty() && dirty.empty();
+}
+

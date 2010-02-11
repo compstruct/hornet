@@ -8,7 +8,7 @@
 #include <vector>
 #include <set>
 #include <map>
-#include <iostream>
+#include <fstream>
 #include <boost/shared_ptr.hpp>
 #include <boost/tuple/tuple.hpp>
 #include "cstdint.hpp"
@@ -31,40 +31,53 @@ public:
 
 class vcd_writer {
 public:
-    typedef enum { VCD_32, VCD_64, VCD_REAL } val_t;
-public:
-    vcd_writer(const uint64_t &time, const shared_ptr<ostream> out) throw(err);
-    virtual ~vcd_writer();
+    vcd_writer(const uint64_t &time, const shared_ptr<ofstream> out,
+               uint64_t start, uint64_t end) throw(err);
     void new_signal(const vcd_id_t &id, const vector<string> &path,
-                    val_t type) throw(err);
-    void set_value(vcd_id_t id, uint32_t val) throw(err);
-    void set_value(vcd_id_t id, uint64_t val) throw(err);
-    void set_value(vcd_id_t id, double val) throw(err);
-    void unset(vcd_id_t id) throw(err);
+                    unsigned width) throw(err);
+    void add_value(vcd_id_t id, uint64_t val) throw(err);
+    void commit() throw(err); // call in the beginning of every tick
+                              // to flush posedge values to VCD
+    void finalize() throw(err); // call once at end to flush VCD
+    bool is_drained() const throw();
 private:
     typedef map<vcd_id_t, string> id_map_t;
-    typedef map<vcd_id_t, val_t> type_map_t;
+    typedef map<vcd_id_t, unsigned> widths_t;
+    typedef map<vcd_id_t, uint64_t> cur_values_t;
     typedef map<vcd_id_t, uint64_t> last_values_t;
+    typedef map<vcd_id_t, tuple<streampos, streampos> > stream_locs_t;
 private:
     string get_fresh_id() throw();
     void check_header() throw(err);
-    void write_val(const string &id, val_t type, uint64_t val) throw(err);
-    void write_x(const string &id) throw(err);
-    void set_value_full(vcd_id_t id, val_t type, uint64_t val) throw(err);
+    void check_timestamp() throw(err);
+    void write_val(const string &id, uint64_t val) throw(err);
+    void writeln_val(const string &id, uint64_t val) throw(err);
+    void declare_vars(const vcd_node::nodes_t &nodes,
+                      const map<vcd_id_t, string> &ids) throw(err);
 private:
     const uint64_t &time;
+    const uint64_t start_time;
+    const uint64_t end_time;
     uint64_t last_timestamp;
     id_map_t ids;
-    type_map_t types;
+    widths_t widths;
+    cur_values_t cur_values;
     last_values_t last_values;
+    set<vcd_id_t> dirty;
     string last_id;
     vcd_node::nodes_t paths;
+    stream_locs_t def_locs;
+    stream_locs_t init_locs;
     bool initialized;
-    shared_ptr<ostream> out;
+    bool finalized;
+    shared_ptr<ofstream> out;
 };
 
-#define VCD_REGISTER(v, id, path, type) {if (v) v->new_signal(id, path, type);}
-
-#define VCD_SET(v, id, new_val) {if (v) v->set_value(id, new_val);}
+inline void vcd_add(shared_ptr<vcd_writer> vcd, vcd_id_t id,
+                    uint64_t add_val) throw(err) {
+    if (vcd) {
+        vcd->add_value(id, add_val);
+    }
+}
 
 #endif // __VCD_HPP__

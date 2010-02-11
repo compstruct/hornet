@@ -9,18 +9,20 @@
 
 node::node(node_id new_id, uint32_t memsz, shared_ptr<router> new_rt,
            shared_ptr<channel_alloc> new_vca,
-           shared_ptr<statistics> stats, logger &l,
-           shared_ptr<BoostRand> ran, shared_ptr<vcd_writer> v) throw()
+           shared_ptr<statistics> st, logger &l,
+           shared_ptr<BoostRand> ran) throw()
     : id(new_id), flits_per_queue(memsz), rt(new_rt), vc_alloc(new_vca),
       pressures(new pressure_tracker(new_id, l)), ingresses(), egresses(),
-      xbar(new_id, stats, l, ran, v), queue_ids(), log(l), vcd(v) {
+      xbar(new_id, st, l, ran), queue_ids(), stats(st), log(l)  {
     LOG(log,3) << "node " << id << " created with " << dec << memsz
         << " flit" << (memsz == 1 ? "" : "s") << " per queue" << endl;
+    stats->register_node(id);
 }
 
 void node::add_queue_id(virtual_queue_id q) throw(err) {
-    if (queue_ids.find(q) != queue_ids.end())
+    if (queue_ids.find(q) != queue_ids.end()) {
         throw err_duplicate_queue(id.get_numeric_id(), q.get_numeric_id());
+    }
 }
 
 void node::add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err) {
@@ -74,7 +76,7 @@ void node::connect_from(const string &port_name,
     shared_ptr<ingress> ingr =
         shared_ptr<ingress>(new ingress(dst_id, src->get_id(), vq_ids,
                                         flits_per_queue, bw_to_xbar, rt,
-                                        vc_alloc, pressures, log));
+                                        vc_alloc, pressures, stats, log));
     egress_id src_id(src->get_id(), src_port_name);
     shared_ptr<egress> egr =
         shared_ptr<egress>(new egress(src_id, ingr, src->get_pressures(),

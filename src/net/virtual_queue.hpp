@@ -16,6 +16,7 @@
 #include "cstdint.hpp"
 #include "flit.hpp"
 #include "node_id.hpp"
+#include "statistics.hpp"
 #include "virtual_queue_id.hpp"
 #include "router.hpp"
 #include "pressure_tracker.hpp"
@@ -62,6 +63,7 @@ public:
                            shared_ptr<channel_alloc> vc_alloc,
                            shared_ptr<pressure_tracker> pressures,
                            shared_ptr<common_alloc> alloc,
+                           shared_ptr<statistics> stats,
                            logger &log) throw();
     const virtual_queue_node_id &get_id() const throw();
     void push(const flit &) throw(err); // does not update stale size
@@ -102,6 +104,7 @@ private:
     const shared_ptr<common_alloc> alloc;
     map<flow_id, unsigned> old_flows; // count of packets for a given flow
     size_t stale_size; // resynchronized at negative clock edge
+    shared_ptr<statistics> stats;
     logger &log;
 };
 
@@ -151,6 +154,7 @@ inline void virtual_queue::tick_positive_edge() throw(err) { }
 
 inline void virtual_queue::tick_negative_edge() throw(err) {
     stale_size = q.size();
+    stats->virtual_queue(id, size());
 }
 
 inline bool virtual_queue::is_drained() const throw() {

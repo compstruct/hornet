@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <boost/shared_ptr.hpp>
 #include <boost/program_options.hpp>
+#include "cstdint.hpp"
 #include "endian.hpp"
 #include "version.hpp"
 #include "logger.hpp"
@@ -28,10 +29,13 @@ typedef void (*custom_signal_handler_t)(int);
 
 static logger syslog;
 static shared_ptr<statistics> stats;
+static shared_ptr<vcd_writer> vcd;
 static bool report_stats = true;
 
 void sig_int_handler(int signo) {
+    if (vcd) vcd->commit();
     stats->end_sim();
+    if (vcd) vcd->finalize();
     LOG(syslog,0) << endl << "simulation ended on keyboard interrupt" << endl;
     if (report_stats) {
         LOG(syslog,0) << endl << *stats << endl;
@@ -50,7 +54,6 @@ static uint32_t fresh_random_seed() {
 shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
                            uint64_t stats_start,
                            shared_ptr<vector<string> > evt_files,
-                           shared_ptr<vcd_writer> vcd,
                            uint32_t g_random_seed) throw(err) {
     shared_ptr<ifstream> img(new ifstream(file.c_str(), ios::in | ios::binary));
     if (img->fail()) throw err_parse(file, "cannot read file");
@@ -67,7 +70,7 @@ shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
         throw err_parse(file, msg.str());
     }
     shared_ptr<sys> s(new sys(sys_time, img, stats_start,
-                              evt_files, stats, syslog, vcd, g_random_seed, false));
+                              evt_files, stats, syslog,  g_random_seed, false));
     img->close();
     return s;
 }
@@ -91,8 +94,12 @@ int main(int argc, char **argv) {
          "read event schedule from file arg")
         ("log", po::value<vector<string> >()->composing(),
          "write a log to file arg")
-        ("vcd", po::value<vector<string> >()->composing(),
-         "write waveforms to file arg")
+        ("vcd-file", po::value<string>(),
+         "write trace in VCD format to file arg")
+        ("vcd-start", po::value<uint64_t>(),
+         "start VCD dump at time arg (default: 0)")
+        ("vcd-end", po::value<uint64_t>(),
+         "end VCD dump at time arg (default: end of simulation)")
         ("verbosity", po::value<int>(), "set console verbosity")
         ("log-verbosity", po::value<int>(), "set log verbosity")
         ("random-seed", po::value<uint32_t>(),
@@ -184,24 +191,53 @@ int main(int argc, char **argv) {
         report_stats = false;
     }
     LOG(syslog,0) << dar_full_version << endl << endl;
-    shared_ptr<vcd_writer> vcd = shared_ptr<vcd_writer>();
-    if (opts.count("vcd") == 1) {
-        string fn = opts["vcd"].as<string>();
+    vcd = shared_ptr<vcd_writer>();
+    if (opts.count("vcd-file") == 1) {
+        uint64_t vcd_start = 0, vcd_end = UINT64_MAX;
+        string fn = opts["vcd-file"].as<string>();
         shared_ptr<ofstream> f(new ofstream(fn.c_str()));
         if (f->fail()) {
             cerr << "failed to write VCD: " << fn << endl;
             exit(1);
         }
-        vcd = shared_ptr<vcd_writer>(new vcd_writer(sys_time, f));
-    } else if (opts.count("vcd") > 1) {
-        cerr << "ERROR: option --vcd admits only one argument" << endl;
+        if (opts.count("vcd-start")) {
+            vcd_start = opts["vcd-start"].as<uint64_t>();
+            if (num_cycles != 0 && vcd_start >= num_cycles) {
+                cerr << "ERROR: VCD start (cycle " << vcd_start
+                    << ") after the simulation ends (cycle " << num_cycles
+                    << ")" << endl;
+                exit(1);
+            }
+        }
+        if (opts.count("vcd-end")) {
+            vcd_end = opts["vcd-end"].as<uint64_t>();
+            if (vcd_end <= vcd_start) {
+                cerr << "ERROR: VCD end (cycle " << vcd_end
+                    << ") not after VCD start (cycle " << vcd_start
+                    << ")" << endl;
+                exit(1);
+            } else if (num_cycles != 0 && vcd_end >= num_cycles) {
+                cerr << "ERROR: VCD end (cycle " << vcd_end
+                    << ") after the simulation ends (cycle " << num_cycles
+                    << ")" << endl;
+                exit(1);
+            }
+        }
+        vcd = shared_ptr<vcd_writer>(new vcd_writer(sys_time, f,
+                                                    vcd_start, vcd_end));
+    } else if (opts.count("vcd-file") > 1) {
+        cerr << "ERROR: option --vcd-file admits only one argument" << endl;
+        exit(1);
+    } else if (opts.count("vcd-start") || opts.count("vcd-end")) {
+        cerr << "ERROR: VCD dump start/end specified without VCD file" << endl;
         exit(1);
     }
     stats = shared_ptr<statistics>(new statistics(sys_time, stats_start,
-                                                  syslog));
+                                                  syslog, vcd));
     shared_ptr<sys> s;
     try {
-        s = new_system(sys_time, mem_image, stats_start, events_files, vcd, g_random_seed);
+        s = new_system(sys_time, mem_image, stats_start, events_files,
+                       g_random_seed);
     } catch (const err_parse &e) {
         cerr << e << endl;
         exit(1);
@@ -237,17 +273,22 @@ int main(int argc, char **argv) {
               && (num_packets == 0
                   || stats->get_received_packet_count() < num_packets));
              ++cycle) {
+            if (vcd) vcd->commit();
             s->tick_positive_edge();
             s->tick_negative_edge();
             ++sys_time;
         }
+        if (vcd) vcd->commit();
         stats->end_sim();
+        if (vcd) vcd->finalize();
         LOG(syslog,0) << endl << "simulation ended successfully" << endl;
         if (report_stats) {
             LOG(syslog,0) << endl << *stats << endl;
         }
     } catch (const exc_syscall_exit &e) {
+        if (vcd) vcd->commit();
         stats->end_sim();
+        if (vcd) vcd->finalize();
         LOG(syslog,0) << endl << "simulation ended on CPU exit()" << endl;
         if (report_stats) {
             LOG(syslog,0) << endl << *stats << endl;

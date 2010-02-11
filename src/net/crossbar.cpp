@@ -6,8 +6,8 @@
 #include "crossbar.hpp"
 
 crossbar::crossbar(node_id parent, shared_ptr<statistics> s, logger &l, 
-                   shared_ptr<BoostRand> r, shared_ptr<vcd_writer> v) throw()
-    : id(parent), ingresses(), egresses(), stats(s), log(l), ran(r), vcd(v) { }
+                   shared_ptr<BoostRand> r) throw()
+    : id(parent), ingresses(), egresses(), stats(s), log(l), ran(r) { }
 
 void crossbar::add_ingress(node_id src, shared_ptr<ingress> ing) throw(err) {
     if (ingresses.find(src) != ingresses.end()) {
@@ -160,7 +160,7 @@ void crossbar::tick_positive_edge() throw(err) {
         static_cast<double>(num_sent) / static_cast<double>(num_reqs);
     double bw_frac =
         static_cast<double>(num_sent) / static_cast<double>(total_bw);
-    stats->xbar(id, num_sent, req_frac, bw_frac);
+    stats->xbar(id, num_sent, num_reqs, req_frac, bw_frac);
     if (num_reqs > 0) {
         LOG(log,3) << "[xbar " << id << "] sent " << dec
             << num_sent << " of " << num_reqs

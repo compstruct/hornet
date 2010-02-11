@@ -6,7 +6,9 @@ Options:
   --no-stats            do not report statistics
   --events arg          read event schedule from file arg
   --log arg             write a log to file arg
-  --vcd arg             write waveforms to file arg
+  --vcd-file arg        write trace in VCD format to file arg
+  --vcd-start arg       start VCD dump at time arg (default: 0)
+  --vcd-end arg         end VCD dump at time arg (default: end of simulation)
   --verbosity arg       set console verbosity
   --log-verbosity arg   set log verbosity
   --random-seed arg     set random seed (default: use system entropy)

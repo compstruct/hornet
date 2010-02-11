@@ -11,7 +11,6 @@
 #include <boost/shared_ptr.hpp>
 #include "cstdint.hpp"
 #include "logger.hpp"
-#include "vcd.hpp"
 #include "statistics.hpp"
 #include "pe.hpp"
 #include "node.hpp"
@@ -27,7 +26,7 @@ public:
     sys(const uint64_t &time, shared_ptr<ifstream> image, uint64_t stats_t0,
         shared_ptr<vector<string> > event_files,
         shared_ptr<statistics> stats, logger &log,
-        shared_ptr<vcd_writer> vcd, uint32_t seed, bool use_graphite_inj) throw(err);
+        uint32_t seed, bool use_graphite_inj) throw(err);
     shared_ptr<statistics> get_statistics() throw();
     bool work_tbd_darsim() throw(err);
     bool nothing_to_offer() throw(err);
@@ -53,7 +52,6 @@ private:
     const uint64_t &time;
     shared_ptr<statistics> stats;
     logger &log;
-    shared_ptr<vcd_writer> vcd;
 };
 
 #endif // __SYS_HPP__

@@ -57,11 +57,9 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
 sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
          uint64_t stats_start, shared_ptr<vector<string> > events_files,
          shared_ptr<statistics> new_stats,
-         logger &new_log, shared_ptr<vcd_writer> new_vcd,
-         uint32_t seed, bool use_graphite_inj) throw(err)
+         logger &new_log, uint32_t seed, bool use_graphite_inj) throw(err)
     : pes(), bridges(), nodes(), time(sys_time),
-      stats(new_stats), log(new_log),
-      vcd(new_vcd) {
+      stats(new_stats), log(new_log) {
     shared_ptr<id_factory<packet_id> >
         packet_id_factory(new id_factory<packet_id>("packet id"));
     uint32_t num_nodes = read_word(img);
@@ -90,7 +88,7 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
                                                log, ran));
         uint32_t flits_per_q = read_word(img);
         shared_ptr<node> n(new node(node_id(id), flits_per_q, n_rt, n_vca,
-                                    stats, log, ran, vcd));
+                                    stats, log, ran));
         uint32_t n2b_bw = read_word(img);
         uint32_t b2n_bw = read_word(img);
         uint32_t b2n_xbar_bw = read_word(img);
@@ -108,7 +106,7 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
                                         n2b_queues, n2b_bw, b2n_queues, b2n_bw,
                                         flits_per_q, b2n_xbar_bw,
                                         one_q_per_f, one_f_per_q,
-                                        packet_id_factory, stats, log, vcd));
+                                        packet_id_factory, stats, log));
         shared_ptr<set_bridge_channel_alloc> vca =
             static_pointer_cast<set_bridge_channel_alloc>(b_vca);
         shared_ptr<ingress> b_n_i = n->get_ingress_from(b->get_id());
@@ -131,12 +129,12 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
             uint32_t cpu_entry_point = read_word(img);
             uint32_t cpu_stack_pointer = read_word(img);
             p = shared_ptr<pe>(new cpu(pe_id(id), time, m, cpu_entry_point,
-                                       cpu_stack_pointer, log, vcd));
+                                       cpu_stack_pointer, log));
             break;
         }
         case PE_INJECTOR: {
             shared_ptr<injector> inj(new injector(id, time, packet_id_factory,
-                                                  stats, log, ran, vcd));
+                                                  stats, log, ran));
             shared_ptr<ginj> g_inj(new ginj(id, time, packet_id_factory, 
                                             stats, log, ran));
             if (use_graphite_inj) {
@@ -218,8 +216,7 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
                     shared_ptr<arbiter>(new arbiter(time, nodes[from],
                                                     nodes[to], arb_scheme,
                                                     arb_min_bw, arb_period,
-                                                    arb_delay, stats,
-                                                    log, vcd));
+                                                    arb_delay, stats, log));
             }
         }
     }
@@ -229,6 +226,7 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
                << " routing " << (num_routes==1 ? "entry" : "entries") << endl;
     for (unsigned i = 0; i < num_routes; ++i) {
         uint32_t flow = read_word(img);
+        stats->register_flow(flow_id(flow));
         uint32_t cur_n = read_word(img);
         uint32_t prev_n = read_word(img);
         if (prev_n == 0xffffffffUL) { // program the bridge

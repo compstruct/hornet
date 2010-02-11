@@ -81,7 +81,7 @@ uint32_t reorder_buffer::get_out_of_order_count() const throw() {
 }
 
 statistics::statistics(const uint64_t &sys_time, const uint64_t &start,
-                       logger &l) throw()
+                       logger &l, shared_ptr<vcd_writer> new_vcd) throw()
     : system_time(sys_time), start_time(start),
       sim_start_time(microsec_clock::local_time()),
       sim_end_time(sim_start_time), original_flows(),
@@ -94,7 +94,8 @@ statistics::statistics(const uint64_t &sys_time, const uint64_t &start,
       flit_departures(), flow_flit_lat_stats(), total_flit_lat_stats(),
       packet_flows(), packet_offers(), packet_sends(),
       flow_packet_lat_stats(), total_packet_lat_stats(),
-      link_switches(), reorder_buffers(), flow_reorder_stats(), log(l) { }
+      link_switches(), reorder_buffers(), flow_reorder_stats(),
+      log(l), vcd(new_vcd) { }
 
 void statistics::start_sim() throw() {
     sim_start_time = microsec_clock::local_time();
@@ -137,6 +138,7 @@ uint64_t statistics::get_received_packet_count() const throw() {
 
 void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
     assert(get_original_flow(fid) == fid);
+    vcd_add(vcd, &vcd_flows[fid].v_sent, 1);
     if (system_time >= start_time) { // count as sent flit
         if (!have_first_flit_id) {
             first_flit_id = flt.get_uid();
@@ -163,6 +165,7 @@ void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
 
 void statistics::receive_flit(const flow_id &org_fid, const flit &flt) throw() {
     flow_id fid = get_original_flow(org_fid);
+    vcd_add(vcd, &vcd_flows[fid].v_received, 1);
     if (have_first_flit_id && flt.get_uid() >= first_flit_id) {
         flit_timestamp_t::iterator di = flit_departures.find(flt.get_uid());
         if (di != flit_departures.end()) {
@@ -196,6 +199,7 @@ void statistics::offer_packet(const flow_id &fid, const uint32_t orig_len,
         offered_flits[fid] += len;
     }
     ++total_offered_packets;
+    vcd_add(vcd, &vcd_flows[fid].v_offered, len);
 }
 
 void statistics::send_packet(const flow_id &fid, const head_flit &flt) throw() {
@@ -255,9 +259,27 @@ void statistics::register_links(const egress_id &src, const egress_id &dst,
     }
 }
 
+void statistics::register_flow(const flow_id &id) throw(err) {
+    if (!vcd) return;
+    if (vcd_flows.find(id) != vcd_flows.end()) return;
+    const vcd_flow_hooks_t &vh = vcd_flows[id];
+    vector<string> path;
+    ostringstream oss;
+    oss << id;
+    path.push_back("flows");
+    path.push_back("offered");
+    path.push_back(oss.str());
+    vcd->new_signal(&vh.v_offered, path, 32);
+    path[1] = "sent";
+    vcd->new_signal(&vh.v_sent, path, 32);
+    path[1] = "received";
+    vcd->new_signal(&vh.v_received, path, 32);
+}
+
 void statistics::register_flow_rename(const flow_id &from,
                                       const flow_id &to) throw (err) {
     assert(from != to);
+    assert(vcd_flows.find(from) != vcd_flows.end());
     if (original_flows.find(to) != original_flows.end()) {
         if (original_flows[to] != from) {
             throw err_duplicate_flow_rename(to.get_numeric_id(),
@@ -267,6 +289,35 @@ void statistics::register_flow_rename(const flow_id &from,
     } else {
         original_flows[to] = from;
     }
+}
+
+void statistics::register_queue(const virtual_queue_node_id &id) throw(err) {
+    if (!vcd) return;
+    if (vcd_vqs.find(id) != vcd_vqs.end()) return;
+    node_id n; virtual_queue_id q; tie(n,q) = id;
+    const vcd_vq_hooks_t &vh = vcd_vqs[id];
+    vector<string> path;
+    ostringstream oss;
+    oss << id.get<0>() << "_" << id.get<1>();
+    path.push_back("queues");
+    path.push_back("size");
+    path.push_back(oss.str());
+    vcd->new_signal(&vh.v_size, path, 32);
+}
+
+void statistics::register_node(const node_id &id) throw(err) {
+    if (!vcd) return;
+    if (vcd_nodes.find(id) != vcd_nodes.end()) return;
+    const vcd_node_hooks_t &vh = vcd_nodes[id];
+    vector<string> path;
+    ostringstream oss;
+    oss << id;
+    path.push_back("xbars");
+    path.push_back("demand");
+    path.push_back(oss.str());
+    vcd->new_signal(&vh.v_xbar_demand, path, 32);
+    path[1] = "use";
+    vcd->new_signal(&vh.v_xbar_use, path, 32);
 }
 
 void statistics::switch_links(const egress_id &src, const egress_id &dst,
@@ -280,11 +331,13 @@ void statistics::switch_links(const egress_id &src, const egress_id &dst,
     }
 }
 
-void statistics::xbar(node_id xbar_id, int flits, double req_frac,
-                      double bw_frac) throw() {
-    xbar_xmit_stats[xbar_id].add(flits, 1);
+void statistics::xbar(node_id xbar_id, int sent_flits, int req_flits,
+                      double req_frac, double bw_frac) throw() {
+    xbar_xmit_stats[xbar_id].add(sent_flits, 1);
     xbar_demand_stats[xbar_id].add(req_frac, 1);
     xbar_bw_stats[xbar_id].add(bw_frac, 1);
+    vcd_add(vcd, &vcd_nodes[xbar_id].v_xbar_use, sent_flits);
+    vcd_add(vcd, &vcd_nodes[xbar_id].v_xbar_demand, req_flits);
 }
 
 void statistics::cxn_xmit(node_id src, node_id dst, unsigned used,
@@ -293,6 +346,11 @@ void statistics::cxn_xmit(node_id src, node_id dst, unsigned used,
     cxn_xmit_stats[cxn].add(used, 1);
     cxn_demand_stats[cxn].add(req_frac, 1);
     cxn_bw_stats[cxn].add(bw_frac, 1);
+}
+
+void statistics::virtual_queue(const virtual_queue_node_id &id,
+                               size_t size) throw() {
+    vcd_add(vcd, &vcd_vqs[id].v_size, size);
 }
 
 static ostream &operator<<(ostream &out,

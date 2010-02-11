@@ -10,6 +10,7 @@
 #include "virtual_queue.hpp"
 #include "router.hpp"
 #include "logger.hpp"
+#include "statistics.hpp"
 #include "ingress_id.hpp"
 
 using namespace std;
@@ -25,6 +26,7 @@ public:
                      shared_ptr<router> rt,
                      shared_ptr<channel_alloc> virtual_channel_alloc,
                      shared_ptr<pressure_tracker> pressures,
+                     shared_ptr<statistics> stats,
                      logger &log) throw(err);
     void add_queue(shared_ptr<virtual_queue> q) throw(err);
     void tick_positive_edge() throw(err);
@@ -42,6 +44,7 @@ private:
     const node_id src_node_id;
     queues_t vqs;
     next_hops_t next_hops;
+    shared_ptr<statistics> stats;
     logger &log;
 private:
     ingress(); // not implemented
