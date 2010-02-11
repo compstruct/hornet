@@ -75,7 +75,7 @@ def read_section_headers(file, objdump_cmd='objdump', verbose=False):
                 sections[name]['flags'] = l.split(', ')
     except StopIteration:
         pass
-    except OSError as e:
+    except OSError, e:
         raise Err('Failed to run %s: %s' % (objdump, e))
     if verbose:
         print 'file %s format %s' % (file, format)
@@ -501,7 +501,7 @@ def new_system_config(cfg, verbose=False):
             routes = flows_to_routes(flows)
         else:
             raise Err('bad queue routing type: %s' % queue_routing)
-    except ConfigParser.Error as e:
+    except ConfigParser.Error, e:
         raise Err('bad config: %s' % e)
     return settings, nodes, links, routes
 
@@ -520,18 +520,18 @@ def main():
         cfg = ConfigParser.SafeConfigParser()
         try:
             cfg.read(args)
-        except Exception as e:
+        except Exception, e:
             raise Err('bad config: %s' % e)
         with open(out_file, 'wb') as out:
             write_complete_image(out, cfg, verbose=opts.verbose)
-    except Err as e:
+    except Err, e:
         print >>sys.stderr, 'ERROR:', e
         try:
             os.remove(out_file)
         except:
             pass
         sys.exit(1)
-    except Exception as e:
+    except Exception, e:
         try:
             os.remove(out_file)
         except:
