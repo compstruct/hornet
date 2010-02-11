@@ -224,7 +224,7 @@ void statistics::send_packet(const flow_id &fid, const head_flit &flt) throw() {
 
 void statistics::receive_packet(const flow_id &fid,
                                 const head_flit &flt) throw() {
-    if (system_time >= start_time) {
+    if (have_first_flit_id && flt.get_uid() >= first_flit_id) {
         if (last_received_times.find(fid) == last_received_times.end())
             last_received_times[fid] = start_time;
         flow_reorder_stats[fid].add(reorder_buffers[fid].get_buffer_length(),
