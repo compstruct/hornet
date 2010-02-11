@@ -117,7 +117,7 @@ void vcd_writer::writeln_val(const string &id, uint64_t val) throw(err) {
 }
 
 void vcd_writer::add_value(vcd_id_t id, uint64_t val) throw(err) {
-    if (time < start_time || time > end_time) return;
+    if (is_sleeping()) return;
     assert(ids.find(id) != ids.end());
     assert(last_values.find(id) != last_values.end());
     cur_values_t::iterator cvi = cur_values.find(id);
@@ -129,7 +129,7 @@ void vcd_writer::add_value(vcd_id_t id, uint64_t val) throw(err) {
 }
 
 void vcd_writer::commit() throw(err) {
-    if (time < start_time || time > end_time) return;
+    if (is_sleeping()) return;
     check_header();
     for (set<vcd_id_t>::iterator di = dirty.begin();
          di != dirty.end(); ++di) {
@@ -232,3 +232,6 @@ bool vcd_writer::is_drained() const throw() {
     return cur_values.empty() && dirty.empty();
 }
 
+bool vcd_writer::is_sleeping() const throw() {
+    return time < start_time || (end_time != 0 && time > end_time);
+}

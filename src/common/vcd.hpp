@@ -54,6 +54,7 @@ private:
     void writeln_val(const string &id, uint64_t val) throw(err);
     void declare_vars(const vcd_node::nodes_t &nodes,
                       const map<vcd_id_t, string> &ids) throw(err);
+    bool is_sleeping() const throw();
 private:
     const uint64_t &time;
     const uint64_t start_time;

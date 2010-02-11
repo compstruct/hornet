@@ -193,7 +193,7 @@ int main(int argc, char **argv) {
     LOG(syslog,0) << dar_full_version << endl << endl;
     vcd = shared_ptr<vcd_writer>();
     if (opts.count("vcd-file") == 1) {
-        uint64_t vcd_start = 0, vcd_end = UINT64_MAX;
+        uint64_t vcd_start = 0, vcd_end = 0;
         string fn = opts["vcd-file"].as<string>();
         shared_ptr<ofstream> f(new ofstream(fn.c_str()));
         if (f->fail()) {
