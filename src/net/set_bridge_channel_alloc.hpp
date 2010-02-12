@@ -6,7 +6,7 @@
 
 #include <map>
 #include "bridge_channel_alloc.hpp"
-#include "par_random.hpp"
+#include "random.hpp"
 
 using namespace std;
 

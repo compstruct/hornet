@@ -11,7 +11,7 @@
 #include "egress.hpp"
 #include "statistics.hpp"
 #include "logger.hpp"
-#include "par_random.hpp"
+#include "random.hpp"
 
 class crossbar {
 public:

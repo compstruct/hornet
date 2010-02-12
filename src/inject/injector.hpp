@@ -15,7 +15,7 @@
 #include "logger.hpp"
 #include "statistics.hpp"
 #include "pe.hpp"
-#include "par_random.hpp"
+#include "random.hpp"
 
 using namespace std;
 using namespace boost;

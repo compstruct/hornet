@@ -8,7 +8,7 @@
 #include "boost/tuple/tuple.hpp"
 #include "boost/tuple/tuple_comparison.hpp"
 #include "router.hpp"
-#include "par_random.hpp"
+#include "random.hpp"
 
 using namespace boost;
 

@@ -6,6 +6,8 @@
 #include <cstdlib>
 #include <iterator>
 #include <algorithm>
+#include <boost/function.hpp>
+#include <boost/bind.hpp>
 #include "random.hpp"
 #include "injector.hpp"
 
@@ -64,8 +66,9 @@ void injector::tick_positive_edge() throw(err) {
         }
     }
     uint32_t waiting = net->get_waiting_queues();
+    boost::function<int(int)> rr_fn = bind(&BoostRand::random_range, ran, _1);
     if (waiting != 0) {
-        random_shuffle(queue_ids.begin(), queue_ids.end(), random_range);
+        random_shuffle(queue_ids.begin(), queue_ids.end(), rr_fn);
         for (vector<uint32_t>::iterator i = queue_ids.begin();
              i != queue_ids.end(); ++i) {
             if (((waiting >> *i) & 1)
@@ -78,7 +81,7 @@ void injector::tick_positive_edge() throw(err) {
             }
         }
     }
-    random_shuffle(flow_ids.begin(), flow_ids.end(), random_range);
+    random_shuffle(flow_ids.begin(), flow_ids.end(), rr_fn);
     for (vector<flow_id>::iterator fi = flow_ids.begin(); fi != flow_ids.end(); ++fi) {
         tick_t t; len_t l; period_t p;
         tie(t, l, p) = flows[*fi];

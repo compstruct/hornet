@@ -9,7 +9,7 @@
 #include <boost/tuple/tuple_comparison.hpp>
 #include "channel_alloc.hpp"
 #include "egress.hpp"
-#include "par_random.hpp"
+#include "random.hpp"
 
 class set_channel_alloc : public channel_alloc {
 public:

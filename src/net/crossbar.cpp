@@ -2,6 +2,8 @@
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
 #include <algorithm>
+#include <boost/function.hpp>
+#include <boost/bind.hpp>
 #include "random.hpp"
 #include "crossbar.hpp"
 
@@ -84,8 +86,9 @@ void crossbar::tick_positive_edge() throw(err) {
         ebws[i->first] = i->second->get_bandwidth();
         egress_demands[i->first] = 0;
     }
-    random_shuffle(egress_qs.begin(), egress_qs.end(), random_range);
-    random_shuffle(ingress_qs.begin(), ingress_qs.end(), random_range);
+    boost::function<int(int)> rr_fn = bind(&BoostRand::random_range, ran, _1);
+    random_shuffle(egress_qs.begin(), egress_qs.end(), rr_fn);
+    random_shuffle(ingress_qs.begin(), ingress_qs.end(), rr_fn);
     vqs_t ingress_ready_qs;
     for (nvqs_t::iterator iqi = ingress_qs.begin();
          iqi != ingress_qs.end(); ++iqi) {

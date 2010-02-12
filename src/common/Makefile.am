@@ -11,7 +11,6 @@ libdarcommon_la_SOURCES =  \
     cstdint.hpp \
     id_factory.hpp id_factory.cpp \
     random.hpp random.cpp \
-    par_random.hpp par_random.cpp \
     error.hpp error.cpp \
     logger.hpp logger.cpp \
     vcd.hpp vcd.cpp \

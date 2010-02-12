@@ -10,6 +10,6 @@
 Makefile.in
 Makefile
 stamp-h1
-config.h
-config.h.in
+dconfig.h
+dconfig.h.in
 config.log

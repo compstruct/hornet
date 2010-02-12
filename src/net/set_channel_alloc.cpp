@@ -4,6 +4,8 @@
 #include <cassert>
 #include <algorithm>
 #include <iomanip>
+#include <boost/function.hpp>
+#include <boost/bind.hpp>
 #include "set_channel_alloc.hpp"
 #include "random.hpp"
 
@@ -91,7 +93,8 @@ void set_channel_alloc::allocate() throw(err) {
     }
     int num_reqs = in_qs.size();
     int num_grants = 0;
-    random_shuffle(in_qs.begin(), in_qs.end(), random_range);
+    boost::function<int(int)> rr_fn = bind(&BoostRand::random_range, ran, _1);
+    random_shuffle(in_qs.begin(), in_qs.end(), rr_fn);
     for (qs_t::iterator qi = in_qs.begin(); qi != in_qs.end(); ++qi) {
         shared_ptr<virtual_queue> &iq = *qi;
         assert(!iq->empty());

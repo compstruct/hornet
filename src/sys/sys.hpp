@@ -16,7 +16,7 @@
 #include "node.hpp"
 #include "arbiter.hpp"
 #include "bridge.hpp"
-#include "par_random.hpp"
+#include "random.hpp"
 
 using namespace std;
 using namespace boost;
