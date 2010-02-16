@@ -112,7 +112,8 @@ void event_parser::p_flow(const flow_id &flow) throw(err) {
         throw err_parse(pos.get<0>(), pos.get<1>(), msg.str());
     }
     node_id n = (*flow_starts)[flow];
-    if (injectors->find(n) == injectors->end()) {
+    if (n < 0 || n.get_numeric_id() >= injectors->size()
+        || !(*injectors)[n.get_numeric_id()]) {
         ostringstream msg;
         msg << "node " << n << ", where flow " << flow << " originates, "
             << " is not an injector";
@@ -129,8 +130,8 @@ void event_parser::p_flow(const flow_id &flow) throw(err) {
         packet_size = 0;
         period = 0;
     }
-    (*injectors)[(*flow_starts)[flow]]->add_event(cur_tick, flow, packet_size,
-                                                  period);
+    (*injectors)[(*flow_starts)[flow].get_numeric_id()]
+        ->add_event(cur_tick, flow, packet_size, period);
 }
 
 void event_parser::p_line() throw(err) {

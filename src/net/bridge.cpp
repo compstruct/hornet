@@ -10,22 +10,6 @@
 #include "bridge.hpp"
 #include "channel_alloc.hpp"
 
-class bogus_router : public router {
-public:
-    bogus_router(node_id id, logger &log) throw();
-    virtual ~bogus_router() throw();
-    virtual tuple<node_id,flow_id> route(node_id src_id, flow_id flow)
-        throw(err);
-};
-
-bogus_router::bogus_router(node_id i, logger &l) throw() : router(i,l) { }
-
-bogus_router::~bogus_router() throw() { }
-
-tuple<node_id,flow_id> bogus_router::route(node_id n, flow_id f) throw(err) {
-    return make_tuple(get_id(), f);
-}
-
 class bogus_channel_alloc : public channel_alloc {
 public:
     bogus_channel_alloc(node_id id, bool one_q_per_f, bool one_f_per_q,
@@ -72,7 +56,6 @@ bridge::bridge(shared_ptr<node> n,
         shared_ptr<ingress>(new ingress(node_ingress_id, n->get_id(),
                                         b2n_vq_ids, flits_per_queue,
                                         b2n_bw_to_xbar,
-                                        target->get_router(),
                                         target->get_channel_alloc(),
                                         target->get_pressures(), stats, log));
     n->add_ingress(n->get_id(), node_ingress);
@@ -91,7 +74,6 @@ bridge::bridge(shared_ptr<node> n,
     }
 
     // node -> bridge
-    shared_ptr<router> br_rt(new bogus_router(id, log));
     shared_ptr<channel_alloc> br_vca(new bogus_channel_alloc(id, one_q_per_f,
                                                              one_f_per_q, log));
     copy(n2b_vq_ids.begin(), n2b_vq_ids.end(),
@@ -99,7 +81,7 @@ bridge::bridge(shared_ptr<node> n,
     ingress_id bridge_ingress_id(n->get_id(), "X");
     incoming = shared_ptr<ingress>(new ingress(bridge_ingress_id, n->get_id(),
                                                n2b_vq_ids, flits_per_queue,
-                                               UINT_MAX, br_rt, br_vca, br_pt,
+                                               UINT_MAX, br_vca, br_pt,
                                                stats, log));
     for (ingress::queues_t::const_iterator q = incoming->get_queues().begin();
          q != incoming->get_queues().end(); ++q) {

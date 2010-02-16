@@ -8,6 +8,7 @@
 #include <boost/static_assert.hpp>
 #include <boost/tuple/tuple.hpp>
 #include <boost/tuple/tuple_comparison.hpp>
+#include <boost/bind.hpp>
 #include "cstdint.hpp"
 #include "endian.hpp"
 #include "node.hpp"
@@ -57,27 +58,35 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
 sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
          uint64_t stats_start, shared_ptr<vector<string> > events_files,
          shared_ptr<statistics> new_stats,
-         logger &new_log, uint32_t seed, bool use_graphite_inj) throw(err)
+         logger &new_log, uint32_t seed, bool use_graphite_inj,
+         uint32_t new_test_seed) throw(err)
     : pes(), bridges(), nodes(), time(sys_time),
-      stats(new_stats), log(new_log) {
+      stats(new_stats), log(new_log), sys_rand(new BoostRand(1000, seed ^ 0xdeadbeef)), test_seed(new_test_seed) {
+
     shared_ptr<id_factory<packet_id> >
         packet_id_factory(new id_factory<packet_id>("packet id"));
     uint32_t num_nodes = read_word(img);
     LOG(log,2) << "creating system with " << num_nodes << " node"
                << (num_nodes == 1 ? "" : "s") << "..." << endl;
-    typedef map<unsigned, shared_ptr<router> > routers_t;
-    routers_t node_rts;
-    typedef map<unsigned, shared_ptr<channel_alloc> > vcas_t;
-    typedef map<unsigned, shared_ptr<bridge_channel_alloc> > br_vcas_t;
-    vcas_t n_vcas;
-    br_vcas_t br_vcas;
+    rands.resize(num_nodes);
+    pes.resize(num_nodes);
+    bridges.resize(num_nodes);
+    nodes.resize(num_nodes);
+    typedef vector<shared_ptr<router> > routers_t;
+    typedef vector<shared_ptr<channel_alloc> > vcas_t;
+    typedef vector<shared_ptr<bridge_channel_alloc> > br_vcas_t;
+    routers_t node_rts(num_nodes);
+    vcas_t n_vcas(num_nodes);
+    br_vcas_t br_vcas(num_nodes);
     typedef event_parser::injectors_t injectors_t;
     typedef event_parser::flow_starts_t flow_starts_t;
-    shared_ptr<injectors_t> injectors(new injectors_t());
+    shared_ptr<injectors_t> injectors(new injectors_t(num_nodes));
     shared_ptr<flow_starts_t> flow_starts(new flow_starts_t());
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
-        shared_ptr<BoostRand> ran(new BoostRand(seed+id));
+        if (id < 0 || id >= num_nodes) throw err_bad_mem_img();
+        if (nodes[id]) throw err_bad_mem_img();
+        shared_ptr<BoostRand> ran(new BoostRand(id, seed+id));
         shared_ptr<router> n_rt(new set_router(id, log, ran));
         uint32_t one_q_per_f = read_word(img);
         uint32_t one_f_per_q = read_word(img);
@@ -150,14 +159,22 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
             throw err_bad_mem_img();
         }
         p->connect(b);
-        rand[id] = ran;
-        //pes[id] = p;
-        pes.push_back(p);
+        rands[id] = ran;
+        pes[id] = p;
         bridges[id] = b;
         nodes[id] = n;
         br_vcas[id] = b_vca;
         node_rts[id] = n_rt;
         n_vcas[id] = n_vca;
+    }
+    for (unsigned i = 0; i < num_nodes; ++i) {
+        assert(nodes[i]);
+        assert(pes[i]);
+        assert(bridges[i]);
+        assert(br_vcas[i]);
+        assert(node_rts[i]);
+        assert(n_vcas[i]);
+        assert(rands[i]);
     }
     arbitration_t arb_scheme = static_cast<arbitration_t>(read_word(img));
     unsigned arb_min_bw = 0;
@@ -198,8 +215,8 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
         for (unsigned q = 0; q < link_num_queues; ++q) {
             queues.insert(virtual_queue_id(read_word(img)));
         }
-        if (nodes.find(link_src_n) == nodes.end()) throw err_bad_mem_img();
-        if (nodes.find(link_dst_n) == nodes.end()) throw err_bad_mem_img();
+        if (link_src_n >= num_nodes) throw err_bad_mem_img();
+        if (link_dst_n >= num_nodes) throw err_bad_mem_img();
         nodes[link_dst_n]->connect_from(string(1, link_dst_port_name),
                                         nodes[link_src_n],
                                         string(1, link_src_port_name),
@@ -278,39 +295,36 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
 shared_ptr<statistics> sys::get_statistics() throw() { return stats; }
 
 void sys::tick_positive_edge() throw(err) {
-    LOG(log,1) << "[system] tick " << dec << time << endl;
+    LOG(log,1) << "[system] posedge " << dec << time << endl;
+    boost::function<int(int)> rr_fn = bind(&BoostRand::random_range, sys_rand, _1);
     for (arbiters_t::iterator i = arbiters.begin(); i != arbiters.end(); ++i) {
         i->second->tick_positive_edge();
     }
-    //for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
-    //    i->second->tick_positive_edge();
-    //}
-    for (uint32_t i = 0; i < pes.size(); i++) {
-        pes[i]->tick_positive_edge();
+    for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
+        (*i)->tick_positive_edge();
     }
     for (nodes_t::iterator i = nodes.begin(); i != nodes.end(); ++i) {
-        i->second->tick_positive_edge();
+        (*i)->tick_positive_edge();
     }
     for (bridges_t::iterator i = bridges.begin(); i != bridges.end(); ++i) {
-        i->second->tick_positive_edge();
+        (*i)->tick_positive_edge();
     }
 }
 
 void sys::tick_negative_edge() throw(err) {
+    LOG(log,1) << "[system] negedge " << dec << time << endl;
+    boost::function<int(int)> rr_fn = bind(&BoostRand::random_range, sys_rand, _1);
     for (arbiters_t::iterator i = arbiters.begin(); i != arbiters.end(); ++i) {
         i->second->tick_negative_edge();
     }
-    //for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
-    //    i->second->tick_negative_edge();
-    //}
-    for (uint32_t i = 0; i < pes.size(); i++) {
-        pes[i]->tick_negative_edge();
+    for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
+        (*i)->tick_negative_edge();
     }
     for (nodes_t::iterator i = nodes.begin(); i != nodes.end(); ++i) {
-        i->second->tick_negative_edge();
+        (*i)->tick_negative_edge();
     }
     for (bridges_t::iterator i = bridges.begin(); i != bridges.end(); ++i) {
-        i->second->tick_negative_edge();
+        (*i)->tick_negative_edge();
     }
 }
 
@@ -336,17 +350,14 @@ bool sys::nothing_to_offer() throw(err) {
 
 bool sys::is_drained() const throw() {
     bool drained = true;
-    //for (pes_t::const_iterator i = pes.begin(); i != pes.end(); ++i) {
-    //   drained &= i->second->is_drained();
-    //}
-    for (uint32_t i = 0; i < pes.size(); i++) {
-        drained &= pes[i]->is_drained();
+    for (pes_t::const_iterator i = pes.begin(); i != pes.end(); ++i) {
+       drained &= (*i)->is_drained();
     }
     for (nodes_t::const_iterator i = nodes.begin(); i != nodes.end(); ++i) {
-        drained &= i->second->is_drained();
+        drained &= (*i)->is_drained();
     }
     for (bridges_t::const_iterator i = bridges.begin(); i != bridges.end(); ++i) {
-        drained &= i->second->is_drained();
+        drained &= (*i)->is_drained();
     }
     return drained;
 }

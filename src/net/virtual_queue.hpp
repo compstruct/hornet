@@ -8,7 +8,7 @@
 #include <cassert>
 #include <cstddef>
 #include <utility>
-#include <queue>
+#include <deque>
 #include <boost/shared_ptr.hpp>
 #include <boost/tuple/tuple.hpp>
 #include "error.hpp"
@@ -18,40 +18,28 @@
 #include "node_id.hpp"
 #include "statistics.hpp"
 #include "virtual_queue_id.hpp"
-#include "router.hpp"
 #include "pressure_tracker.hpp"
 
 using namespace std;
 using namespace boost;
 
 // common allocator allows several virtual queues to share memory
+// release events are not observed until the next positive tick
 class common_alloc {
 public:
     explicit common_alloc(unsigned max_slots) throw();
-    unsigned free_slots() const throw();
     bool full() const throw();
     void alloc(unsigned num_slots = 1) throw();
     void dealloc(unsigned num_slots = 1) throw();
+    void tick_positive_edge() throw(err);
+    void tick_negative_edge() throw(err);
 private:
-    unsigned size;
-    unsigned max_size;
+    const unsigned max_capacity;
+    unsigned capacity; // # full 
+    unsigned stale_capacity; // not updated by dealloc() until negative clock edge
     common_alloc();
     common_alloc(const common_alloc &);
 };
-
-inline bool common_alloc::full() const throw() { return size == 0; }
-
-inline void common_alloc::alloc(unsigned n) throw() {
-    assert(n <= size);
-    size -= n;
-}
-
-inline void common_alloc::dealloc(unsigned n) throw() {
-    assert(size + n <= max_size);
-    size += n;
-}
-
-inline unsigned common_alloc::free_slots() const throw() { return size; }
 
 class channel_alloc;
 
@@ -59,7 +47,6 @@ class virtual_queue {
 public:
     explicit virtual_queue(node_id parent_id, virtual_queue_id queue_id,
                            node_id src_node_id,
-                           shared_ptr<router> flow_router,
                            shared_ptr<channel_alloc> vc_alloc,
                            shared_ptr<pressure_tracker> pressures,
                            shared_ptr<common_alloc> alloc,
@@ -75,6 +62,7 @@ public:
     flit front() const throw(err);
     node_id front_node_id() const throw(err); // dest node id for front flit
     virtual_queue_id front_vq_id() const throw(err);
+    void set_front_next_hop(const node_id &nid, const flow_id &fid) throw(err);
     void set_front_vq_id(const virtual_queue_id &vqid) throw(err);
     bool ingress_new_flow() const throw(); // can accept new flit sequence
     bool egress_new_flow() const throw();  // next flit is a head flit
@@ -89,17 +77,16 @@ public:
 private:
     const virtual_queue_node_id id;
     node_id src_node_id;
-    queue<tuple<flit, node_id, flow_id, flow_id> > q;
-    shared_ptr<router> rt;
+    typedef deque<flit> flits_queue_t;
+    flits_queue_t q;
     shared_ptr<channel_alloc> vc_alloc;
     shared_ptr<pressure_tracker> pressures;
-    node_id next_node; // for next incoming flit
-    flow_id next_flow; // for next incoming flit
     unsigned ingress_remaining;
     flow_id ingress_flow;
     unsigned egress_remaining;
     flow_id egress_flow_old; // only valid for non-head flits
-    flow_id egress_flow_new; // only valid for non-head flits
+    flow_id egress_flow_new;
+    node_id egress_node;
     virtual_queue_id egress_vq;
     const shared_ptr<common_alloc> alloc;
     map<flow_id, unsigned> old_flows; // count of packets for a given flow
@@ -107,59 +94,6 @@ private:
     shared_ptr<statistics> stats;
     logger &log;
 };
-
-inline const virtual_queue_node_id &virtual_queue::get_id() const throw() {
-    return id;
-}
-
-inline bool virtual_queue::egress_new_flow() const throw () {
-    return !empty() && egress_remaining == 0;
-}
-
-inline bool virtual_queue::ingress_new_flow() const throw () {
-    return !full() && ingress_remaining == 0;
-}
-
-
-inline bool virtual_queue::full() const throw() { return alloc->full(); }
-
-inline size_t virtual_queue::size() const throw() { return stale_size; }
-
-inline bool virtual_queue::empty() const throw() { return size() == 0; }
-
-inline bool virtual_queue::egress_ready() const throw(err) {
-    return !empty() && front_vq_id().is_valid();
-}
-
-inline flit virtual_queue::front() const throw(err) {
-    assert(!empty());
-    return q.front().get<0>();
-}
-
-inline node_id virtual_queue::front_node_id() const throw(err) {
-    assert(!empty());
-    return q.front().get<1>();
-}
-
-inline virtual_queue_id virtual_queue::front_vq_id() const throw(err) {
-    assert(!empty());
-    return egress_vq;
-}
-
-inline node_id virtual_queue::get_src_node_id() const throw() {
-    return src_node_id;
-}
-
-inline void virtual_queue::tick_positive_edge() throw(err) { }
-
-inline void virtual_queue::tick_negative_edge() throw(err) {
-    stale_size = q.size();
-    stats->virtual_queue(id, size());
-}
-
-inline bool virtual_queue::is_drained() const throw() {
-    return q.empty();
-}
 
 #endif // __VIRTUAL_QUEUE_HPP__
 

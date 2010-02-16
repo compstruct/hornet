@@ -16,8 +16,8 @@ class set_router : public router {
 public:
     set_router(node_id id, logger &log, shared_ptr<BoostRand> ran) throw();
     virtual ~set_router() throw();
-    virtual tuple<node_id,flow_id> route(node_id src_node_id, flow_id flow)
-        throw(err);
+    virtual void route() throw(err);
+    virtual void add_egress(shared_ptr<egress> egress) throw(err);
     void add_route(const node_id &prev, const flow_id &flow,
                    const vector<tuple<node_id,flow_id,double> > &next_hops)
         throw(err);

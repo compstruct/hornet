@@ -9,27 +9,36 @@ pressure_tracker::pressure_tracker(const node_id &parent, logger &l) throw()
 
 void pressure_tracker::inc(const node_id &tgt,
                            const virtual_queue_id &q) throw(err) {
-    if (pressures.find(tgt) == pressures.end())
+    assert(tgt.is_valid());
+    assert(q.is_valid());
+    if (pressures.find(tgt) == pressures.end()) {
         throw err_bad_neighbor(id.get_numeric_id(), tgt.get_numeric_id());
+    }
     pressures[tgt]++;
 }
 
 void pressure_tracker::dec(const node_id &tgt,
                            const virtual_queue_id &q) throw(err) {
-    if (pressures.find(tgt) == pressures.end())
+    assert(tgt.is_valid());
+    assert(q.is_valid());
+    if (pressures.find(tgt) == pressures.end()) {
         throw err_bad_neighbor(id.get_numeric_id(), tgt.get_numeric_id());
+    }
     assert(pressures[tgt] > 0);
     pressures[tgt]--;
 }
 
 pressure_tracker::pressure_t pressure_tracker::get(const node_id &tgt)
     throw(err) {
-    if (pressures.find(tgt) == pressures.end())
+    assert(tgt.is_valid());
+    if (pressures.find(tgt) == pressures.end()) {
         throw err_bad_neighbor(get_id().get_numeric_id(), tgt.get_numeric_id());
+    }
     return pressures[tgt];
 }
 
 void pressure_tracker::add_egress(const node_id &tgt) throw(err) {
+    assert(tgt.is_valid());
     if (pressures.find(tgt) != pressures.end())
         throw err_duplicate_egress(get_id().get_numeric_id(),
                                    tgt.get_numeric_id());

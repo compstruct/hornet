@@ -79,7 +79,6 @@ virtual_queue_id set_bridge_channel_alloc::request(flow_id f) throw(err) {
     }
     if (!free_qs.empty()) {
         virtual_queue_id vqid;
-        //double r = random_range_double(prop_sum);
         double r = ran->random_range_double(prop_sum);
         for (route_queues_t::const_iterator oqi = free_qs.begin();
              oqi != free_qs.end(); ++oqi) {

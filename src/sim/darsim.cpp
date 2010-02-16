@@ -54,7 +54,8 @@ static uint32_t fresh_random_seed() {
 shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
                            uint64_t stats_start,
                            shared_ptr<vector<string> > evt_files,
-                           uint32_t g_random_seed) throw(err) {
+                           uint32_t g_random_seed,
+                           uint32_t test_seed) throw(err) {
     shared_ptr<ifstream> img(new ifstream(file.c_str(), ios::in | ios::binary));
     if (img->fail()) throw err_parse(file, "cannot read file");
     char file_magic[5] = { 0, 0, 0, 0, 0 };
@@ -70,7 +71,8 @@ shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
         throw err_parse(file, msg.str());
     }
     shared_ptr<sys> s(new sys(sys_time, img, stats_start,
-                              evt_files, stats, syslog,  g_random_seed, false));
+                              evt_files, stats, syslog,  g_random_seed, false,
+                              test_seed));
     img->close();
     return s;
 }
@@ -109,8 +111,9 @@ int main(int argc, char **argv) {
         ("help,h", po::value<vector<bool> >()->zero_tokens()->composing(),
          "show this help message and exit");
     hidden_opts_desc.add_options()
-        ("mem_image", po::value<string>(), "memory image");
-    args_desc.add("mem_image", 1);
+        ("mem-image", po::value<string>(), "memory image")
+        ("test-seed", po::value<uint32_t>(), "test seed");
+    args_desc.add("mem-image", 1);
     po::variables_map opts;
     all_opts_desc.add(opts_desc).add(hidden_opts_desc);
     try {
@@ -127,15 +130,15 @@ int main(int argc, char **argv) {
     }
     if (opts.count("version")) cout << dar_full_version << endl;
     if (opts.count("version") || opts.count("help")) exit(0);
-    if (opts.count("mem_image") < 1) {
+    if (opts.count("mem-image") < 1) {
         cerr << "not enough arguments; try -h" << endl;
         exit(1);
     }
-    if (opts.count("mem_image") > 1) {
+    if (opts.count("mem-image") > 1) {
         cerr << "too many arguments; try -h" << endl;
         exit(1);
     }
-    string mem_image = opts["mem_image"].as<string>();
+    string mem_image = opts["mem-image"].as<string>();
     int verb = (opts.count("verbosity") ?
                      opts["verbosity"].as<int>() : 0);
     syslog.add(cout, verb);
@@ -232,12 +235,16 @@ int main(int argc, char **argv) {
         cerr << "ERROR: VCD dump start/end specified without VCD file" << endl;
         exit(1);
     }
+    uint32_t test_seed = 0;
+    if (opts.count("test-seed")) {
+        test_seed = opts["test-seed"].as<uint32_t>();
+    }
     stats = shared_ptr<statistics>(new statistics(sys_time, stats_start,
                                                   syslog, vcd));
     shared_ptr<sys> s;
     try {
         s = new_system(sys_time, mem_image, stats_start, events_files,
-                       g_random_seed);
+                       g_random_seed, test_seed);
     } catch (const err_parse &e) {
         cerr << e << endl;
         exit(1);

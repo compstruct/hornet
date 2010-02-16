@@ -13,6 +13,7 @@ class node_id {
 public:
     node_id(uint32_t new_id) throw();
     node_id() throw();
+    bool is_valid() const throw();
     void operator=(const node_id &) throw();
     bool operator==(const node_id &) const throw();
     bool operator<(const node_id &) const throw();
@@ -25,7 +26,9 @@ private:
 
 inline node_id::node_id(uint32_t new_id) throw() : id(new_id) { }
 
-inline node_id::node_id() throw() : id(-1) { }
+inline node_id::node_id() throw() : id(0xffffffffUL) { }
+
+inline bool node_id::is_valid() const throw() { return id != 0xffffffffUL; }
 
 inline void node_id::operator=(const node_id &o) throw() { id = o.id; }
 

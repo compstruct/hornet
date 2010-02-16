@@ -6,7 +6,6 @@
 ingress::ingress(const ingress_id &new_id, const node_id &new_src_node_id,
                  const set<virtual_queue_id> &vq_ids,
                  unsigned flits_per_queue, unsigned xbar_bw,
-                 shared_ptr<router> rt,
                  shared_ptr<channel_alloc> vca,
                  shared_ptr<pressure_tracker> pt,
                  shared_ptr<statistics> st,
@@ -22,7 +21,7 @@ ingress::ingress(const ingress_id &new_id, const node_id &new_src_node_id,
             throw err_duplicate_queue(parent_id.get_numeric_id(),
                                       i->get_numeric_id());
         shared_ptr<virtual_queue> q(new virtual_queue(parent_id, *i,
-                                                      src_node_id, rt,
+                                                      src_node_id,
                                                       vca, pt, alloc,
                                                       stats, log));
         vqs[q->get_id().get<1>()] = q;

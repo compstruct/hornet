@@ -132,7 +132,6 @@ void set_channel_alloc::allocate() throw(err) {
             }
         }
         if (!free_qs.empty()) {
-            //double r = random_range_double(prop_sum);
             double r = ran->random_range_double(prop_sum);
             for (route_queues_t::const_iterator oqi = free_qs.begin();
                  oqi != free_qs.end(); ++oqi) {

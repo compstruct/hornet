@@ -122,9 +122,10 @@ void crossbar::tick_positive_edge() throw(err) {
                 if (iq->empty()) {
                     LOG(log, 12) << "empty" << endl;
                 } else {
-                    LOG(log, 12) << "-> node " << iq->front_node_id();
                     if (iq_ready) {
-                        LOG(log, 12) << " (ready)";
+                        virtual_queue_node_id vqn =
+                            make_tuple(iq->front_node_id(), iq->front_vq_id());
+                        LOG(log, 12) << "-> " << vqn << " (ready)";
                     } else {
                         LOG(log, 12) << " (not ready)";
                     }

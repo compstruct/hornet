@@ -16,13 +16,17 @@ private:
    boost::uniform_01<boost::mt19937> gen;
 
 public:
-   BoostRand(const uint32_t seed);
+   BoostRand(const uint32_t id, const uint32_t seed) throw();
    
    // return a natural number selected u.a.r. from [0..max)
-   int random_range(int max);
+   int random_range(int max) throw();
    
    // return a real number selected u.a.r. from [0..max)
-   double random_range_double(double max);
+   double random_range_double(double max) throw();
+
+   uint32_t get_id() const throw();
+private:
+   uint32_t id;
 };
 
 #endif // __RAND_HPP__

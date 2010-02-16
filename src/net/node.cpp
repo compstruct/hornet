@@ -35,6 +35,7 @@ void node::add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err) {
         add_queue_id(q->first);
     }
     ingresses[src] = ingress;
+    rt->add_ingress(ingress);
     vc_alloc->add_ingress(ingress);
     xbar.add_ingress(src, ingress);
 }
@@ -45,19 +46,24 @@ void node::add_egress(node_id dst, shared_ptr<egress> egress) throw(err) {
                                    dst.get_numeric_id());
     }
     egresses[dst] = egress;
+    rt->add_egress(egress);
     vc_alloc->add_egress(egress);
     xbar.add_egress(dst, egress);
 }
 
 shared_ptr<ingress> node::get_ingress_from(node_id src) throw(err) {
-    if (ingresses.find(src) == ingresses.end())
+    assert(src.is_valid());
+    if (ingresses.find(src) == ingresses.end()) {
         throw err_bad_neighbor(get_id().get_numeric_id(), src.get_numeric_id());
+    }
     return ingresses[src];
 }
 
 shared_ptr<egress> node::get_egress_to(node_id dst) throw(err) {
-    if (egresses.find(dst) == egresses.end())
+    assert(dst.is_valid());
+    if (egresses.find(dst) == egresses.end()) {
         throw err_bad_neighbor(get_id().get_numeric_id(), dst.get_numeric_id());
+    }
     return egresses[dst];
 }
 
@@ -75,7 +81,7 @@ void node::connect_from(const string &port_name,
     ingress_id dst_id(get_id(), port_name);
     shared_ptr<ingress> ingr =
         shared_ptr<ingress>(new ingress(dst_id, src->get_id(), vq_ids,
-                                        flits_per_queue, bw_to_xbar, rt,
+                                        flits_per_queue, bw_to_xbar,
                                         vc_alloc, pressures, stats, log));
     egress_id src_id(src->get_id(), src_port_name);
     shared_ptr<egress> egr =
@@ -90,6 +96,8 @@ void node::tick_positive_edge() throw(err) {
          n != ingresses.end(); ++n) {
         n->second->tick_positive_edge();
     }
+    rt->route();
+    vc_alloc->allocate();
     xbar.tick_positive_edge();
 }
 
@@ -99,7 +107,6 @@ void node::tick_negative_edge() throw(err) {
         n->second->tick_negative_edge();
     }
     xbar.tick_negative_edge();
-    vc_alloc->allocate();
 }
 
 bool node::is_drained() const throw() {

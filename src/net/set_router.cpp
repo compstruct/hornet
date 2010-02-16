@@ -11,28 +11,44 @@ set_router::set_router(node_id i, logger &l, shared_ptr<BoostRand> r) throw()
 
 set_router::~set_router() throw() { }
 
-tuple<node_id,flow_id> set_router::route(node_id src, flow_id f) throw(err) {
-    route_query_t rq = route_query_t(src, f);
-    routes_t::iterator ri = routes.find(rq);
-    if (ri == routes.end())
-        throw exc_bad_flow_from(id.get_numeric_id(), src.get_numeric_id(),
-                                f.get_numeric_id());
-    const route_nodes_t &nodes = ri->second;
-    assert(!nodes.empty());
-    //double r = random_range_double(nodes.back().get<2>());
-    double r = ran->random_range_double(nodes.back().get<2>());
-    node_id dst_n(0xdeadbeef);
-    flow_id dst_f(0xdeadbeef);
-    for (route_nodes_t::const_iterator ni = nodes.begin();
-         ni != nodes.end(); ++ni) {
-        node_id n; flow_id nf; double prop; tie(n,nf,prop) = *ni;
-        if (r < prop) {
-            dst_n = n;
-            dst_f = nf;
-            break;
+void set_router::add_egress(shared_ptr<egress> egress) throw(err) { }
+
+void set_router::route() throw(err) {
+    for (ingresses_t::iterator ii = ingresses.begin(); ii != ingresses.end();
+         ++ii) {
+        const node_id src = (*ii)->get_src_node_id();
+        const ingress::queues_t &iqs = (*ii)->get_queues();
+        for (ingress::queues_t::const_iterator qi = iqs.begin();
+             qi != iqs.end(); ++qi) {
+            if (qi->second->egress_new_flow()
+                && !qi->second->front_node_id().is_valid()) {
+                assert(!qi->second->get_egress_new_flow_id().is_valid());
+                const flow_id f = qi->second->get_egress_old_flow_id();
+                route_query_t rq = route_query_t(src, f);
+                routes_t::iterator ri = routes.find(rq);
+                if (ri == routes.end()) {
+                    throw exc_bad_flow_from(id.get_numeric_id(),
+                                            src.get_numeric_id(),
+                                            f.get_numeric_id());
+                }
+                const route_nodes_t &nodes = ri->second;
+                assert(!nodes.empty());
+                double r = ran->random_range_double(nodes.back().get<2>());
+                node_id dst_n;
+                flow_id dst_f;
+                for (route_nodes_t::const_iterator ni = nodes.begin();
+                     ni != nodes.end(); ++ni) {
+                    node_id n; flow_id nf; double prop; tie(n,nf,prop) = *ni;
+                    if (r < prop) {
+                        dst_n = n;
+                        dst_f = nf;
+                        break;
+                    }
+                }
+                qi->second->set_front_next_hop(dst_n, dst_f);
+            }
         }
     }
-    return make_tuple(dst_n, dst_f);
 }
 
 void set_router::add_route(const node_id &src, const flow_id &f,

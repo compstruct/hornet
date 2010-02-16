@@ -8,7 +8,6 @@
 #include <map>
 #include <boost/shared_ptr.hpp>
 #include "virtual_queue.hpp"
-#include "router.hpp"
 #include "logger.hpp"
 #include "statistics.hpp"
 #include "ingress_id.hpp"
@@ -23,7 +22,6 @@ public:
     explicit ingress(const ingress_id &id, const node_id &src_node_id,
                      const set<virtual_queue_id> &vq_ids,
                      unsigned flits_per_queue, unsigned bw_to_xbar,
-                     shared_ptr<router> rt,
                      shared_ptr<channel_alloc> virtual_channel_alloc,
                      shared_ptr<pressure_tracker> pressures,
                      shared_ptr<statistics> stats,

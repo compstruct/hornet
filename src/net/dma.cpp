@@ -17,7 +17,7 @@ dma_channel::dma_channel(node_id n_id, dma_channel_id d_id, uint32_t new_bw,
                          shared_ptr<virtual_queue> q,
                          shared_ptr<statistics> new_stats, logger &l) throw()
     : id(make_tuple(n_id, d_id)), bandwidth(new_bw), vq(q), 
-      started(false), flow(0xdeadbeef), remaining_flits(0),
+      started(false), flow(), remaining_flits(0),
       mem(NULL), stats(new_stats), log(l) { }
 
 dma_channel::~dma_channel() { }
@@ -83,8 +83,16 @@ void ingress_dma_channel::tick_positive_edge() throw(err) {
 }
 
 void ingress_dma_channel::tick_negative_edge() throw(err) {
-    if (vq->egress_new_flow() && !vq->front_vq_id().is_valid()) {
-        vq->set_front_vq_id(vq->get_id().get<1>());
+    if (vq->egress_new_flow()) {
+        if (!vq->front_node_id().is_valid()) {
+            assert(!vq->front_vq_id().is_valid());
+            assert(vq->get_egress_old_flow_id().is_valid());
+            vq->set_front_next_hop(vq->get_id().get<0>(),
+                                   vq->get_egress_old_flow_id());
+        }
+        if (!vq->front_vq_id().is_valid()) {
+            vq->set_front_vq_id(vq->get_id().get<1>());
+        }
     }
 }
 

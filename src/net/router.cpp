@@ -3,7 +3,10 @@
 
 #include "router.hpp"
 
-router::router(node_id i, logger &l) throw() : id(i), log(l) { }
+router::router(node_id i, logger &l) throw() : id(i), ingresses(), log(l) { }
 
 router::~router() throw() { }
 
+void router::add_ingress(shared_ptr<ingress> ing) throw(err) {
+    ingresses.push_back(ing);
+}

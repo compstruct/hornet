@@ -5,6 +5,7 @@
 #define __EVENT_PARSER_HPP__
 
 #include <string>
+#include <vector>
 #include <map>
 #include <iostream>
 #include <boost/shared_ptr.hpp>
@@ -19,7 +20,7 @@ using namespace boost;
 
 class event_parser {
 public:
-    typedef map<node_id, shared_ptr<injector> > injectors_t;
+    typedef vector<shared_ptr<injector> > injectors_t;
     typedef map<flow_id, node_id> flow_starts_t;
 public:
     event_parser(shared_ptr<vector<string> > event_files,

@@ -21,7 +21,7 @@ private:
     string name;
 };
 
-inline egress_id::egress_id() throw() : parent(0xdeadbeef), name("?") { }
+inline egress_id::egress_id() throw() : parent(), name("?") { }
 
 inline egress_id::egress_id(const node_id p, const string &n) throw()
     : parent(p), name(n) { }
