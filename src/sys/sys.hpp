@@ -30,6 +30,7 @@ public:
     shared_ptr<statistics> get_statistics() throw();
     bool work_tbd_darsim() throw(err);
     bool nothing_to_offer() throw(err);
+    uint64_t advance_time() throw(err);
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
     bool is_drained() const throw();

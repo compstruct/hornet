@@ -348,6 +348,16 @@ bool sys::nothing_to_offer() throw(err) {
     return true;
 }
 
+uint64_t sys::advance_time() throw(err) {
+    uint64_t pkt_time = pes[0]->next_pkt_time();
+    for (uint32_t i = 1; i < pes.size(); i++) {
+       if (pkt_time > pes[i]->next_pkt_time()) {
+          pkt_time = pes[i]->next_pkt_time();
+       }
+    }
+    return pkt_time;
+}
+
 bool sys::is_drained() const throw() {
     bool drained = true;
     for (pes_t::const_iterator i = pes.begin(); i != pes.end(); ++i) {

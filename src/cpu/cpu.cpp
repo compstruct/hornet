@@ -58,6 +58,10 @@ bool cpu::is_ready_to_offer() throw(err) {
     return 0;
 }
 
+uint64_t cpu::next_pkt_time() throw(err) {
+    return 0;
+}
+
 bool cpu::is_drained() const throw() {
     return !running;
 }

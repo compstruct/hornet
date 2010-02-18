@@ -117,6 +117,10 @@ bool injector::is_ready_to_offer() throw(err) {
     return 0;
 }
 
+uint64_t injector::next_pkt_time() throw(err) {
+    return 0;
+}
+
 bool injector::is_drained() const throw() {
     bool drained = true;
     drained &= next_event == events.end();

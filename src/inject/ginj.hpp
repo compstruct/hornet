@@ -51,6 +51,7 @@ public:
     virtual void tick_negative_edge() throw(err);
     virtual void set_stop_darsim() throw(err);
     virtual bool is_ready_to_offer() throw(err);
+    virtual uint64_t next_pkt_time() throw(err);
     virtual bool is_drained() const throw();
     uint32_t pkt_accounting;
     bool stop_darsim;

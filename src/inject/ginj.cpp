@@ -129,6 +129,15 @@ bool ginj::is_ready_to_offer() throw(err) {
    return false;
 }
 
+uint64_t ginj::next_pkt_time() throw(err) {
+   queue<g_waiting_packet> &q = waiting_packets_queue;
+   if (!q.empty()) {
+      g_waiting_packet &pkt = q.front();
+      return pkt.time;
+   }
+   return 0;
+}
+
 bool ginj::is_drained() const throw() {
    bool drained = true;
    drained &= net->get_waiting_queues() == 0;
