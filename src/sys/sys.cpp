@@ -9,6 +9,7 @@
 #include <boost/tuple/tuple.hpp>
 #include <boost/tuple/tuple_comparison.hpp>
 #include <boost/bind.hpp>
+#include <boost/function.hpp>
 #include "cstdint.hpp"
 #include "endian.hpp"
 #include "node.hpp"

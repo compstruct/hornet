@@ -3,6 +3,7 @@ Options:
   --cycles arg          simulate for arg cycles (0 = until drained)
   --packets arg         simulate until arg packets arrive (0 = until drained)
   --stats-start arg     start statistics after cycle arg (default: 0)
+  --stats-reset arg     reset statistics every arg cycles (default: never)
   --no-stats            do not report statistics
   --events arg          read event schedule from file arg
   --log arg             write a log to file arg

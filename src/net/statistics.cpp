@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <set>
+#include <sstream>
 #include <algorithm>
 #include <iomanip>
 #include "statistics.hpp"
@@ -10,6 +11,14 @@
 running_stats::running_stats() throw()
     : minimum(-log(0)), maximum(log(0)),
       mean(0), var_numer(0), weight_sum(0) { }
+
+void running_stats::reset() throw() {
+    minimum = -log(0);
+    maximum = log(0);
+    mean = 0;
+    var_numer = 0;
+    weight_sum = 0;
+}
 
 void running_stats::add(double sample, double weight) throw() {
     if (!isnan(sample) && !isnan(weight)) { // NaN -> invalid sample
@@ -82,10 +91,8 @@ uint32_t reorder_buffer::get_out_of_order_count() const throw() {
 
 statistics::statistics(const uint64_t &sys_time, const uint64_t &start,
                        logger &l, shared_ptr<vcd_writer> new_vcd) throw()
-    : system_time(sys_time), start_time(start),
-      sim_start_time(microsec_clock::local_time()),
-      sim_end_time(sim_start_time), original_flows(),
-      have_first_flit_id(false), first_flit_id(-1),
+    : system_time(sys_time), after_reset(false), start_time(start),
+      original_flows(), have_first_flit_id(false), first_flit_id(-1),
       offered_flits(), total_offered_flits(0),
       sent_flits(), total_sent_flits(0),
       received_flits(), total_received_flits(0),
@@ -97,13 +104,40 @@ statistics::statistics(const uint64_t &sys_time, const uint64_t &start,
       link_switches(), reorder_buffers(), flow_reorder_stats(),
       log(l), vcd(new_vcd) { }
 
-void statistics::start_sim() throw() {
-    sim_start_time = microsec_clock::local_time();
-    sim_end_time = sim_start_time;
+void statistics::reset() throw() {
+    have_first_flit_id = false;
+    first_flit_id = flit_id();
+    offered_flits.clear();
+    total_offered_flits = 0;
+    sent_flits.clear();
+    total_sent_flits = 0;
+    received_flits.clear();
+    total_received_flits = 0;
+    total_offered_packets = 0;
+    total_sent_packets = 0;
+    flow_flit_lat_stats.clear();
+    total_flit_lat_stats.reset();
+    packet_flows.clear();
+    packet_offers.clear();
+    packet_sends.clear();
+    flow_packet_lat_stats.clear();
+    total_packet_lat_stats.reset();
+    xbar_xmit_stats.clear();
+    xbar_demand_stats.clear();
+    xbar_bw_stats.clear();
+    cxn_xmit_stats.clear();
+    cxn_demand_stats.clear();
+    cxn_bw_stats.clear();
+    link_switches.clear();
+    reorder_buffers.clear();
+    last_received_times.clear();
+    flow_reorder_stats.clear();
+    after_reset = true;
 }
 
+void statistics::start_sim() throw() { }
+
 void statistics::end_sim() throw() {
-    sim_end_time = microsec_clock::local_time();
     for (flow_stats_t::iterator fsi = flow_reorder_stats.begin();
          fsi != flow_reorder_stats.end(); ++fsi) {
         const flow_id &fid = fsi->first;
@@ -151,7 +185,7 @@ void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
         } else {
             sent_flits[fid]++;
         }
-        assert(total_offered_flits >= total_sent_flits);
+        assert(after_reset || total_offered_flits >= total_sent_flits);
         assert(flit_departures.find(flt.get_uid()) == flit_departures.end());
         flit_departures[flt.get_uid()] = system_time;
     } else {
@@ -159,8 +193,8 @@ void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
         --offered_flits[fid];
         --total_offered_flits;
     }
-    assert(offered_flits[fid] >= sent_flits[fid]);
-    assert(total_offered_flits >= total_sent_flits);
+    assert(after_reset || offered_flits[fid] >= sent_flits[fid]);
+    assert(after_reset || total_offered_flits >= total_sent_flits);
 }
 
 void statistics::receive_flit(const flow_id &org_fid, const flit &flt) throw() {
@@ -361,11 +395,6 @@ static ostream &operator<<(ostream &out,
 }
 
 ostream &operator<<(ostream &out, statistics &stats) {
-    if (stats.sim_start_time == stats.sim_end_time) {
-        stats.sim_end_time = microsec_clock::local_time();
-    }
-    time_duration sim_time = stats.sim_end_time - stats.sim_start_time;
-    uint64_t stats_time = stats.system_time - stats.start_time;
     set<flow_id> flow_ids;
     typedef statistics::flit_counter_t flit_counter_t;
     for (flit_counter_t::const_iterator i = stats.offered_flits.begin();
@@ -380,15 +409,6 @@ ostream &operator<<(ostream &out, statistics &stats) {
          i != stats.received_flits.end(); ++i) {
         flow_ids.insert(i->first);
     }
-    double cycles_per_s = ((static_cast<double>(stats.system_time) * 1.0e6) /
-                            static_cast<double>(sim_time.total_microseconds()));
-    out << "total simulation time:   " << dec << sim_time << endl
-        << "total simulation cycles: " << dec << stats.system_time
-        << " (" << cycles_per_s << " Hz)" << endl
-        << "total statistics cycles: " << dec << stats_time
-        << " (statistics start after cycle " << dec << stats.start_time
-        << ")" << endl << endl;
-
     out << "flit counts:" << endl;
     for (set<flow_id>::const_iterator i = flow_ids.begin();
          i != flow_ids.end(); ++i) {
@@ -413,15 +433,17 @@ ostream &operator<<(ostream &out, statistics &stats) {
         } else {
             received = 0;
         }
-        assert(offered >= sent);
-        assert(sent >= received);
+        assert(stats.after_reset || offered >= sent);
+        assert(stats.after_reset || sent >= received);
         out << "    flow " << f << ": offered " << dec
             << offered << ", sent " << sent << ", received "
             << received << " (" << sent - received << " in flight)"
             << endl;
     }
-    assert(stats.total_offered_flits >= stats.total_sent_flits);
-    assert(stats.total_sent_flits >= stats.total_received_flits);
+    assert(stats.after_reset
+           || stats.total_offered_flits >= stats.total_sent_flits);
+    assert(stats.after_reset
+           || stats.total_sent_flits >= stats.total_received_flits);
     out << "    all flows counts: "
         << "offered " << dec << stats.total_offered_flits
         << ", sent " << stats.total_sent_flits
@@ -430,8 +452,10 @@ ostream &operator<<(ostream &out, statistics &stats) {
         << " in flight)" << endl << endl;
 
     out << "packet counts:" << endl;
-    assert(stats.total_offered_packets >= stats.total_sent_packets);
-    assert(stats.total_sent_packets >= stats.total_received_packets);
+    assert(stats.after_reset
+           || stats.total_offered_packets >= stats.total_sent_packets);
+    assert(stats.after_reset
+           || stats.total_sent_packets >= stats.total_received_packets);
     out << "    all flows counts: "
         << "offered " << dec << stats.total_offered_packets
         << ", sent " << stats.total_sent_packets

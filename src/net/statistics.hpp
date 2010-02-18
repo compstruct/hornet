@@ -10,7 +10,6 @@
 #include <queue>
 #include <boost/tuple/tuple.hpp>
 #include <boost/tuple/tuple_comparison.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
 #include "cstdint.hpp"
 #include "error.hpp"
 #include "flow_id.hpp"
@@ -23,12 +22,12 @@
 
 using namespace std;
 using namespace boost;
-using namespace boost::posix_time;
 
 class running_stats {
 public:
     explicit running_stats() throw();
     void add(double sample, double weight) throw();
+    void reset() throw();
     double get_min() const throw();
     double get_max() const throw();
     double get_mean() const throw();
@@ -61,6 +60,7 @@ class statistics {
 public:
     statistics(const uint64_t &system_time, const uint64_t &start_time,
                logger &log, shared_ptr<vcd_writer> vcd) throw();
+    void reset() throw();
     void start_sim() throw();
     void end_sim() throw();
     void send_flit(const flow_id &, const flit &) throw();
@@ -91,9 +91,8 @@ private:
     flow_id get_original_flow(flow_id f) const throw();
 private:
     const uint64_t &system_time;
+    bool after_reset; // hack to disable asserts on fragmentary statistics
     const uint64_t start_time;
-    ptime sim_start_time;
-    ptime sim_end_time;
     typedef map<flow_id, flow_id> flow_renames_t;
     typedef map<flow_id, uint64_t> flit_counter_t;
     typedef tuple<egress_id, egress_id, unsigned> sub_link_id;

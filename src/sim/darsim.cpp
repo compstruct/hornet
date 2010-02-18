@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <boost/shared_ptr.hpp>
 #include <boost/program_options.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include "cstdint.hpp"
 #include "endian.hpp"
 #include "version.hpp"
@@ -20,6 +21,7 @@
 
 using namespace std;
 using namespace boost;
+using namespace boost::posix_time;
 namespace po = boost::program_options;
 
 static const string magic = "DAR ";
@@ -90,6 +92,8 @@ int main(int argc, char **argv) {
          "simulate until arg packets arrive (0 = until drained)")
         ("stats-start", po::value<uint64_t>(),
          "start statistics after cycle arg (default: 0)")
+        ("stats-reset", po::value<uint64_t>(),
+         "reset statistics every arg cycles (default: never)")
         ("no-stats", po::value<vector<bool> >()->zero_tokens()->composing(),
          "do not report statistics")
         ("events", po::value<vector<string> >()->composing(),
@@ -159,6 +163,7 @@ int main(int argc, char **argv) {
     uint64_t num_cycles = 0;
     uint64_t num_packets = 0;
     uint64_t stats_start = 0;
+    uint64_t stats_reset = 0;
     uint64_t sys_time = 0;
     uint32_t g_random_seed = 0xdeadbeef;
     if (opts.count("cycles")) {
@@ -173,6 +178,13 @@ int main(int argc, char **argv) {
             cerr << "ERROR: statistics start (cycle " << stats_start
                  << ") after the simulation ends (cycle " << num_cycles
                  << ")" << endl;
+            exit(1);
+        }
+    }
+    if (opts.count("stats-reset")) {
+        stats_reset = opts["stats-reset"].as<uint64_t>();
+        if (stats_reset == 0) {
+            cerr << "ERROR: statistics reset period must be positive" << endl;
             exit(1);
         }
     }
@@ -275,6 +287,8 @@ int main(int argc, char **argv) {
             LOG(syslog,0) << "simulating" << oss.str() << endl;
         }
         LOG(syslog,0) << endl;
+        ptime sim_start_time = microsec_clock::local_time();
+        uint32_t last_stats_start = stats_start;
         for (unsigned cycle = 0;
              (((num_cycles == 0 && !s->is_drained()) || cycle < num_cycles)
               && (num_packets == 0
@@ -284,13 +298,39 @@ int main(int argc, char **argv) {
             s->tick_positive_edge();
             s->tick_negative_edge();
             ++sys_time;
+            if (report_stats && (stats_reset != 0) && (sys_time > stats_start)
+                && (sys_time % stats_reset == 0)) {
+                stats->end_sim();
+                LOG(syslog,0) << "statistics for period [" << last_stats_start
+                              << "," << sys_time << ")" << endl;
+                LOG(syslog,0) << endl << *stats << endl;
+                stats->reset();
+                stats->start_sim();
+                last_stats_start = sys_time;
+            }
         }
         if (vcd) vcd->commit();
+        ptime sim_end_time = microsec_clock::local_time();
         stats->end_sim();
         if (vcd) vcd->finalize();
         LOG(syslog,0) << endl << "simulation ended successfully" << endl;
         if (report_stats) {
-            LOG(syslog,0) << endl << *stats << endl;
+            if (last_stats_start < sys_time) {
+                LOG(syslog,0) << "statistics for period [" << last_stats_start
+                    << "," << sys_time << ")" << endl;
+                LOG(syslog,0) << endl << *stats << endl;
+            }
+            time_duration sim_time = sim_end_time - sim_start_time;
+            LOG(syslog,0) << endl;
+            LOG(syslog,0) << "total simulation time:   "
+                          << dec << sim_time << endl
+                          << "total simulation cycles: "
+                          << dec << sys_time << endl
+                          << "total statistics cycles: "
+                          << dec << (sys_time - stats_start)
+                          << " (statistics start after cycle "
+                          << dec << stats_start
+                          << ")" << endl;
         }
     } catch (const exc_syscall_exit &e) {
         if (vcd) vcd->commit();
