@@ -10,11 +10,6 @@ def get_net2cpu_vcs(num_vcs):
     assert num_vcs <= 8
     return range(8,8+num_vcs)
 
-def fact(x):
-    assert x >= 0
-    assert x == int(x)
-    return reduce(operator.mul, xrange(2,x+1), 1)
-
 def concat(xs):
     return reduce(operator.add, xs, [])
 
