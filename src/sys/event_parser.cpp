@@ -1,13 +1,14 @@
 // -*- mode:c++; c-style:k&r; c-basic-offset:4; indent-tabs-mode: nil; -*-
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
+
+#include "cstdint.hpp"
 #include <cassert>
 #include <iomanip>
 #include <cstdlib>
 #include <sstream>
 #include <set>
 #include <iterator>
-
 #include "event_parser.hpp"
  
 event_parser::event_parser(shared_ptr<vector<string> > events_files,
@@ -124,11 +125,15 @@ void event_parser::p_flow(const flow_id &flow) throw(err) {
     string w = p_kw("off", "size", false);
     if (w == "size") {
         packet_size = p_nat(1);
-        p_kw("period", false);
-        period = p_nat(1);
+        w = p_kw("period", true);
+        if (w.empty()) {
+            period = 0;
+        } else {
+            period = p_nat(1);
+        }
     } else {
         packet_size = 0;
-        period = 0;
+        period = UINT64_MAX;
     }
     (*injectors)[(*flow_starts)[flow].get_numeric_id()]
         ->add_event(cur_tick, flow, packet_size, period);

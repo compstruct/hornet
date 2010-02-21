@@ -16,7 +16,8 @@ injector::injector(const pe_id &id, const uint64_t &t,
                    shared_ptr<statistics> st, logger &l,
                    shared_ptr<BoostRand> r) throw(err)
     : pe(id), system_time(t), net(), events(), next_event(events.begin()),
-      waiting_packets(), incoming_packets(), flows(), flow_ids(), queue_ids(),
+      waiting_packets(), incoming_packets(), flows(),
+      flow_ids(), queue_ids(),
       packet_id_factory(pif), stats(st), log(l), ran(r) { }
 
 injector::~injector() throw() { }
@@ -36,7 +37,7 @@ void injector::add_event(const uint64_t &t, const flow_id &f,
     next_event = events.begin();
     if (find(flow_ids.begin(), flow_ids.end(), f) == flow_ids.end()) {
         flow_ids.push_back(f);
-        flows[f] = make_tuple(UINT64_MAX, 0, 0);
+        flows[f] = make_tuple(UINT64_MAX, 0, UINT64_MAX);
     }
 }
 
@@ -47,12 +48,23 @@ void injector::tick_positive_edge() throw(err) {
          ++next_event) {
         tick_t t; flow_id f; len_t l; period_t p;
         tie(t, f, l, p) = *next_event;
-        flows[f] = make_tuple(system_time, l, p);
+        if (p > 0) {
+            flows[f] = make_tuple(system_time, l, p);
+        } else if (l > 0) {
+            assert(l > 0);
+            waiting_packet pkt = { packet_id_factory->get_fresh_id(), f, l };
+            waiting_packets[f].push(pkt);
+            stats->offer_packet(f, l, pkt.id);
+        }
         LOG(log,2) << "[injector " << get_id() << "] flow " << f;
         if (l == 0) {
             LOG(log,2) << " off" << endl;
+        } else if (p == 0) {
+            LOG(log,2) << " sending a "
+                       << dec << (l + 1) << "-flit packet" << endl;
         } else {
-            LOG(log,2) << " sending a " << dec << l << "-flit packet every "
+            LOG(log,2) << " sending a "
+                       << dec << (l + 1) << "-flit packet every "
                        << dec << p << " tick" << (p == 1 ? "" : "s") << endl;
         }
     }
@@ -82,9 +94,9 @@ void injector::tick_positive_edge() throw(err) {
         }
     }
     random_shuffle(flow_ids.begin(), flow_ids.end(), rr_fn);
-    for (vector<flow_id>::iterator fi = flow_ids.begin(); fi != flow_ids.end(); ++fi) {
-        tick_t t; len_t l; period_t p;
-        tie(t, l, p) = flows[*fi];
+    for (vector<flow_id>::iterator fi = flow_ids.begin();
+         fi != flow_ids.end(); ++fi) {
+        tick_t t; len_t l; period_t p; tie(t, l, p) = flows[*fi];
         if (l != 0 && t == system_time) {
             waiting_packet pkt = { packet_id_factory->get_fresh_id(), *fi, l };
             waiting_packets[*fi].push(pkt);
