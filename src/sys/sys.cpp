@@ -364,9 +364,11 @@ bool sys::is_drained() const throw() {
     for (pes_t::const_iterator i = pes.begin(); i != pes.end(); ++i) {
        drained &= (*i)->is_drained();
     }
+    if (!drained) return drained;
     for (nodes_t::const_iterator i = nodes.begin(); i != nodes.end(); ++i) {
         drained &= (*i)->is_drained();
     }
+    if (!drained) return drained;
     for (bridges_t::const_iterator i = bridges.begin(); i != bridges.end(); ++i) {
         drained &= (*i)->is_drained();
     }

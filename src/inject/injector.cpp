@@ -130,26 +130,34 @@ bool injector::is_ready_to_offer() throw(err) {
 }
 
 uint64_t injector::next_pkt_time() throw(err) {
-    return 0;
+    uint64_t next_time = UINT64_MAX;
+    if (!incoming_packets.empty()) {
+        return system_time;
+    }
+    for (waiting_packets_t::const_iterator wpi = waiting_packets.begin();
+         wpi != waiting_packets.end(); ++wpi) {
+        if (!wpi->second.empty()) return system_time;
+    }
+    if (next_event != events.end()) {
+        next_time = next_event->get<0>();
+    }
+    for (flows_t::const_iterator fi = flows.begin(); fi != flows.end(); ++fi) {
+        if (fi->second.get<0>() < next_time) {
+            next_time = fi->second.get<0>();
+        }
+    }
+    return next_time;
 }
 
 bool injector::is_drained() const throw() {
     bool drained = true;
-    drained &= next_event == events.end();
     drained &= net->get_waiting_queues() == 0;
     for (uint32_t i = 0; i < 32; ++i) {
         drained &= incoming_packets.find(i) == incoming_packets.end();
     }
-    for (vector<flow_id>::const_iterator fi = flow_ids.begin();
-         fi != flow_ids.end(); ++fi) {
-        tick_t t; len_t l; period_t p;
-        flows_t::const_iterator fli = flows.find(*fi);
-        if (fli != flows.end()) {
-            tie(t, l, p) = fli->second;
-            drained &= l == 0;
-            waiting_packets_t::const_iterator wpi = waiting_packets.find(*fi);
-            drained &= ((wpi == waiting_packets.end()) || wpi->second.empty());
-        }
+    for (waiting_packets_t::const_iterator wpi = waiting_packets.begin();
+         wpi != waiting_packets.end(); ++wpi) {
+        drained &= wpi->second.empty();
     }
     return drained;
 }

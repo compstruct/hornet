@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
          "do not report statistics")
         ("events", po::value<vector<string> >()->composing(),
          "read event schedule from file arg")
-        ("log", po::value<vector<string> >()->composing(),
+        ("log-file", po::value<vector<string> >()->composing(),
          "write a log to file arg")
         ("vcd-file", po::value<string>(),
          "write trace in VCD format to file arg")
@@ -146,10 +146,10 @@ int main(int argc, char **argv) {
     int verb = (opts.count("verbosity") ?
                      opts["verbosity"].as<int>() : 0);
     syslog.add(cout, verb);
-    if (opts.count("log")) {
+    if (opts.count("log-file")) {
         int log_verb = (opts.count("log-verbosity") ?
                              opts["log-verbosity"].as<int>() : verb);
-        vector<string> fns = opts["log"].as<vector<string> >();
+        vector<string> fns = opts["log-file"].as<vector<string> >();
         for (vector<string>::const_iterator fn = fns.begin();
              fn != fns.end(); ++fn) {
             shared_ptr<ofstream> f(new ofstream(fn->c_str()));
@@ -289,12 +289,26 @@ int main(int argc, char **argv) {
         LOG(syslog,0) << endl;
         ptime sim_start_time = microsec_clock::local_time();
         uint32_t last_stats_start = stats_start;
-        for (unsigned cycle = 0;
-             (((num_cycles == 0 && !s->is_drained()) || cycle < num_cycles)
-              && (num_packets == 0
-                  || stats->get_received_packet_count() < num_packets));
-             ++cycle) {
+        while (true) {
             if (vcd) vcd->commit();
+            bool drained = s->is_drained() && (!vcd || vcd->is_drained());
+            uint64_t next_time = s->advance_time();
+            if (num_cycles != 0 && num_cycles < sys_time) {
+                break;
+            }
+            if (drained && next_time == UINT64_MAX) {
+                if (num_cycles != 0) {
+                    num_cycles = sys_time;
+                }
+                break;
+            }
+            if (num_packets != 0
+                && stats->get_received_packet_count() >= num_packets) {
+                break;
+            }
+            if (drained && next_time != UINT64_MAX && next_time > sys_time) {
+                sys_time = next_time;
+            }
             s->tick_positive_edge();
             s->tick_negative_edge();
             ++sys_time;
@@ -309,7 +323,6 @@ int main(int argc, char **argv) {
                 last_stats_start = sys_time;
             }
         }
-        if (vcd) vcd->commit();
         ptime sim_end_time = microsec_clock::local_time();
         stats->end_sim();
         if (vcd) vcd->finalize();

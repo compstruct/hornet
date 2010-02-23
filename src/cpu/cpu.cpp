@@ -51,15 +51,19 @@ void cpu::tick_negative_edge() throw(err) { }
 void cpu::add_packet(uint64_t time, const flow_id &flow, uint32_t len) throw(err) { }
 
 bool cpu::work_queued() throw(err) {
-    return 0;
+    return running;
 }
 
 bool cpu::is_ready_to_offer() throw(err) {
-    return 0;
+    return running;
 }
 
 uint64_t cpu::next_pkt_time() throw(err) {
-    return 0;
+    if (running) {
+        return time;
+    } else {
+        return UINT64_MAX;
+    }
 }
 
 bool cpu::is_drained() const throw() {
