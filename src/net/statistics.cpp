@@ -313,7 +313,7 @@ void statistics::register_flow(const flow_id &id) throw(err) {
 void statistics::register_flow_rename(const flow_id &from,
                                       const flow_id &to) throw (err) {
     assert(from != to);
-    assert(vcd_flows.find(from) != vcd_flows.end());
+    if (vcd) assert(vcd_flows.find(from) != vcd_flows.end());
     if (original_flows.find(to) != original_flows.end()) {
         if (original_flows[to] != from) {
             throw err_duplicate_flow_rename(to.get_numeric_id(),
