@@ -27,8 +27,8 @@ public:
                  shared_ptr<injectors_t> injectors,
                  shared_ptr<flow_starts_t> flow_starts) throw(err);
 private:
-    typedef tuple<string,unsigned> pos_t;
-    unsigned p_nat(unsigned low = 0) throw(err);
+    typedef tuple<string,uint64_t> pos_t;
+    uint64_t p_nat(uint64_t low = 0) throw(err);
     string p_kw(const set<string> &kws, bool empty_ok) throw(err);
     string p_kw(const string &kw1, bool empty_ok) throw(err);
     string p_kw(const string &kw1, const string &kw2, bool empty_ok) throw(err);
@@ -40,7 +40,7 @@ private:
     shared_ptr<istream> input;
     shared_ptr<istream> line;
     pos_t pos;
-    unsigned cur_tick;
+    uint64_t cur_tick;
 };
 
 #endif // __EVENT_PARSER_HPP__

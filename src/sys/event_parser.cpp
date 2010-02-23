@@ -30,8 +30,8 @@ event_parser::event_parser(shared_ptr<vector<string> > events_files,
     }
 }
 
-unsigned event_parser::p_nat(unsigned low) throw(err) {
-    unsigned n;
+uint64_t event_parser::p_nat(uint64_t low) throw(err) {
+    uint64_t n;
     string s;
     *line >> s;
     if (s.size() == 0 || s[0] == '#') {
@@ -48,11 +48,11 @@ unsigned event_parser::p_nat(unsigned low) throw(err) {
     }
     char *end;
     if (s.size() > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
-        n = strtoul(s.c_str() + 2, &end, 16);
+        n = strtoull(s.c_str() + 2, &end, 16);
     } else if (s.size() > 2 && s[0] == '0' && (s[1] == 'b' || s[1] == 'B')) {
-        n = strtoul(s.c_str() + 2, &end, 2);
+        n = strtoull(s.c_str() + 2, &end, 2);
     } else {
-        n = strtoul(s.c_str(), &end, 10);
+        n = strtoull(s.c_str(), &end, 10);
     }
     if (*end != '\0') {
         ostringstream msg;
@@ -144,7 +144,7 @@ void event_parser::p_line() throw(err) {
     string w = p_kw("tick", "flow", true);
     if (w.size() == 0) return;
     if (w == "tick") {
-        unsigned t = p_nat();
+        uint64_t t = p_nat();
         if (t < cur_tick) {
             ostringstream msg;
             msg << "tick " << dec << t << " precedes previous tick ("
