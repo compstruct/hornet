@@ -69,12 +69,12 @@ void arbiter::tick_positive_edge() throw(err) {
         const ingress::queues_t &src_qs = dst_to_src->get_remote_queues();
         for (ingress::queues_t::const_iterator qi = src_qs.begin();
              qi != src_qs.end(); ++qi) {
-            if (!qi->second->full()) ++num_src_queues;
+            if (!qi->second->back_is_full()) ++num_src_queues;
         }
         const ingress::queues_t &dst_qs = src_to_dst->get_remote_queues();
         for (ingress::queues_t::const_iterator qi = dst_qs.begin();
              qi != dst_qs.end(); ++qi) {
-            if (!qi->second->full()) ++num_dst_queues;
+            if (!qi->second->back_is_full()) ++num_dst_queues;
         }
         double out_pressure_frac =
             src_to_dst_pressure / (src_to_dst_pressure + dst_to_src_pressure);

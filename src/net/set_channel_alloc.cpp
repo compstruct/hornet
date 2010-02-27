@@ -73,7 +73,7 @@ void set_channel_alloc::allocate() throw(err) {
         for (ingress::queues_t::const_iterator eqi = eqs.begin();
              eqi != eqs.end(); ++eqi) {
             const shared_ptr<virtual_queue> &eq = eqi->second;
-            if (!is_claimed(eq->get_id()) && eq->ingress_new_flow()) {
+            if (!is_claimed(eq->get_id()) && !eq->back_is_mid_packet()) {
                 ++num_free_eqs;
             }
         }
@@ -85,7 +85,10 @@ void set_channel_alloc::allocate() throw(err) {
         const ingress::queues_t &iqs = (*ii)->get_queues();
         for (ingress::queues_t::const_iterator qi = iqs.begin();
              qi != iqs.end(); ++qi) {
-            if (qi->second->egress_new_flow()
+            if (!qi->second->front_is_empty()
+                && qi->second->front_is_head_flit()
+                && qi->second->front_node_id().is_valid()
+                && qi->second->front_new_flow_id().is_valid()
                 && !qi->second->front_vq_id().is_valid()) {
                 in_qs.push_back(qi->second);
             }
@@ -97,9 +100,9 @@ void set_channel_alloc::allocate() throw(err) {
     random_shuffle(in_qs.begin(), in_qs.end(), rr_fn);
     for (qs_t::iterator qi = in_qs.begin(); qi != in_qs.end(); ++qi) {
         shared_ptr<virtual_queue> &iq = *qi;
-        assert(!iq->empty());
-        route_query_t rq(iq->get_src_node_id(), iq->get_egress_old_flow_id(),
-                         iq->front_node_id(), iq->get_egress_new_flow_id());
+        assert(!iq->front_is_empty());
+        route_query_t rq(iq->get_src_node_id(), iq->front_old_flow_id(),
+                         iq->front_node_id(), iq->front_new_flow_id());
         assert(routes.find(rq) != routes.end());
         const route_queues_t &route_qs = routes[rq];
         route_queues_t free_qs;
@@ -107,26 +110,26 @@ void set_channel_alloc::allocate() throw(err) {
         for (route_queues_t::const_iterator rqi = route_qs.begin();
              rqi != route_qs.end(); ++rqi) {
             shared_ptr<virtual_queue> rq; double prop; tie(rq,prop) = *rqi;
-            if (rq->empty()) {
-                if (!is_claimed(rq->get_id()) && rq->ingress_new_flow()) {
+            if (rq->back_is_empty()) { // OQPF/OFPQ do not apply
+                if (!is_claimed(rq->get_id()) && !rq->back_is_mid_packet()) {
                     prop_sum += prop;
                     free_qs.push_back(make_tuple(rq, prop_sum));
                 }
             } else if (one_queue_per_flow
-                       && rq->has_old_flow(iq->get_egress_new_flow_id())) {
+                       && rq->back_has_old_flow(iq->front_new_flow_id())) {
                 // VC has current flow; permit only this VC
                 prop_sum = 1.0;
                 free_qs.clear();
-                if (!is_claimed(rq->get_id()) && rq->ingress_new_flow()) {
+                if (!is_claimed(rq->get_id()) && !rq->back_is_mid_packet()) {
                     prop_sum += prop;
                     free_qs.push_back(make_tuple(rq, prop_sum));
                 }
                 break;
             } else if (one_flow_per_queue
-                       && !rq->has_old_flow(iq->get_egress_new_flow_id())) {
+                       && !rq->back_has_old_flow(iq->front_new_flow_id())) {
                 // VC has another flow so cannot have ours
                 continue;
-            } else if (!is_claimed(rq->get_id()) && rq->ingress_new_flow()) {
+            } else if (!is_claimed(rq->get_id()) && !rq->back_is_mid_packet()) {
                 prop_sum += prop;
                 free_qs.push_back(make_tuple(rq, prop_sum));
             }
@@ -137,7 +140,7 @@ void set_channel_alloc::allocate() throw(err) {
                  oqi != free_qs.end(); ++oqi) {
                 shared_ptr<virtual_queue> oq; double prop; tie(oq,prop) = *oqi;
                 if (r < prop) {
-                    iq->set_front_vq_id(oq->get_id().get<1>());
+                    iq->front_set_vq_id(oq->get_id().get<1>());
                     ++num_grants;
                     break;
                 }

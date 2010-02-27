@@ -39,7 +39,7 @@ static uint32_t read_word(shared_ptr<ifstream> in) throw(err) {
 }
 
 static double read_double(shared_ptr<ifstream> in) throw(err) {
-    uint64_t word = 0xdeadbeefdeadbeefLL;
+    uint64_t word = 0xdeadbeefdeadbeefULL;
     in->read((char *) &word, 8);
     if (in->bad()) throw err_bad_mem_img();
     word = endian(word);
@@ -60,10 +60,10 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
          uint64_t stats_start, shared_ptr<vector<string> > events_files,
          shared_ptr<statistics> new_stats,
          logger &new_log, uint32_t seed, bool use_graphite_inj,
-         uint32_t new_test_seed) throw(err)
+         uint64_t new_test_flags) throw(err)
     : pes(), bridges(), nodes(), time(sys_time),
-      stats(new_stats), log(new_log), sys_rand(new BoostRand(1000, seed ^ 0xdeadbeef)), test_seed(new_test_seed) {
-
+      stats(new_stats), log(new_log), sys_rand(new BoostRand(-1, seed++)),
+      test_flags(new_test_flags) {
     shared_ptr<id_factory<packet_id> >
         packet_id_factory(new id_factory<packet_id>("packet id"));
     uint32_t num_nodes = read_word(img);
@@ -87,7 +87,7 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
         uint32_t id = read_word(img);
         if (id < 0 || id >= num_nodes) throw err_bad_mem_img();
         if (nodes[id]) throw err_bad_mem_img();
-        shared_ptr<BoostRand> ran(new BoostRand(id, seed+id));
+        shared_ptr<BoostRand> ran(new BoostRand(id, seed++));
         shared_ptr<router> n_rt(new set_router(id, log, ran));
         uint32_t one_q_per_f = read_word(img);
         uint32_t one_f_per_q = read_word(img);
@@ -293,19 +293,27 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
     LOG(log,1) << "system created" << endl;
 }
 
-shared_ptr<statistics> sys::get_statistics() throw() { return stats; }
-
 void sys::tick_positive_edge() throw(err) {
     LOG(log,1) << "[system] posedge " << dec << time << endl;
-    boost::function<int(int)> rr_fn = bind(&BoostRand::random_range, sys_rand, _1);
+    boost::function<int(int)> rr_fn =
+        bind(&BoostRand::random_range, sys_rand, _1);
     for (arbiters_t::iterator i = arbiters.begin(); i != arbiters.end(); ++i) {
         i->second->tick_positive_edge();
+    }
+    if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
+        random_shuffle(pes.begin(), pes.end(), rr_fn);
     }
     for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
         (*i)->tick_positive_edge();
     }
+    if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
+        random_shuffle(nodes.begin(), nodes.end(), rr_fn);
+    }
     for (nodes_t::iterator i = nodes.begin(); i != nodes.end(); ++i) {
         (*i)->tick_positive_edge();
+    }
+    if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
+        random_shuffle(bridges.begin(), bridges.end(), rr_fn);
     }
     for (bridges_t::iterator i = bridges.begin(); i != bridges.end(); ++i) {
         (*i)->tick_positive_edge();
@@ -318,11 +326,20 @@ void sys::tick_negative_edge() throw(err) {
     for (arbiters_t::iterator i = arbiters.begin(); i != arbiters.end(); ++i) {
         i->second->tick_negative_edge();
     }
+    if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
+        random_shuffle(pes.begin(), pes.end(), rr_fn);
+    }
     for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
         (*i)->tick_negative_edge();
     }
+    if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
+        random_shuffle(nodes.begin(), nodes.end(), rr_fn);
+    }
     for (nodes_t::iterator i = nodes.begin(); i != nodes.end(); ++i) {
         (*i)->tick_negative_edge();
+    }
+    if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
+        random_shuffle(bridges.begin(), bridges.end(), rr_fn);
     }
     for (bridges_t::iterator i = bridges.begin(); i != bridges.end(); ++i) {
         (*i)->tick_negative_edge();
@@ -353,7 +370,7 @@ uint64_t sys::advance_time() throw(err) {
     uint64_t pkt_time = pes[0]->next_pkt_time();
     for (uint32_t i = 1; i < pes.size(); i++) {
        if (pkt_time > pes[i]->next_pkt_time()) {
-          pkt_time = pes[i]->next_pkt_time();
+           pkt_time = pes[i]->next_pkt_time();
        }
     }
     return pkt_time;

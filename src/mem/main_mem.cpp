@@ -89,6 +89,5 @@ void main_mem::tick_positive_edge() throw(err) {
     }
 }
 
-void main_mem::tick_negative_edge() throw(err) {
-}
+void main_mem::tick_negative_edge() throw(err) { }
 

@@ -57,7 +57,7 @@ shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
                            uint64_t stats_start,
                            shared_ptr<vector<string> > evt_files,
                            uint32_t g_random_seed,
-                           uint32_t test_seed) throw(err) {
+                           uint32_t test_flags) throw(err) {
     shared_ptr<ifstream> img(new ifstream(file.c_str(), ios::in | ios::binary));
     if (img->fail()) throw err_parse(file, "cannot read file");
     char file_magic[5] = { 0, 0, 0, 0, 0 };
@@ -74,7 +74,7 @@ shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
     }
     shared_ptr<sys> s(new sys(sys_time, img, stats_start,
                               evt_files, stats, syslog,  g_random_seed, false,
-                              test_seed));
+                              test_flags));
     img->close();
     return s;
 }
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
          "show this help message and exit");
     hidden_opts_desc.add_options()
         ("mem-image", po::value<string>(), "memory image")
-        ("test-seed", po::value<uint32_t>(), "test seed");
+        ("test-flags", po::value<uint64_t>(), "test flags");
     args_desc.add("mem-image", 1);
     po::variables_map opts;
     all_opts_desc.add(opts_desc).add(hidden_opts_desc);
@@ -247,16 +247,16 @@ int main(int argc, char **argv) {
         cerr << "ERROR: VCD dump start/end specified without VCD file" << endl;
         exit(1);
     }
-    uint32_t test_seed = 0;
-    if (opts.count("test-seed")) {
-        test_seed = opts["test-seed"].as<uint32_t>();
+    uint32_t test_flags = 0;
+    if (opts.count("test-flags")) {
+        test_flags = opts["test-flags"].as<uint64_t>();
     }
     stats = shared_ptr<statistics>(new statistics(sys_time, stats_start,
                                                   syslog, vcd));
     shared_ptr<sys> s;
     try {
         s = new_system(sys_time, mem_image, stats_start, events_files,
-                       g_random_seed, test_seed);
+                       g_random_seed, test_flags);
     } catch (const err_parse &e) {
         cerr << e << endl;
         exit(1);
@@ -293,7 +293,7 @@ int main(int argc, char **argv) {
             if (vcd) vcd->commit();
             bool drained = s->is_drained() && (!vcd || vcd->is_drained());
             uint64_t next_time = s->advance_time();
-            if (num_cycles != 0 && num_cycles < sys_time) {
+            if (num_cycles != 0 && num_cycles <= sys_time) {
                 break;
             }
             if (drained && next_time == UINT64_MAX) {
@@ -315,7 +315,8 @@ int main(int argc, char **argv) {
             if (report_stats && (stats_reset != 0) && (sys_time > stats_start)
                 && (sys_time % stats_reset == 0)) {
                 stats->end_sim();
-                LOG(syslog,0) << "statistics for period [" << last_stats_start
+                LOG(syslog,0) << "statistics for period ["
+                              << dec << last_stats_start
                               << "," << sys_time << ")" << endl;
                 LOG(syslog,0) << endl << *stats << endl;
                 stats->reset();

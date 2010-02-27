@@ -26,8 +26,7 @@ public:
     sys(const uint64_t &time, shared_ptr<ifstream> image, uint64_t stats_t0,
         shared_ptr<vector<string> > event_files,
         shared_ptr<statistics> stats, logger &log,
-        uint32_t seed, bool use_graphite_inj, uint32_t test_seed) throw(err);
-    shared_ptr<statistics> get_statistics() throw();
+        uint32_t seed, bool use_graphite_inj, uint64_t test_flags) throw(err);
     bool work_tbd_darsim() throw(err);
     bool nothing_to_offer() throw(err);
     uint64_t advance_time() throw(err);
@@ -36,7 +35,6 @@ public:
     bool is_drained() const throw();
 private:
     typedef vector<shared_ptr<BoostRand> > rands_t;
-    //typedef map<unsigned, shared_ptr<pe> > pes_t;
     typedef vector<shared_ptr<pe> > pes_t;
     typedef vector<shared_ptr<bridge> > bridges_t;
     typedef vector<shared_ptr<node> > nodes_t;
@@ -46,6 +44,10 @@ private:
 public:
     pes_t pes;
 private:
+    typedef enum {
+        TF_RANDOMIZE_NODE_ORDER = 1
+    } test_flags_t;
+
     bridges_t bridges;
     nodes_t nodes;
     arbiters_t arbiters;
@@ -54,7 +56,7 @@ private:
     shared_ptr<statistics> stats;
     logger &log;
     shared_ptr<BoostRand> sys_rand;
-    uint32_t test_seed;
+    uint64_t test_flags;
 };
 
 #endif // __SYS_HPP__

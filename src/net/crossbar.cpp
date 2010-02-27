@@ -89,12 +89,14 @@ void crossbar::tick_positive_edge() throw(err) {
     boost::function<int(int)> rr_fn = bind(&BoostRand::random_range, ran, _1);
     random_shuffle(egress_qs.begin(), egress_qs.end(), rr_fn);
     random_shuffle(ingress_qs.begin(), ingress_qs.end(), rr_fn);
-    vqs_t ingress_ready_qs;
+    vqs_t ingress_ready_qs; // ingress VCs that are ready to transmit
     for (nvqs_t::iterator iqi = ingress_qs.begin();
          iqi != ingress_qs.end(); ++iqi) {
         node_id &in_node = iqi->get<0>();
         shared_ptr<virtual_queue> &iq = iqi->get<1>();
-        if (ibws[in_node] > 0 && iq->egress_ready()) {
+        if (ibws[in_node] > 0 && !iq->front_is_empty()
+            && iq->front_node_id().is_valid()
+            && iq->front_vq_id().is_valid()) {
             egress_demands[iq->front_node_id()]++;
             ingress_ready_qs.push_back(iq);
             --ibws[in_node];
@@ -110,16 +112,18 @@ void crossbar::tick_positive_edge() throw(err) {
         tie(out_node,out_q) = eq->get_id();
         LOG(log,12) << "[xbar " << id << "]     egress queue "
             << eq->get_id() << endl;
-        if (ebws[out_node] > 0 && !eq->full()) {
+        if (ebws[out_node] > 0 && !eq->back_is_full()) {
             ++num_eqs;
             for (vqs_t::iterator iqi = ingress_ready_qs.begin();
                  iqi != ingress_ready_qs.end(); ++iqi) {
                 shared_ptr<virtual_queue> &iq = *iqi;
-                bool iq_ready = iq->egress_ready();
+                bool iq_ready = (!iq->front_is_empty()
+                                 && iq->front_node_id().is_valid()
+                                 && iq->front_vq_id().is_valid());
                 LOG(log,12) << "[xbar " << id
                             << "]         considering ingress queue "
                             << iq->get_id() << ": ";
-                if (iq->empty()) {
+                if (iq->front_is_empty()) {
                     LOG(log, 12) << "empty" << endl;
                 } else {
                     if (iq_ready) {
@@ -136,9 +140,9 @@ void crossbar::tick_positive_edge() throw(err) {
                     LOG(log,12) << "[xbar " << id
                         << "]         queue " << iq->get_id()
                         << " wins arbitration" << endl;
-                    flit f = iq->front();
-                    iq->pop();
-                    eq->push(f);
+                    flit f = iq->front_flit();
+                    iq->front_pop();
+                    eq->back_push(f);
                     --ebws[out_node];
                     ++num_sent;
                     break; // exit ingress_ready_qs loop

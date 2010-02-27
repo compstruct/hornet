@@ -18,6 +18,7 @@ class flit {
 public:
     flit(uint64_t data, packet_id pid=0xffffffffffffffffULL) throw();
     flit(const flit &flit) throw();
+    flit() throw();
     flit &operator=(const flit &flit) throw();
     const uint64_t &get_data() const throw();
     const flit_id &get_uid() const throw();
@@ -37,6 +38,10 @@ inline flit::flit(uint64_t new_data, packet_id new_pid) throw()
 
 inline flit::flit(const flit &f) throw()
     : data(f.data), uid(f.uid), pid(f.pid) { }
+
+inline flit::flit() throw()
+    : data(0xdeadbeefdeadbeefULL), uid(0xffffffffffffffffULL),
+      pid(0xffffffffffffffffULL) { }
 
 inline flit &flit::operator=(const flit &f) throw() {
     data = f.data;

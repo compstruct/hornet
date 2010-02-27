@@ -56,23 +56,23 @@ virtual_queue_id set_bridge_channel_alloc::request(flow_id f) throw(err) {
     double prop_sum = 0.0;
     for (route_queues_t::const_iterator qi = qs.begin(); qi != qs.end(); ++qi) {
         shared_ptr<virtual_queue> q; double prop; tie(q,prop) = *qi;
-        if (q->empty()) {
-            if (!is_claimed(q->get_id()) && q->ingress_new_flow()) {
+        if (q->back_is_empty()) {
+            if (!is_claimed(q->get_id()) && !q->back_is_mid_packet()) {
                 prop_sum += prop;
                 free_qs.push_back(make_tuple(q, prop_sum));
             }
-        } else if (one_queue_per_flow && q->has_old_flow(f)) {
+        } else if (one_queue_per_flow && q->back_has_old_flow(f)) {
             // VC has current flow; permit only this VC
             prop_sum = 1.0;
             free_qs.clear();
-            if (!is_claimed(q->get_id()) && q->ingress_new_flow()) {
+            if (!is_claimed(q->get_id()) && !q->back_is_mid_packet()) {
                 free_qs.push_back(make_tuple(q, prop_sum));
             }
             break;
-        } else if (one_flow_per_queue && !q->has_old_flow(f)) {
+        } else if (one_flow_per_queue && !q->back_has_old_flow(f)) {
             // VC has another flow so cannot have ours
             continue;
-        } else if (!is_claimed(q->get_id()) && q->ingress_new_flow()) {
+        } else if (!is_claimed(q->get_id()) && !q->back_is_mid_packet()) {
             prop_sum += prop;
             free_qs.push_back(make_tuple(q, prop_sum));
         }

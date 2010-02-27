@@ -6,40 +6,21 @@
 #include "virtual_queue.hpp"
 #include "channel_alloc.hpp"
 
-common_alloc::common_alloc(unsigned max_slots) throw()
-    : max_capacity(max_slots), capacity(max_slots),
-      stale_capacity(max_slots) { }
-
-bool common_alloc::full() const throw() { return stale_capacity == 0; }
-
-void common_alloc::alloc(unsigned n) throw() {
-    assert(n <= stale_capacity);
-    stale_capacity -= n;
-    capacity -= n;
-}
-
-void common_alloc::dealloc(unsigned n) throw() {
-    assert(capacity + n <= max_capacity);
-    capacity += n;
-}
-
-void common_alloc::tick_positive_edge() throw(err) { }
-
-void common_alloc::tick_negative_edge() throw(err) {
-    stale_capacity = capacity;
-}
-
 virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
-                             node_id new_src_node_id,
+                             node_id new_src_node_id, uint32_t new_max_size,
                              shared_ptr<channel_alloc> new_vc_alloc,
                              shared_ptr<pressure_tracker> new_pt,
-                             shared_ptr<common_alloc> new_alloc,
                              shared_ptr<statistics> st, logger &l) throw()
     : id(make_tuple(new_node_id, new_vq_id)), src_node_id(new_src_node_id),
-      q(), vc_alloc(new_vc_alloc), pressures(new_pt),
-      ingress_remaining(0), ingress_flow(0),
-      egress_remaining(0), egress_flow_old(0), egress_flow_new(0), egress_vq(),
-      alloc(new_alloc), old_flows(), stale_size(0), stats(st), log(l) {
+      buffer_size(new_max_size + 1), contents(new_max_size + 1),
+      front_head(0), front_stale_tail(0),
+      front_egress_packet_flits_remaining(0), front_old_flow(),
+      front_next_hop_node(), front_next_hop_flow(), front_next_hop_vq(),
+      back_stale_head(0), back_tail(0),
+      back_ingress_packet_flits_remaining(0),
+      back_stale_egress_packet_flits_remaining(0),
+      vc_alloc(new_vc_alloc), pressures(new_pt),
+      stats(st), log(l) {
     stats->register_queue(id);
 }
 
@@ -47,227 +28,206 @@ const virtual_queue_node_id &virtual_queue::get_id() const throw() {
     return id;
 }
 
-bool virtual_queue::egress_new_flow() const throw () {
-    return !empty() && egress_remaining == 0;
-}
-
-bool virtual_queue::ingress_new_flow() const throw () {
-    return !full() && ingress_remaining == 0;
-}
-
-bool virtual_queue::full() const throw() { return alloc->full(); }
-
-size_t virtual_queue::size() const throw() { return stale_size; }
-
-bool virtual_queue::empty() const throw() { return size() == 0; }
-
-bool virtual_queue::egress_ready() const throw(err) {
-    return !empty() && front_node_id().is_valid() && front_vq_id().is_valid();
-}
-
-flit virtual_queue::front() const throw(err) {
-    assert(!empty());
-    assert(egress_remaining == 0 || egress_flow_old.is_valid());
-    assert(egress_node.is_valid());
-    assert(egress_vq.is_valid());
-    assert(egress_flow_new.is_valid());
-    if (egress_remaining == 0) {
-        const head_flit &head = reinterpret_cast<const head_flit &>(q.front());
-        const flow_id &fid = head.get_flow_id();
-        if (fid == egress_flow_new) {
-            return head;
-        } else {
-            return head_flit(head, egress_flow_new);
-        }
-    } else {
-        return q.front();
-    }
-}
-
-node_id virtual_queue::front_node_id() const throw(err) {
-    assert(!empty());
-    return egress_node;
-}
-
-virtual_queue_id virtual_queue::front_vq_id() const throw(err) {
-    assert(!empty());
-    return egress_vq;
-}
-
 node_id virtual_queue::get_src_node_id() const throw() {
     return src_node_id;
 }
 
-void virtual_queue::tick_positive_edge() throw(err) {
-    alloc->tick_positive_edge();
+bool virtual_queue::front_is_empty() const throw() {
+    return front_head == front_stale_tail;
 }
 
-void virtual_queue::tick_negative_edge() throw(err) {
-    stale_size = q.size();
-    stats->virtual_queue(id, size());
-    alloc->tick_negative_edge();
-    uint32_t n = 0;
-    for (flits_queue_t::iterator i = q.begin(); i != q.end(); ++i, ++n) {
-        LOG(log,10) << "[queue " << id << "] @" << dec << n << ": "
-                    << *i << endl;
+bool virtual_queue::front_is_head_flit() const throw() {
+    assert(!front_is_empty());
+    return front_egress_packet_flits_remaining == 0;
+}
+
+node_id virtual_queue::front_node_id() const throw() {
+    assert(!front_is_empty());
+    return front_next_hop_node;
+}
+
+virtual_queue_id virtual_queue::front_vq_id() const throw() {
+    assert(!front_is_empty());
+    return front_next_hop_vq;
+}
+
+flow_id virtual_queue::front_old_flow_id() const throw() {
+    assert(!front_is_empty());
+    assert(front_old_flow.is_valid());
+    return front_old_flow;
+}
+
+flow_id virtual_queue::front_new_flow_id() const throw() {
+    assert(!front_is_empty());
+    return front_next_hop_flow;
+}
+
+uint32_t virtual_queue::front_num_remaining_flits_in_packet() const throw() {
+    // returns the # of flits past the head flit
+    if (!front_is_empty() && front_is_head_flit()) {
+        const head_flit &h = reinterpret_cast<const head_flit &>(front_flit());
+        return h.get_length();
+    } else {
+        return front_egress_packet_flits_remaining;
     }
+}
+
+const flit &virtual_queue::front_flit() const throw() {
+    assert(!front_is_empty());
+    return contents[front_head];
+}
+
+
+uint32_t virtual_queue::front_size() const throw() {
+    return (front_stale_tail >= front_head ? front_stale_tail - front_head
+            : front_stale_tail + buffer_size - front_head);
+}
+
+void virtual_queue::front_pop() throw() {
+    assert(!front_is_empty());
+    if (front_egress_packet_flits_remaining == 0) { // head, update flit count
+        assert(front_old_flow.is_valid()); // set in tick_negative_edge()
+        assert(front_next_hop_node.is_valid()); // otherwise, why pop()?
+        assert(front_next_hop_flow.is_valid()); // otherwise, why pop()?
+        assert(front_next_hop_vq.is_valid()); // otherwise, why pop()?
+        const head_flit &h =
+            reinterpret_cast<const head_flit &>(contents[front_head]);
+        front_egress_packet_flits_remaining = h.get_length();
+        LOG(log,3) << "[queue " << get_id() << "] egress: " << h << endl;
+    } else {
+        --front_egress_packet_flits_remaining;
+        LOG(log,3) << "[queue " << get_id() << "] egress: "
+                   << contents[front_head] << endl;
+    }
+    front_head = (front_head + 1) % buffer_size;
+    if (front_egress_packet_flits_remaining == 0) {
+        virtual_queue_node_id vqnid(front_next_hop_node, front_next_hop_vq);
+        front_vqs_to_release_at_negedge.push_back(vqnid);
+        front_next_hop_node = node_id(); // invalidate
+        front_next_hop_flow = flow_id(); // invalidate
+        front_next_hop_vq = virtual_queue_id(); // invalidate
+    }
+}
+
+void virtual_queue::front_set_next_hop(const node_id &nid,
+                                       const flow_id &fid) throw() {
+    assert(!front_is_empty());
+    assert(front_is_head_flit());
+    assert(!front_next_hop_node.is_valid());
+    assert(!front_next_hop_flow.is_valid());
+    assert(!front_next_hop_vq.is_valid());
+    assert(nid.is_valid());
+    assert(fid.is_valid());
+    front_next_hop_node = nid;
+    front_next_hop_flow = fid;
+}
+
+void virtual_queue::front_set_vq_id(const virtual_queue_id &vqid) throw() {
+    assert(!front_is_empty());
+    assert(front_is_head_flit());
+    assert(front_next_hop_node.is_valid());
+    assert(front_next_hop_flow.is_valid());
+    assert(!front_next_hop_vq.is_valid());
+    assert(vqid.is_valid());
+    virtual_queue_node_id vqnid(front_next_hop_node, vqid);
+    vc_alloc->claim(vqnid);
+    front_next_hop_vq = vqid;
+}
+
+bool virtual_queue::back_is_full() const throw() {
+    return ((back_tail + 1) % buffer_size) == back_stale_head;
+}
+
+void virtual_queue::back_push(const flit &f) throw() {
+    assert(!back_is_full());
+    contents[back_tail] = f;
+    back_tail = (back_tail + 1) % buffer_size;
+    if (back_ingress_packet_flits_remaining == 0) { // head flit
+        const head_flit &h =
+            reinterpret_cast<const head_flit &>(f);
+        back_ingress_packet_flits_remaining = h.get_length();
+        LOG(log,3) << "[queue " << get_id() << "] ingress: " << h << endl;
+    } else {
+        --back_ingress_packet_flits_remaining;
+        LOG(log,3) << "[queue " << get_id() << "] ingress: " << f << endl;
+    }
+}
+
+bool virtual_queue::back_is_mid_packet() const throw() {
+    return back_ingress_packet_flits_remaining != 0;
+}
+
+bool virtual_queue::back_is_empty() const throw() {
+    return back_stale_head == back_tail;
+}
+
+bool virtual_queue::back_has_old_flow(const flow_id &f) throw() {
+    uint32_t remaining = back_stale_egress_packet_flits_remaining;
+    for (virtual_queue::buffer_t::size_type i = back_stale_head;
+         i != back_tail; i = (i + 1) % buffer_size) {
+        if (remaining == 0) {
+            const head_flit &h =
+                reinterpret_cast<const head_flit &>(contents[i]);
+            remaining = h.get_length();
+            if (h.get_flow_id() == f) {
+                return true;
+            }
+        } else {
+            --remaining;
+        }
+    }
+    return false;
+}
+
+void virtual_queue::tick_positive_edge() throw() { }
+
+// synchronize front and back views of the virtual queue
+void virtual_queue::tick_negative_edge() throw() {
+    if ((front_head != back_stale_head // head changed
+         || (front_stale_tail == back_stale_head // was empty before
+             && back_tail != front_stale_tail)) // but no longer
+        && front_egress_packet_flits_remaining == 0) { // head
+        const head_flit &h =
+            reinterpret_cast<const head_flit &>(contents[front_head]);
+        front_old_flow = h.get_flow_id();
+    }
+    back_stale_head = front_head;
+    front_stale_tail = back_tail;
+    back_stale_egress_packet_flits_remaining =
+        front_egress_packet_flits_remaining;
+    typedef vector<virtual_queue_node_id>::const_iterator vqi_t;
+    for (vqi_t vqi = front_vqs_to_release_at_negedge.begin();
+         vqi != front_vqs_to_release_at_negedge.end(); ++vqi) {
+        vc_alloc->release(*vqi);
+    }
+    front_vqs_to_release_at_negedge.clear();
+    stats->virtual_queue(id, front_size());
 }
 
 bool virtual_queue::is_drained() const throw() {
-    return q.empty();
+    assert(front_is_empty() == back_is_empty());
+    return front_is_empty();
 }
 
-void virtual_queue::push(const flit &f) throw(err) {
-    assert(!full());
-    alloc->alloc();
-    if (ingress_remaining == 0) {
-        const head_flit &head = reinterpret_cast<const head_flit &>(f);
-        ingress_flow = head.get_flow_id();
-        ingress_remaining = head.get_length();
-        map<flow_id, unsigned>::const_iterator i = old_flows.find(ingress_flow);
-        if (i == old_flows.end()) old_flows[ingress_flow] = 0;
-        ++old_flows[ingress_flow];
-        if (q.empty()) {
-            egress_node = node_id(); // invalid ID
-            egress_vq = virtual_queue_id(); // invalid ID
-            egress_flow_old = flow_id(); // invalid ID
-            egress_flow_new = flow_id(); // invalid ID
-        }
-        LOG(log,3) << "[queue " << id << "] ingress: " << head
-                   << " (flow " << ingress_flow << ")"
-                   << ", #" << hex << setfill('0') << setw(8)
-                   << f.get_uid() << ")" << endl;
-    } else {
-        --ingress_remaining;
-        LOG(log,3) << "[queue " << id << "] ingress: " << f
-                   << " (flow " << ingress_flow << ", #"
-                   << hex << setfill('0') << setw(8)
-                   << f.get_uid() << ")" << endl;
-    }
-    if (egress_vq.is_valid() && q.empty()) { // continuing flit gets to vq head
-        pressures->inc(egress_node, egress_vq);
-    }
-    q.push_back(f);
-}
-
-void virtual_queue::pop() throw(err) {
-    assert(!empty());
-    alloc->dealloc();
-    assert(egress_remaining == 0 || egress_flow_old.is_valid());
-    assert(egress_node.is_valid());
-    assert(egress_vq.is_valid());
-    const flit &f = q.front();
-    if (egress_remaining == 0) {
-        const head_flit &head = reinterpret_cast<const head_flit &>(f);
-        egress_flow_old = head.get_flow_id();
-        egress_remaining = head.get_length();
-        LOG(log,3) << "[queue " << id << "] egress:  " << head
-            << " (flow ";
-        if (egress_flow_new == egress_flow_old) {
-            LOG(log,3) << egress_flow_old;
+ostream &operator<<(ostream &out, const virtual_queue &vq) {
+    uint32_t remaining = vq.front_egress_packet_flits_remaining;
+    for (virtual_queue::buffer_t::size_type i = vq.front_head;
+         i != vq.front_stale_tail; i = (i + 1) % vq.buffer_size) {
+        virtual_queue::buffer_t::size_type index =
+            (i >= vq.front_head ? i - vq.front_head
+             : i + vq.buffer_size - vq.front_head);
+        out << "[queue " << vq.get_id() << "] at [" << dec << index
+            << "]: ";
+        if (remaining == 0) {
+            const head_flit &h =
+                reinterpret_cast<const head_flit &>(vq.contents[i]);
+            remaining = h.get_length();
+            out << h;
         } else {
-            LOG(log,3) << egress_flow_old << "->" << egress_flow_new;
+            out << vq.contents[i];
+            --remaining;
         }
-        LOG(log,3) << ", #" << hex << setfill('0') << setw(8)
-                   << f.get_uid() << ")" << endl;
-    } else {
-        --egress_remaining;
-        LOG(log,3) << "[queue " << id << "] egress:  " << f
-            << " (flow ";
-        if (egress_flow_new == egress_flow_old) {
-            LOG(log,3) << egress_flow_old;
-        } else {
-            LOG(log,3) << egress_flow_old << "->" << egress_flow_new;
-        }
-        LOG(log,3) << ", #" << hex << setfill('0') << setw(8)
-                   << f.get_uid() << ")" << endl;
+        out << endl;
     }
-    q.pop_front();
-    // decrease pressure if next flit is new flow, or VC is empty
-    if (egress_remaining == 0 || q.empty()) {
-        assert(egress_node.is_valid());
-        assert(egress_vq.is_valid());
-        pressures->dec(egress_node, egress_vq);
-    }
-    if (egress_remaining == 0) {
-        vc_alloc->release(make_tuple(egress_node, egress_vq));
-        assert(old_flows.find(egress_flow_old) != old_flows.end());
-        --old_flows[egress_flow_old];
-        egress_node = node_id(); // invalid ID
-        egress_vq = virtual_queue_id(); // invalid ID
-        egress_flow_new = flow_id(); // invalid ID
-        egress_flow_old = flow_id(); // invalid ID
-    }
-    --stale_size;
-}
-
-flow_id virtual_queue::get_egress_old_flow_id() const throw (err) {
-    assert(!empty());
-    if (egress_remaining == 0) {
-        const head_flit &head = reinterpret_cast<const head_flit &>(q.front());
-        return head.get_flow_id();
-    } else {
-        return egress_flow_old;
-    }
-}
-
-flow_id virtual_queue::get_egress_new_flow_id() const throw (err) {
-    assert(!empty());
-    return egress_flow_new;
-}
-
-uint32_t virtual_queue::get_egress_flow_length() const throw (err) {
-    assert(!empty());
-    if (egress_remaining == 0) {
-        const head_flit &head = reinterpret_cast<const head_flit &>(q.front());
-        return head.get_length();
-    } else {
-        return egress_remaining;
-    }
-}
-
-void virtual_queue::set_front_next_hop(const node_id &next_node,
-                                       const flow_id &next_flow) throw(err) {
-    assert(!empty());
-    assert(!egress_node.is_valid());
-    assert(!egress_vq.is_valid());
-    assert(egress_remaining == 0);
-    assert(next_node.is_valid());
-    assert(next_flow.is_valid());
-    egress_node = next_node;
-    egress_flow_new = next_flow;
-    const head_flit &head = reinterpret_cast<const head_flit &>(q.front());
-    LOG(log,3) << "[queue " << id << "] granted next hop node "
-               << next_node << " (flow ";
-    if (egress_flow_new == head.get_flow_id()) {
-        LOG(log,3) << head.get_flow_id();
-    } else {
-        LOG(log,3) << head.get_flow_id() << "->" << egress_flow_new;
-    }
-    LOG(log,3) << ")" << endl;
-}
-
-void virtual_queue::set_front_vq_id(const virtual_queue_id &vqid) throw(err) {
-    assert(!empty());
-    assert(egress_node.is_valid());
-    assert(!egress_vq.is_valid());
-    assert(egress_remaining == 0);
-    assert(vqid.is_valid());
-    egress_vq = vqid;
-    const head_flit &head = reinterpret_cast<const head_flit &>(q.front());
-    LOG(log,3) << "[queue " << id << "] granted next hop queue "
-               << make_tuple(egress_node, egress_vq) << " (flow ";
-    if (egress_flow_new == head.get_flow_id()) {
-        LOG(log,3) << head.get_flow_id();
-    } else {
-        LOG(log,3) << head.get_flow_id() << "->" << egress_flow_new;
-    }
-    LOG(log,3) << ")" << endl;
-    vc_alloc->claim(make_tuple(egress_node, egress_vq));
-    pressures->inc(egress_node, egress_vq); // increase pressure for a head flit
-}
-
-bool virtual_queue::has_old_flow(const flow_id &flow) const throw(err) {
-    map<flow_id, unsigned>::const_iterator i = old_flows.find(flow);
-    return ((i != old_flows.end()) && (i->second > 0));
+    return out;
 }

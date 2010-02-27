@@ -20,10 +20,12 @@ void set_router::route() throw(err) {
         const ingress::queues_t &iqs = (*ii)->get_queues();
         for (ingress::queues_t::const_iterator qi = iqs.begin();
              qi != iqs.end(); ++qi) {
-            if (qi->second->egress_new_flow()
+            if (!qi->second->front_is_empty()
+                && qi->second->front_is_head_flit()
                 && !qi->second->front_node_id().is_valid()) {
-                assert(!qi->second->get_egress_new_flow_id().is_valid());
-                const flow_id f = qi->second->get_egress_old_flow_id();
+                assert(!qi->second->front_new_flow_id().is_valid());
+                assert(!qi->second->front_vq_id().is_valid());
+                const flow_id f = qi->second->front_old_flow_id();
                 route_query_t rq = route_query_t(src, f);
                 routes_t::iterator ri = routes.find(rq);
                 if (ri == routes.end()) {
@@ -45,7 +47,7 @@ void set_router::route() throw(err) {
                         break;
                     }
                 }
-                qi->second->set_front_next_hop(dst_n, dst_f);
+                qi->second->front_set_next_hop(dst_n, dst_f);
             }
         }
     }

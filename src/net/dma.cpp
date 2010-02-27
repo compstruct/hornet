@@ -41,39 +41,54 @@ void ingress_dma_channel::receive(void *dst, packet_id *pid,
 }
 
 bool ingress_dma_channel::has_waiting_flow() const throw() {
-    return vq->egress_ready();
+    return (!vq->front_is_empty() && vq->front_node_id().is_valid()
+            && vq->front_vq_id().is_valid());
 }
 
 uint32_t ingress_dma_channel::get_flow_length() const throw(err) {
-    return vq->get_egress_flow_length();
+    return vq->front_num_remaining_flits_in_packet();
 }
 
 flow_id ingress_dma_channel::get_flow_id() const throw(err) {
-    return vq->get_egress_new_flow_id();
+    return vq->front_new_flow_id();
 }
 
 void ingress_dma_channel::tick_positive_edge() throw(err) {
+    if (!vq->front_is_empty() && vq->front_is_head_flit()) {
+        if (!vq->front_node_id().is_valid()) {
+            assert(!vq->front_vq_id().is_valid());
+            assert(vq->front_old_flow_id().is_valid());
+            assert(!vq->front_new_flow_id().is_valid());
+            vq->front_set_next_hop(vq->get_id().get<0>(),
+                                   vq->front_old_flow_id());
+        }
+        if (!vq->front_vq_id().is_valid()) {
+            vq->front_set_vq_id(vq->get_id().get<1>());
+        }
+    }
     unsigned i;
     for (i = 0; ((bandwidth == 0 || i < bandwidth)
-                 && remaining_flits > 0 && vq->egress_ready()); ++i) {
-        if (vq->egress_new_flow()) {
-            flow = vq->get_egress_new_flow_id();
+                 && remaining_flits > 0 && !vq->front_is_empty()); ++i) {
+        assert(vq->front_node_id().is_valid());
+        assert(vq->front_vq_id().is_valid());
+        if (vq->front_is_head_flit()) {
+            flow = vq->front_new_flow_id();
             if (started) {
                 throw exc_new_flow_mid_dma(flow.get_numeric_id(),
                                            id.get<0>().get_numeric_id(),
                                            id.get<1>().get_numeric_id());
             }
-            const flit f = vq->front();
+            const flit f = vq->front_flit();
             const head_flit &h = reinterpret_cast<const head_flit &>(f);
             stats->receive_packet(flow, h);
         } else {
-            if (mem) *((uint64_t *) mem) = endian(vq->front().get_data());
+            if (mem) *((uint64_t *) mem) = endian(vq->front_flit().get_data());
             mem = mem ? (uint8_t *) mem + sizeof(uint64_t) : mem;
             --remaining_flits;
         }
-        if (pid_p) *pid_p = vq->front().get_packet_id();
-        stats->receive_flit(flow, vq->front());
-        vq->pop();
+        if (pid_p) *pid_p = vq->front_flit().get_packet_id();
+        stats->receive_flit(flow, vq->front_flit());
+        vq->front_pop();
         started = true;
     }
     if (i > 0) {
@@ -82,19 +97,7 @@ void ingress_dma_channel::tick_positive_edge() throw(err) {
     }
 }
 
-void ingress_dma_channel::tick_negative_edge() throw(err) {
-    if (vq->egress_new_flow()) {
-        if (!vq->front_node_id().is_valid()) {
-            assert(!vq->front_vq_id().is_valid());
-            assert(vq->get_egress_old_flow_id().is_valid());
-            vq->set_front_next_hop(vq->get_id().get<0>(),
-                                   vq->get_egress_old_flow_id());
-        }
-        if (!vq->front_vq_id().is_valid()) {
-            vq->set_front_vq_id(vq->get_id().get<1>());
-        }
-    }
-}
+void ingress_dma_channel::tick_negative_edge() throw(err) { }
 
 egress_dma_channel::
 egress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned new_bw,
@@ -119,11 +122,11 @@ void egress_dma_channel::send(flow_id f, void *src, uint32_t len,
 void egress_dma_channel::tick_positive_edge() throw(err) {
     unsigned i;
     for (i = 0; ((bandwidth == 0 || i < bandwidth)
-                 && remaining_flits > 0 && !vq->full()
-                 && (started || vq->ingress_new_flow())); ++i) {
+                 && remaining_flits > 0 && !vq->back_is_full()
+                 && (started || !vq->back_is_mid_packet())); ++i) {
         if (!started) {
             head_flit f(flow, remaining_flits, pid);
-            vq->push(f);
+            vq->back_push(f);
             stats->send_packet(flow, f);
             stats->send_flit(flow, f);
         } else {
@@ -132,7 +135,7 @@ void egress_dma_channel::tick_positive_edge() throw(err) {
                           : ((((uint64_t) flow.get_numeric_id()) << 32)
                              | remaining_flits));
             flit f(endian(v), pid);
-            vq->push(f);
+            vq->back_push(f);
             stats->send_flit(flow, f);
             mem = mem ? (uint8_t *) mem + sizeof(uint64_t) : mem;
             if (remaining_flits == 0) vc_alloc->release(vq->get_id());

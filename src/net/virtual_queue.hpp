@@ -23,77 +23,109 @@
 using namespace std;
 using namespace boost;
 
-// common allocator allows several virtual queues to share memory
-// release events are not observed until the next positive tick
-class common_alloc {
-public:
-    explicit common_alloc(unsigned max_slots) throw();
-    bool full() const throw();
-    void alloc(unsigned num_slots = 1) throw();
-    void dealloc(unsigned num_slots = 1) throw();
-    void tick_positive_edge() throw(err);
-    void tick_negative_edge() throw(err);
-private:
-    const unsigned max_capacity;
-    unsigned capacity; // # full 
-    unsigned stale_capacity; // not updated by dealloc() until negative clock edge
-    common_alloc();
-    common_alloc(const common_alloc &);
-};
-
 class channel_alloc;
+
+// The virtual_queue class models a switch virtual channel.
+//
+// Methods *modifying* the queue may only be called during the positive edge
+// of the clock.  Any modifications to the back of the queue (pushes, etc)
+// must not be reflected at the front of the queue during the same positive
+// edge (and vice versa); the negative_edge method of the queue propagates
+// updates.
+//
+// The virtual_queue also keeps track of packet boundaries (by counting flits),
+// next-hop port assignment, next-hop VC assignment, and flow ID renaming.
 
 class virtual_queue {
 public:
     explicit virtual_queue(node_id parent_id, virtual_queue_id queue_id,
-                           node_id src_node_id,
+                           node_id src_node_id, uint32_t max_size,
                            shared_ptr<channel_alloc> vc_alloc,
                            shared_ptr<pressure_tracker> pressures,
-                           shared_ptr<common_alloc> alloc,
                            shared_ptr<statistics> stats,
                            logger &log) throw();
+
+    // methods which do not change over the life of the queue
     const virtual_queue_node_id &get_id() const throw();
-    void push(const flit &) throw(err); // does not update stale size
-    void pop() throw(err); // updates stale size
-    size_t size() const throw(); // reports stale size
-    bool empty() const throw(); // uses stale size
-    bool full() const throw();  // uses real size only
-    bool egress_ready() const throw(err);
-    flit front() const throw(err);
-    node_id front_node_id() const throw(err); // dest node id for front flit
-    virtual_queue_id front_vq_id() const throw(err);
-    void set_front_next_hop(const node_id &nid, const flow_id &fid) throw(err);
-    void set_front_vq_id(const virtual_queue_id &vqid) throw(err);
-    bool ingress_new_flow() const throw(); // can accept new flit sequence
-    bool egress_new_flow() const throw();  // next flit is a head flit
-    flow_id get_egress_old_flow_id() const throw(err);
-    flow_id get_egress_new_flow_id() const throw(err);
-    uint32_t get_egress_flow_length() const throw(err);
-    bool has_old_flow(const flow_id &flow) const throw(err);
     node_id get_src_node_id() const throw();
-    void tick_positive_edge() throw(err);
-    void tick_negative_edge() throw(err);
-    bool is_drained() const throw(); // uses real size
+
+    // methods reading the front ("read end") of the queue
+    bool front_is_empty() const throw();
+    bool front_is_head_flit() const throw();
+    node_id front_node_id() const throw();
+    virtual_queue_id front_vq_id() const throw();
+    flow_id front_old_flow_id() const throw();
+    flow_id front_new_flow_id() const throw();
+    uint32_t front_num_remaining_flits_in_packet() const throw();
+    const flit &front_flit() const throw();
+
+    // methods modifying the front ("read end") of the queue
+    void front_pop() throw();
+    void front_set_next_hop(const node_id &nid, const flow_id &fid) throw();
+    void front_set_vq_id(const virtual_queue_id &vqid) throw();
+
+    // methods reading/modifying the back ("write end") of the queue
+    void back_push(const flit &) throw();
+    bool back_is_full() const throw();
+    bool back_is_mid_packet() const throw();
+
+    // true iff "stale" view of the VC is empty
+    // (not taking into account any front_pop() calls in this clock cycle)
+    bool back_is_empty() const throw(); // required for EDVCA
+
+    // true iff "stale" view of the VC has a flit with old flow ID f
+    // (not taking into account any front_pop() calls in this clock cycle)
+    bool back_has_old_flow(const flow_id &f) throw(); // required for EDVCA
+
+    // other methods
+    void tick_positive_edge() throw();
+    void tick_negative_edge() throw();
+
+    // methods accessing both ends of the queue
+
+    // may only be called after all negedges have completed
+    bool is_drained() const throw();
+
+private:
+    uint32_t front_size() const throw();
+
 private:
     const virtual_queue_node_id id;
-    node_id src_node_id;
-    typedef deque<flit> flits_queue_t;
-    flits_queue_t q;
+    const node_id src_node_id;
+    const uint32_t buffer_size;
+
+    typedef vector<flit> buffer_t;
+
+    // circular buffer with at least one free slot (to distinguish full/empty);
+    buffer_t contents;
+
+    // accessed by front (pop) end
+    buffer_t::size_type front_head;
+    buffer_t::size_type front_stale_tail; // one slot past tail actually
+    uint32_t front_egress_packet_flits_remaining; // 0 iff packet complete
+    flow_id front_old_flow; // invalid iff VC is empty and packet boundary
+    node_id front_next_hop_node; // invalid iff not yet routed
+    flow_id front_next_hop_flow; // invalid iff not yet routed
+    virtual_queue_id front_next_hop_vq; // invalid if not yet assigned
+    vector<virtual_queue_node_id> front_vqs_to_release_at_negedge;
+
+    // accessed by back (push) end
+    buffer_t::size_type back_stale_head;
+    buffer_t::size_type back_tail; // one slot past tail actually
+    uint32_t back_ingress_packet_flits_remaining; // 0 iff packet complete
+    uint32_t back_stale_egress_packet_flits_remaining; // 0 iff packet complete
+
     shared_ptr<channel_alloc> vc_alloc;
     shared_ptr<pressure_tracker> pressures;
-    unsigned ingress_remaining;
-    flow_id ingress_flow;
-    unsigned egress_remaining;
-    flow_id egress_flow_old; // only valid for non-head flits
-    flow_id egress_flow_new;
-    node_id egress_node;
-    virtual_queue_id egress_vq;
-    const shared_ptr<common_alloc> alloc;
-    map<flow_id, unsigned> old_flows; // count of packets for a given flow
-    size_t stale_size; // resynchronized at negative clock edge
+
     shared_ptr<statistics> stats;
     logger &log;
+
+private:
+    friend ostream &operator<<(ostream &, const virtual_queue &);
 };
+
+ostream &operator<<(ostream &out, const virtual_queue &vq);
 
 #endif // __VIRTUAL_QUEUE_HPP__
 
