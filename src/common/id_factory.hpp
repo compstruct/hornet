@@ -20,14 +20,24 @@ private:
 private:
     id_factory(); // not defined
     id_factory(const id_factory &); // not defined
+    pthread_mutex_t id_mutex;
 };
 
 template<class T>
-inline T id_factory<T>::get_fresh_id() throw() { return next_id++; }
+inline T id_factory<T>::get_fresh_id() throw() { 
+   pthread_mutex_lock (&id_mutex);
+   next_id++;
+   T l_next_id = next_id;
+   pthread_mutex_unlock (&id_mutex);
+
+   return l_next_id; 
+}
 
 template<class T>
 inline id_factory<T>::id_factory(const string &nm) throw()
-    : next_id(0), name(nm) { }
+    : next_id(0), name(nm) { 
+     pthread_mutex_init(&id_mutex, NULL);
+}
 
 #endif // __ID_FACTORY__
 

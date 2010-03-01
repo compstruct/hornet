@@ -23,6 +23,7 @@ public:
     const uint64_t &get_data() const throw();
     const flit_id &get_uid() const throw();
     const packet_id &get_packet_id() const throw();
+    uint64_t get_next_uid() throw();
 protected:
     uint64_t data;
     flit_id uid;
@@ -32,7 +33,7 @@ protected:
 };
 
 inline flit::flit(uint64_t new_data, packet_id new_pid) throw()
-    : data(new_data), uid(next_uid++), pid(new_pid) {
+    : data(new_data), uid(get_next_uid()), pid(new_pid) {
     assert(next_uid != 0);
 }
 
@@ -47,6 +48,14 @@ inline flit &flit::operator=(const flit &f) throw() {
     data = f.data;
     uid = f.uid;
     return *this;
+}
+
+inline uint64_t flit::get_next_uid() throw() {
+   static pthread_mutex_t fuid_mutex = PTHREAD_MUTEX_INITIALIZER;
+   pthread_mutex_lock (&fuid_mutex);
+   uint64_t l_next_uid = next_uid++;
+   pthread_mutex_unlock (&fuid_mutex);
+   return l_next_uid;
 }
 
 inline const uint64_t &flit::get_data() const throw() { return data; }

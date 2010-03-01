@@ -33,6 +33,10 @@ public:
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
     bool is_drained() const throw();
+
+    void tick_positive_edge_par(int tile_id) throw(err);
+    void tick_negative_edge_par(int tile_id) throw(err);
+    uint32_t num_tiles;
 private:
     typedef vector<shared_ptr<BoostRand> > rands_t;
     typedef vector<shared_ptr<pe> > pes_t;

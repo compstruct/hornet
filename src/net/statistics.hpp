@@ -58,6 +58,7 @@ private:
 
 class statistics {
 public:
+    pthread_mutex_t stats_mutex;
     statistics(const uint64_t &system_time, const uint64_t &start_time,
                logger &log, shared_ptr<vcd_writer> vcd) throw();
     void reset() throw();

@@ -67,6 +67,7 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
     shared_ptr<id_factory<packet_id> >
         packet_id_factory(new id_factory<packet_id>("packet id"));
     uint32_t num_nodes = read_word(img);
+    num_tiles = num_nodes;
     LOG(log,2) << "creating system with " << num_nodes << " node"
                << (num_nodes == 1 ? "" : "s") << "..." << endl;
     rands.resize(num_nodes);
@@ -344,6 +345,32 @@ void sys::tick_negative_edge() throw(err) {
     for (bridges_t::iterator i = bridges.begin(); i != bridges.end(); ++i) {
         (*i)->tick_negative_edge();
     }
+}
+
+void sys::tick_positive_edge_par(int tile_id) throw(err) {
+   if (tile_id == 1) {
+      LOG(log,1) << "[system] posedge " << dec << time << endl;
+   }
+   arbiters_t::iterator i = arbiters.find(tile_id);
+   if ( i != arbiters.end() ) {
+      i->second->tick_positive_edge();
+   }
+   pes[tile_id]->tick_positive_edge();
+   nodes[tile_id]->tick_positive_edge();
+   bridges[tile_id]->tick_positive_edge();
+}
+
+void sys::tick_negative_edge_par(int tile_id) throw(err) {
+   if (tile_id == 1) {
+      LOG(log,1) << "[system] negedge " << dec << time << endl;
+   }
+   arbiters_t::iterator i = arbiters.find(tile_id);
+   if ( i != arbiters.end() ) {
+      i->second->tick_negative_edge();
+   }
+   pes[tile_id]->tick_negative_edge();
+   nodes[tile_id]->tick_negative_edge();
+   bridges[tile_id]->tick_negative_edge();
 }
 
 bool sys::work_tbd_darsim() throw(err) {

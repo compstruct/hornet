@@ -1,6 +1,7 @@
 // -*- mode:c++; c-style:k&r; c-basic-offset:4; indent-tabs-mode: nil; -*-
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
+#include <pthread.h>
 #include "cstdint.hpp"
 #include <cstdlib>
 #include <iostream>
@@ -33,6 +34,33 @@ static logger syslog;
 static shared_ptr<statistics> stats;
 static shared_ptr<vcd_writer> vcd;
 static bool report_stats = true;
+
+pthread_barrier_t barr;
+pthread_mutex_t mutex;
+uint64_t sys_time = 0;
+uint64_t num_cycles_par = 0;
+bool g_clock_inc = true;
+shared_ptr<sys> s;
+
+void * clock_tile (void *arg) {
+   int tile_id = (long)arg;
+   for (unsigned cycle = 0; cycle < num_cycles_par; ++cycle) {
+      int rc = pthread_barrier_wait(&barr); // BARRIER
+      s->tick_positive_edge_par(tile_id);
+      rc = pthread_barrier_wait(&barr); // BARRIER
+      pthread_mutex_lock (&mutex);
+      if (g_clock_inc) {
+         ++sys_time;
+         g_clock_inc = false;
+      }
+      pthread_mutex_unlock (&mutex);
+      rc = pthread_barrier_wait(&barr); // BARRIER
+      g_clock_inc = true;
+      s->tick_negative_edge_par(tile_id);
+   }
+   pthread_exit((void*) 0);
+}
+
 
 void sig_int_handler(int signo) {
     if (vcd) vcd->commit();
@@ -113,7 +141,9 @@ int main(int argc, char **argv) {
         ("version", po::value<vector<bool> >()->zero_tokens()->composing(),
          "show program version and exit")
         ("help,h", po::value<vector<bool> >()->zero_tokens()->composing(),
-         "show this help message and exit");
+         "show this help message and exit")
+        ("parallel", po::value<bool>(),
+         "enable parallel darsim (default: false)");
     hidden_opts_desc.add_options()
         ("mem-image", po::value<string>(), "memory image")
         ("test-flags", po::value<uint64_t>(), "test flags");
@@ -160,14 +190,19 @@ int main(int argc, char **argv) {
             syslog.add(f, log_verb);
         }
     }
+    bool PARALLEL_DARSIM = false;
     uint64_t num_cycles = 0;
     uint64_t num_packets = 0;
     uint64_t stats_start = 0;
     uint64_t stats_reset = 0;
-    uint64_t sys_time = 0;
+    //uint64_t sys_time = 0;
     uint32_t g_random_seed = 0xdeadbeef;
+    if (opts.count("parallel")) {
+       PARALLEL_DARSIM = opts["parallel"].as<bool>();
+    }
     if (opts.count("cycles")) {
         num_cycles = opts["cycles"].as<uint64_t>();
+        num_cycles_par = num_cycles;
     }
     if (opts.count("packets")) {
         num_packets = opts["packets"].as<uint64_t>();
@@ -253,7 +288,7 @@ int main(int argc, char **argv) {
     }
     stats = shared_ptr<statistics>(new statistics(sys_time, stats_start,
                                                   syslog, vcd));
-    shared_ptr<sys> s;
+    //shared_ptr<sys> s;
     try {
         s = new_system(sys_time, mem_image, stats_start, events_files,
                        g_random_seed, test_flags);
@@ -289,7 +324,40 @@ int main(int argc, char **argv) {
         LOG(syslog,0) << endl;
         ptime sim_start_time = microsec_clock::local_time();
         uint32_t last_stats_start = stats_start;
-        while (true) {
+        
+        if (PARALLEL_DARSIM) {
+           uint32_t THREADS = s->num_tiles;
+           pthread_t thr[THREADS];
+
+           if (pthread_barrier_init(&barr, NULL, THREADS)) {
+              printf ("could not create a barrier \n");
+              return -1;
+           }
+
+           if (pthread_mutex_init (&mutex, NULL)) {
+              printf("Unable to initialize a mutex\n");
+              return -1;
+           }
+           
+           printf ("Ready to spawn %d threads \n", THREADS);
+           
+           for (uint32_t i=0; i<THREADS; ++i) {
+              if (pthread_create (&thr[i], NULL, &clock_tile, (void*)i)) {
+                 printf ("could not create thread %d \n", i);
+                 return -1;
+              }
+              printf ("spawned thread id %d \n", i);
+           }
+           for (uint32_t i=0; i<THREADS; ++i) {
+              if (pthread_join (thr[i], NULL)) {
+                 printf ("could not join thread %d \n", i);
+                 return -1;
+              }
+           }
+           printf ("all threads joined \n");
+        }
+        else {
+         while (true) {
             if (vcd) vcd->commit();
             bool drained = s->is_drained() && (!vcd || vcd->is_drained());
             uint64_t next_time = s->advance_time();
@@ -323,6 +391,7 @@ int main(int argc, char **argv) {
                 stats->start_sim();
                 last_stats_start = sys_time;
             }
+         }
         }
         ptime sim_end_time = microsec_clock::local_time();
         stats->end_sim();
