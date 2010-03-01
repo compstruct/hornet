@@ -35,6 +35,7 @@ static shared_ptr<statistics> stats;
 static shared_ptr<vcd_writer> vcd;
 static bool report_stats = true;
 
+uint32_t NODES_PER_THREAD;
 pthread_barrier_t barr;
 pthread_mutex_t mutex;
 uint64_t sys_time = 0;
@@ -42,21 +43,39 @@ uint64_t num_cycles_par = 0;
 bool g_clock_inc = true;
 shared_ptr<sys> s;
 
-void * clock_tile (void *arg) {
-   int tile_id = (long)arg;
+void * clock_nodes (void *arg) {
+   int rc = pthread_barrier_wait(&barr);
+   int tid = (long)arg;
+
+   printf ("tid %d has %d tasks mapped.\n", tid, NODES_PER_THREAD);
+
    for (unsigned cycle = 0; cycle < num_cycles_par; ++cycle) {
-      int rc = pthread_barrier_wait(&barr); // BARRIER
-      s->tick_positive_edge_par(tile_id);
       rc = pthread_barrier_wait(&barr); // BARRIER
+
+      if (cycle > 0) {
+         g_clock_inc = true;
+      }
+
+      for (uint32_t tile_id=(tid*NODES_PER_THREAD); tile_id < ((tid+1)*NODES_PER_THREAD); ++tile_id) {
+         s->tick_positive_edge_par(tile_id);
+      }
+
+      rc = pthread_barrier_wait(&barr); // BARRIER
+
+      for (uint32_t tile_id=(tid*NODES_PER_THREAD); tile_id < ((tid+1)*NODES_PER_THREAD); ++tile_id) {
+         pthread_mutex_lock (&mutex);
+         s->tick_negative_edge_par(tile_id);
+         pthread_mutex_unlock (&mutex);
+      }
+
+      rc = pthread_barrier_wait(&barr); // BARRIER
+      
       pthread_mutex_lock (&mutex);
       if (g_clock_inc) {
          ++sys_time;
          g_clock_inc = false;
       }
       pthread_mutex_unlock (&mutex);
-      rc = pthread_barrier_wait(&barr); // BARRIER
-      g_clock_inc = true;
-      s->tick_negative_edge_par(tile_id);
    }
    pthread_exit((void*) 0);
 }
@@ -143,7 +162,9 @@ int main(int argc, char **argv) {
         ("help,h", po::value<vector<bool> >()->zero_tokens()->composing(),
          "show this help message and exit")
         ("parallel", po::value<bool>(),
-         "enable parallel darsim (default: false)");
+         "enable parallel darsim (default: false)")
+        ("nodes_per_thread", po::value<uint32_t>(),
+         "select number of nodes per thread for parallel darsim (default is 1)");
     hidden_opts_desc.add_options()
         ("mem-image", po::value<string>(), "memory image")
         ("test-flags", po::value<uint64_t>(), "test flags");
@@ -199,6 +220,12 @@ int main(int argc, char **argv) {
     uint32_t g_random_seed = 0xdeadbeef;
     if (opts.count("parallel")) {
        PARALLEL_DARSIM = opts["parallel"].as<bool>();
+    }
+    if (opts.count("nodes_per_thread")) {
+       NODES_PER_THREAD = opts["nodes_per_thread"].as<uint32_t>();
+    }
+    else {
+       NODES_PER_THREAD = 1;
     }
     if (opts.count("cycles")) {
         num_cycles = opts["cycles"].as<uint64_t>();
@@ -326,7 +353,10 @@ int main(int argc, char **argv) {
         uint32_t last_stats_start = stats_start;
         
         if (PARALLEL_DARSIM) {
-           uint32_t THREADS = s->num_tiles;
+           uint32_t NODES = s->num_tiles;
+           
+           uint32_t THREADS = NODES/NODES_PER_THREAD;
+
            pthread_t thr[THREADS];
 
            if (pthread_barrier_init(&barr, NULL, THREADS)) {
@@ -340,9 +370,9 @@ int main(int argc, char **argv) {
            }
            
            printf ("Ready to spawn %d threads \n", THREADS);
-           
+
            for (uint32_t i=0; i<THREADS; ++i) {
-              if (pthread_create (&thr[i], NULL, &clock_tile, (void*)i)) {
+              if (pthread_create (&thr[i], NULL, &clock_nodes, (void*)i)) {
                  printf ("could not create thread %d \n", i);
                  return -1;
               }
