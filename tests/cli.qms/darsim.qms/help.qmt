@@ -14,7 +14,8 @@ Options:
   --log-verbosity arg    set log verbosity
   --random-seed arg      set random seed (default: use system entropy)
   --parallel             enable parallel darsim (default: false)
-  --nodes-per-thread arg run arg tiles/thread for parallel darsim (default: 1)
+  --nodes-per-thread arg run arg tiles/thread for parallel darsim
+                         (default: hardware concurrency)
   --version              show program version and exit
   -h [ --help ]          show this help message and exit
 </text></argument><argument name="prerequisites"><set/></argument><argument name="stdin"><text/></argument><argument name="exit_code"><integer>0</integer></argument><argument name="environment"><set/></argument><argument name="command"><text>../src/sim/darsim --help</text></argument><argument name="stderr"><text/></argument><argument name="resources"><set/></argument></extension>

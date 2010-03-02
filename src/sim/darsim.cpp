@@ -48,7 +48,8 @@ void *clock_nodes (void *arg) {
     int rc = barr->wait();
     int tid = (long)arg;
 
-    printf ("tid %d has %d tasks mapped.\n", tid, NODES_PER_THREAD);
+    cout << "thread " << dec << tid
+         << " has " << NODES_PER_THREAD << " tasks" << endl;
 
     for (unsigned cycle = 0; cycle < num_cycles_par; ++cycle) {
         rc = barr->wait(); // BARRIER
@@ -160,7 +161,7 @@ int main(int argc, char **argv) {
         ("parallel", po::value<vector<bool> >()->zero_tokens()->composing(),
          "enable parallel darsim (default: false)")
         ("nodes-per-thread", po::value<uint32_t>(),
-         "run arg tiles/thread for parallel darsim (default: 1)")
+         "run arg tiles/thread for parallel darsim\n(default: hardware concurrency)")
         ("version", po::value<vector<bool> >()->zero_tokens()->composing(),
          "show program version and exit")
         ("help,h", po::value<vector<bool> >()->zero_tokens()->composing(),
@@ -170,6 +171,8 @@ int main(int argc, char **argv) {
         ("test-flags", po::value<uint64_t>(), "test flags");
     args_desc.add("mem-image", 1);
     po::variables_map opts;
+    uint32_t hw_concurrency = thread::hardware_concurrency();
+    if (hw_concurrency == 0) hw_concurrency = 1;
     all_opts_desc.add(opts_desc).add(hidden_opts_desc);
     try {
         po::store(po::command_line_parser(argc, argv).options(all_opts_desc).
@@ -224,7 +227,7 @@ int main(int argc, char **argv) {
     if (opts.count("nodes-per-thread")) {
        NODES_PER_THREAD = opts["nodes-per-thread"].as<uint32_t>();
     } else {
-       NODES_PER_THREAD = 1;
+       NODES_PER_THREAD = 0;
     }
     if (opts.count("cycles")) {
         num_cycles = opts["cycles"].as<uint64_t>();
@@ -314,7 +317,6 @@ int main(int argc, char **argv) {
     }
     stats = shared_ptr<statistics>(new statistics(sys_time, stats_start,
                                                   syslog, vcd));
-    //shared_ptr<sys> s;
     try {
         s = new_system(sys_time, mem_image, stats_start, events_files,
                        g_random_seed, test_flags);
@@ -354,7 +356,14 @@ int main(int argc, char **argv) {
         if (PARALLEL_DARSIM) {
            uint32_t NODES = s->get_num_tiles();
            
-           uint32_t THREADS = NODES/NODES_PER_THREAD;
+           uint32_t THREADS;
+           if (NODES_PER_THREAD == 0) {
+               THREADS = hw_concurrency;
+               NODES_PER_THREAD = NODES/THREADS;
+           } else {
+               THREADS = NODES/NODES_PER_THREAD;
+           }
+           assert(NODES_PER_THREAD * THREADS == NODES);
 
            pthread_t thr[THREADS];
 
@@ -369,18 +378,18 @@ int main(int argc, char **argv) {
 
            for (uint32_t i=0; i<THREADS; ++i) {
               if (pthread_create (&thr[i], NULL, &clock_nodes, (void*)i)) {
-                 printf ("could not create thread %d \n", i);
+                 cerr << "could not create thread " << dec << i << endl;
                  return -1;
               }
               printf ("spawned thread id %d \n", i);
            }
            for (uint32_t i=0; i<THREADS; ++i) {
               if (pthread_join (thr[i], NULL)) {
-                 printf ("could not join thread %d \n", i);
+                 cerr << "could not joint thread " << dec << i << endl;
                  return -1;
               }
            }
-           printf ("all threads joined \n");
+           cout << "all threads joined" << endl;
         }
         else {
          while (true) {
