@@ -11,6 +11,7 @@
 #include <iterator>
 #include <algorithm>
 #include <boost/shared_ptr.hpp>
+#include <boost/thread.hpp>
 #include <boost/program_options.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include "endian.hpp"
@@ -36,48 +37,48 @@ static shared_ptr<vcd_writer> vcd;
 static bool report_stats = true;
 
 uint32_t NODES_PER_THREAD;
-pthread_barrier_t barr;
-pthread_mutex_t mutex;
+shared_ptr<barrier> barr;
+mutex global_mutex;
 uint64_t sys_time = 0;
 uint64_t num_cycles_par = 0;
 bool g_clock_inc = true;
 shared_ptr<sys> s;
 
-void * clock_nodes (void *arg) {
-   int rc = pthread_barrier_wait(&barr);
-   int tid = (long)arg;
+void *clock_nodes (void *arg) {
+    int rc = barr->wait();
+    int tid = (long)arg;
 
-   printf ("tid %d has %d tasks mapped.\n", tid, NODES_PER_THREAD);
+    printf ("tid %d has %d tasks mapped.\n", tid, NODES_PER_THREAD);
 
-   for (unsigned cycle = 0; cycle < num_cycles_par; ++cycle) {
-      rc = pthread_barrier_wait(&barr); // BARRIER
+    for (unsigned cycle = 0; cycle < num_cycles_par; ++cycle) {
+        rc = barr->wait(); // BARRIER
 
-      if (cycle > 0) {
-         g_clock_inc = true;
-      }
+        if (cycle > 0) {
+            g_clock_inc = true;
+        }
 
-      for (uint32_t tile_id=(tid*NODES_PER_THREAD); tile_id < ((tid+1)*NODES_PER_THREAD); ++tile_id) {
-         s->tick_positive_edge_par(tile_id);
-      }
+        for (uint32_t tile_id=(tid*NODES_PER_THREAD); tile_id < ((tid+1)*NODES_PER_THREAD); ++tile_id) {
+            s->tick_positive_edge_par(tile_id);
+        }
 
-      rc = pthread_barrier_wait(&barr); // BARRIER
+        rc = barr->wait(); // BARRIER
 
-      for (uint32_t tile_id=(tid*NODES_PER_THREAD); tile_id < ((tid+1)*NODES_PER_THREAD); ++tile_id) {
-         pthread_mutex_lock (&mutex);
-         s->tick_negative_edge_par(tile_id);
-         pthread_mutex_unlock (&mutex);
-      }
+        for (uint32_t tile_id=(tid*NODES_PER_THREAD); tile_id < ((tid+1)*NODES_PER_THREAD); ++tile_id) {
+            unique_lock<mutex> lock(global_mutex);
+            s->tick_negative_edge_par(tile_id);
+        }
 
-      rc = pthread_barrier_wait(&barr); // BARRIER
-      
-      pthread_mutex_lock (&mutex);
-      if (g_clock_inc) {
-         ++sys_time;
-         g_clock_inc = false;
-      }
-      pthread_mutex_unlock (&mutex);
-   }
-   pthread_exit((void*) 0);
+        rc = barr->wait(); // BARRIER
+
+        {
+            unique_lock<mutex> lock(global_mutex);
+            if (g_clock_inc) {
+                ++sys_time;
+                g_clock_inc = false;
+            }
+        }
+    }
+    pthread_exit((void*) 0);
 }
 
 
@@ -157,14 +158,14 @@ int main(int argc, char **argv) {
         ("log-verbosity", po::value<int>(), "set log verbosity")
         ("random-seed", po::value<uint32_t>(),
          "set random seed (default: use system entropy)")
+        ("parallel", po::value<vector<bool> >()->zero_tokens()->composing(),
+         "enable parallel darsim (default: false)")
+        ("nodes-per-thread", po::value<uint32_t>(),
+         "run arg tiles/thread for parallel darsim (default: 1)")
         ("version", po::value<vector<bool> >()->zero_tokens()->composing(),
          "show program version and exit")
         ("help,h", po::value<vector<bool> >()->zero_tokens()->composing(),
-         "show this help message and exit")
-        ("parallel", po::value<bool>(),
-         "enable parallel darsim (default: false)")
-        ("nodes_per_thread", po::value<uint32_t>(),
-         "select number of nodes per thread for parallel darsim (default is 1)");
+         "show this help message and exit");
     hidden_opts_desc.add_options()
         ("mem-image", po::value<string>(), "memory image")
         ("test-flags", po::value<uint64_t>(), "test flags");
@@ -219,12 +220,11 @@ int main(int argc, char **argv) {
     //uint64_t sys_time = 0;
     uint32_t g_random_seed = 0xdeadbeef;
     if (opts.count("parallel")) {
-       PARALLEL_DARSIM = opts["parallel"].as<bool>();
+       PARALLEL_DARSIM = true;
     }
-    if (opts.count("nodes_per_thread")) {
-       NODES_PER_THREAD = opts["nodes_per_thread"].as<uint32_t>();
-    }
-    else {
+    if (opts.count("nodes-per-thread")) {
+       NODES_PER_THREAD = opts["nodes-per-thread"].as<uint32_t>();
+    } else {
        NODES_PER_THREAD = 1;
     }
     if (opts.count("cycles")) {
@@ -359,17 +359,14 @@ int main(int argc, char **argv) {
 
            pthread_t thr[THREADS];
 
-           if (pthread_barrier_init(&barr, NULL, THREADS)) {
-              printf ("could not create a barrier \n");
-              return -1;
+           try {
+               barr = shared_ptr<barrier>(new barrier(THREADS));
+           } catch (thread_resource_error e) {
+               cerr << "could not create a barrier" << endl;
+               return -1;
            }
 
-           if (pthread_mutex_init (&mutex, NULL)) {
-              printf("Unable to initialize a mutex\n");
-              return -1;
-           }
-           
-           printf ("Ready to spawn %d threads \n", THREADS);
+           cout << "Ready to spawn " << THREADS << " threads" << endl;
 
            for (uint32_t i=0; i<THREADS; ++i) {
               if (pthread_create (&thr[i], NULL, &clock_nodes, (void*)i)) {
