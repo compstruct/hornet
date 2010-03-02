@@ -8,6 +8,7 @@ libdarnet_la_SOURCES = \
     flow_id.hpp flow_id.cpp \
     flit.hpp flit.cpp \
     node_id.hpp node_id.cpp \
+    link_id.hpp link_id.cpp \
     virtual_queue_id.hpp virtual_queue_id.cpp \
     router.hpp router.cpp \
     channel_alloc.hpp channel_alloc.cpp \

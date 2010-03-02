@@ -7,6 +7,7 @@
 #include <queue>
 #include "logger.hpp"
 #include "statistics.hpp"
+#include "link_id.hpp"
 #include "node.hpp"
 
 typedef enum {
@@ -21,9 +22,11 @@ public:
             arbitration_t scheme, unsigned min_bw, unsigned period,
             unsigned delay, shared_ptr<statistics> stats,
             logger &log) throw(err);
+    const link_id &get_id() const throw();
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
 private:
+    const link_id id;
     const uint64_t &system_time;
     arbitration_t scheme;
     unsigned min_bw;    // guarantee minimum bandwidth in each direction

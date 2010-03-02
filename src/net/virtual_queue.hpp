@@ -11,6 +11,7 @@
 #include <deque>
 #include <boost/shared_ptr.hpp>
 #include <boost/tuple/tuple.hpp>
+#include <boost/thread.hpp>
 #include "error.hpp"
 #include "logger.hpp"
 #include "cstdint.hpp"
@@ -121,6 +122,8 @@ private:
     shared_ptr<statistics> stats;
     logger &log;
 
+    mutable recursive_mutex front_mutex;
+    mutable recursive_mutex back_mutex;
 private:
     friend ostream &operator<<(ostream &, const virtual_queue &);
 };

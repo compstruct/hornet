@@ -6,8 +6,10 @@
 
 #include <string>
 #include <cassert>
+#include <boost/thread.hpp>
 
 using namespace std;
+using namespace boost;
 
 template<class T>
 class id_factory {
@@ -16,28 +18,24 @@ public:
     T get_fresh_id() throw();
 private:
     T next_id;
+    mutex next_id_mutex;
     const string name;
 private:
     id_factory(); // not defined
     id_factory(const id_factory &); // not defined
-    pthread_mutex_t id_mutex;
 };
 
 template<class T>
-inline T id_factory<T>::get_fresh_id() throw() { 
-   pthread_mutex_lock (&id_mutex);
-   next_id++;
-   T l_next_id = next_id;
-   pthread_mutex_unlock (&id_mutex);
-
-   return l_next_id; 
+inline T id_factory<T>::get_fresh_id() throw() {
+    unique_lock<mutex> lock(next_id_mutex);
+    T id = next_id;
+    ++next_id;
+    return id;
 }
 
 template<class T>
 inline id_factory<T>::id_factory(const string &nm) throw()
-    : next_id(0), name(nm) { 
-     pthread_mutex_init(&id_mutex, NULL);
-}
+    : next_id(0), name(nm) { }
 
 #endif // __ID_FACTORY__
 

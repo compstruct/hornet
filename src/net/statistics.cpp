@@ -35,11 +35,17 @@ void running_stats::add(double sample, double weight) throw() {
     }
 }
 
-double running_stats::get_min() const throw() { return minimum; }
+double running_stats::get_min() const throw() {
+    return minimum;
+}
 
-double running_stats::get_max() const throw() { return maximum; }
+double running_stats::get_max() const throw() {
+    return maximum;
+}
 
-double running_stats::get_mean() const throw() { return mean; }
+double running_stats::get_mean() const throw() {
+    return mean;
+}
 
 double running_stats::get_std_dev() const throw() {
     return weight_sum == 0 ? 0 : sqrt(var_numer/weight_sum);
@@ -102,11 +108,10 @@ statistics::statistics(const uint64_t &sys_time, const uint64_t &start,
       packet_flows(), packet_offers(), packet_sends(),
       flow_packet_lat_stats(), total_packet_lat_stats(),
       link_switches(), reorder_buffers(), flow_reorder_stats(),
-      log(l), vcd(new_vcd) {
-    pthread_mutex_init(&stats_mutex, NULL);
-}
+      log(l), vcd(new_vcd) { }
 
 void statistics::reset() throw() {
+    unique_lock<recursive_mutex> lock(stats_mutex);
     have_first_flit_id = false;
     first_flit_id = flit_id();
     offered_flits.clear();
@@ -140,6 +145,7 @@ void statistics::reset() throw() {
 void statistics::start_sim() throw() { }
 
 void statistics::end_sim() throw() {
+    unique_lock<recursive_mutex> lock(stats_mutex);
     for (flow_stats_t::iterator fsi = flow_reorder_stats.begin();
          fsi != flow_reorder_stats.end(); ++fsi) {
         const flow_id &fid = fsi->first;
@@ -162,6 +168,7 @@ void statistics::end_sim() throw() {
 }
 
 flow_id statistics::get_original_flow(flow_id f) const throw() {
+    unique_lock<recursive_mutex> lock(stats_mutex);
     flow_renames_t::const_iterator fri;
     while ((fri = original_flows.find(f)) != original_flows.end())
         f = fri->second;
@@ -169,11 +176,12 @@ flow_id statistics::get_original_flow(flow_id f) const throw() {
 }
 
 uint64_t statistics::get_received_packet_count() const throw() {
+    unique_lock<recursive_mutex> lock(stats_mutex);
     return total_received_packets;
 }
 
 void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
-    pthread_mutex_lock (&stats_mutex);
+    unique_lock<recursive_mutex> lock(stats_mutex);
     assert(get_original_flow(fid) == fid);
     vcd_add(vcd, &vcd_flows[fid].v_sent, 1);
     if (system_time >= start_time) { // count as sent flit
@@ -198,11 +206,10 @@ void statistics::send_flit(const flow_id &fid, const flit &flt) throw() {
     }
     assert(after_reset || offered_flits[fid] >= sent_flits[fid]);
     assert(after_reset || total_offered_flits >= total_sent_flits);
-    pthread_mutex_unlock (&stats_mutex);
 }
 
 void statistics::receive_flit(const flow_id &org_fid, const flit &flt) throw() {
-    pthread_mutex_lock (&stats_mutex);
+    unique_lock<recursive_mutex> lock(stats_mutex);
     flow_id fid = get_original_flow(org_fid);
     vcd_add(vcd, &vcd_flows[fid].v_received, 1);
     if (have_first_flit_id && flt.get_uid() >= first_flit_id) {
@@ -220,12 +227,11 @@ void statistics::receive_flit(const flow_id &org_fid, const flit &flt) throw() {
             flit_departures.erase(flt.get_uid());
         }
     }
-    pthread_mutex_unlock (&stats_mutex);
 }
 
 void statistics::offer_packet(const flow_id &fid, const uint32_t orig_len,
                               const packet_id &pid) throw() {
-    pthread_mutex_lock (&stats_mutex);
+    unique_lock<recursive_mutex> lock(stats_mutex);
     const uint32_t len = orig_len + 1; // original length plus head flit
     assert(packet_flows.find(pid) == packet_flows.end());
     packet_flows[pid] = fid;
@@ -241,11 +247,10 @@ void statistics::offer_packet(const flow_id &fid, const uint32_t orig_len,
     }
     ++total_offered_packets;
     vcd_add(vcd, &vcd_flows[fid].v_offered, len);
-    pthread_mutex_unlock (&stats_mutex);
 }
 
 void statistics::send_packet(const flow_id &fid, const head_flit &flt) throw() {
-    pthread_mutex_lock (&stats_mutex);
+    unique_lock<recursive_mutex> lock(stats_mutex);
     const uint32_t len = flt.get_length() + 1; // original length plus head flit
     const packet_id &pid = flt.get_packet_id();
     if (packet_offers.find(pid) == packet_offers.end()) { // no separate offer
@@ -263,12 +268,11 @@ void statistics::send_packet(const flow_id &fid, const head_flit &flt) throw() {
         assert(offered_flits[flt.get_flow_id()] >= len);
         --total_offered_packets;
     }
-    pthread_mutex_unlock (&stats_mutex);
 }
 
 void statistics::receive_packet(const flow_id &fid,
                                 const head_flit &flt) throw() {
-    pthread_mutex_lock (&stats_mutex);
+    unique_lock<recursive_mutex> lock(stats_mutex);
     if (have_first_flit_id && flt.get_uid() >= first_flit_id) {
         if (last_received_times.find(fid) == last_received_times.end())
             last_received_times[fid] = start_time;
@@ -278,12 +282,11 @@ void statistics::receive_packet(const flow_id &fid,
         last_received_times[fid] = system_time;
         ++total_received_packets;
     }
-    pthread_mutex_unlock (&stats_mutex);
 }
 
 void statistics::complete_packet(const flow_id &fid, const uint32_t len,
                                  const packet_id &pid) throw() {
-    pthread_mutex_lock (&stats_mutex);
+    unique_lock<recursive_mutex> lock(stats_mutex);
     if (system_time >= start_time) {
         packet_timestamp_t::iterator poi = packet_offers.find(pid);
         packet_timestamp_t::iterator psi = packet_sends.find(pid);
@@ -295,11 +298,11 @@ void statistics::complete_packet(const flow_id &fid, const uint32_t len,
             packet_flows.erase(pid);
         }
     }
-    pthread_mutex_unlock (&stats_mutex);
 }
 
 void statistics::register_links(const egress_id &src, const egress_id &dst,
                                 unsigned num_links) throw() {
+    unique_lock<recursive_mutex> lock(stats_mutex);
     for (unsigned n = 0; n < num_links; ++n) {
         sub_link_id l(src,dst,n);
         assert(link_switches.find(l) == link_switches.end());
@@ -308,6 +311,7 @@ void statistics::register_links(const egress_id &src, const egress_id &dst,
 }
 
 void statistics::register_flow(const flow_id &id) throw(err) {
+    unique_lock<recursive_mutex> lock(stats_mutex);
     if (!vcd) return;
     if (vcd_flows.find(id) != vcd_flows.end()) return;
     const vcd_flow_hooks_t &vh = vcd_flows[id];
@@ -326,6 +330,7 @@ void statistics::register_flow(const flow_id &id) throw(err) {
 
 void statistics::register_flow_rename(const flow_id &from,
                                       const flow_id &to) throw (err) {
+    unique_lock<recursive_mutex> lock(stats_mutex);
     assert(from != to);
     if (vcd) assert(vcd_flows.find(from) != vcd_flows.end());
     if (original_flows.find(to) != original_flows.end()) {
@@ -340,6 +345,7 @@ void statistics::register_flow_rename(const flow_id &from,
 }
 
 void statistics::register_queue(const virtual_queue_node_id &id) throw(err) {
+    unique_lock<recursive_mutex> lock(stats_mutex);
     if (!vcd) return;
     if (vcd_vqs.find(id) != vcd_vqs.end()) return;
     node_id n; virtual_queue_id q; tie(n,q) = id;
@@ -354,6 +360,7 @@ void statistics::register_queue(const virtual_queue_node_id &id) throw(err) {
 }
 
 void statistics::register_node(const node_id &id) throw(err) {
+    unique_lock<recursive_mutex> lock(stats_mutex);
     if (!vcd) return;
     if (vcd_nodes.find(id) != vcd_nodes.end()) return;
     const vcd_node_hooks_t &vh = vcd_nodes[id];
@@ -370,7 +377,7 @@ void statistics::register_node(const node_id &id) throw(err) {
 
 void statistics::switch_links(const egress_id &src, const egress_id &dst,
                               unsigned min_link, unsigned num_links) throw() {
-    pthread_mutex_lock (&stats_mutex);
+    unique_lock<recursive_mutex> lock(stats_mutex);
     if (system_time >= start_time) {
         for (unsigned n = min_link; n < min_link + num_links; ++n) {
             sub_link_id l(src,dst,n);
@@ -378,32 +385,30 @@ void statistics::switch_links(const egress_id &src, const egress_id &dst,
             link_switches[l]++;
         }
     }
-    pthread_mutex_unlock (&stats_mutex);
 }
 
 void statistics::xbar(node_id xbar_id, int sent_flits, int req_flits,
                       double req_frac, double bw_frac) throw() {
-    pthread_mutex_lock (&stats_mutex);
+    unique_lock<recursive_mutex> lock(stats_mutex);
     xbar_xmit_stats[xbar_id].add(sent_flits, 1);
     xbar_demand_stats[xbar_id].add(req_frac, 1);
     xbar_bw_stats[xbar_id].add(bw_frac, 1);
     vcd_add(vcd, &vcd_nodes[xbar_id].v_xbar_use, sent_flits);
     vcd_add(vcd, &vcd_nodes[xbar_id].v_xbar_demand, req_flits);
-    pthread_mutex_unlock (&stats_mutex);
 }
 
 void statistics::cxn_xmit(node_id src, node_id dst, unsigned used,
                           double req_frac, double bw_frac) throw() {
-    pthread_mutex_lock (&stats_mutex);
+    unique_lock<recursive_mutex> lock(stats_mutex);
     cxn_id cxn = make_tuple(src,dst);
     cxn_xmit_stats[cxn].add(used, 1);
     cxn_demand_stats[cxn].add(req_frac, 1);
     cxn_bw_stats[cxn].add(bw_frac, 1);
-    pthread_mutex_unlock (&stats_mutex);
 }
 
 void statistics::virtual_queue(const virtual_queue_node_id &id,
                                size_t size) throw() {
+    unique_lock<recursive_mutex> lock(stats_mutex);
     vcd_add(vcd, &vcd_vqs[id].v_size, size);
 }
 
@@ -415,6 +420,7 @@ static ostream &operator<<(ostream &out,
 }
 
 ostream &operator<<(ostream &out, statistics &stats) {
+    unique_lock<recursive_mutex> lock(stats.stats_mutex);
     set<flow_id> flow_ids;
     typedef statistics::flit_counter_t flit_counter_t;
     for (flit_counter_t::const_iterator i = stats.offered_flits.begin();

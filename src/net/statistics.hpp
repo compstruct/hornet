@@ -10,6 +10,7 @@
 #include <queue>
 #include <boost/tuple/tuple.hpp>
 #include <boost/tuple/tuple_comparison.hpp>
+#include <boost/thread.hpp>
 #include "cstdint.hpp"
 #include "error.hpp"
 #include "flow_id.hpp"
@@ -58,7 +59,6 @@ private:
 
 class statistics {
 public:
-    pthread_mutex_t stats_mutex;
     statistics(const uint64_t &system_time, const uint64_t &start_time,
                logger &log, shared_ptr<vcd_writer> vcd) throw();
     void reset() throw();
@@ -137,6 +137,7 @@ private:
     flow_stats_t flow_reorder_stats;
     logger &log;
     shared_ptr<vcd_writer> vcd;
+    mutable recursive_mutex stats_mutex;
 private:
     typedef struct {
         char v_offered;

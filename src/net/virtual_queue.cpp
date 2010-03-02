@@ -33,37 +33,44 @@ node_id virtual_queue::get_src_node_id() const throw() {
 }
 
 bool virtual_queue::front_is_empty() const throw() {
+    unique_lock<recursive_mutex> lock(front_mutex);
     return front_head == front_stale_tail;
 }
 
 bool virtual_queue::front_is_head_flit() const throw() {
+    unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     return front_egress_packet_flits_remaining == 0;
 }
 
 node_id virtual_queue::front_node_id() const throw() {
+    unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     return front_next_hop_node;
 }
 
 virtual_queue_id virtual_queue::front_vq_id() const throw() {
+    unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     return front_next_hop_vq;
 }
 
 flow_id virtual_queue::front_old_flow_id() const throw() {
+    unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     assert(front_old_flow.is_valid());
     return front_old_flow;
 }
 
 flow_id virtual_queue::front_new_flow_id() const throw() {
+    unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     return front_next_hop_flow;
 }
 
 uint32_t virtual_queue::front_num_remaining_flits_in_packet() const throw() {
     // returns the # of flits past the head flit
+    unique_lock<recursive_mutex> lock(front_mutex);
     if (!front_is_empty() && front_is_head_flit()) {
         const head_flit &h = reinterpret_cast<const head_flit &>(front_flit());
         return h.get_length();
@@ -73,17 +80,20 @@ uint32_t virtual_queue::front_num_remaining_flits_in_packet() const throw() {
 }
 
 const flit &virtual_queue::front_flit() const throw() {
+    unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     return contents[front_head];
 }
 
 
 uint32_t virtual_queue::front_size() const throw() {
+    unique_lock<recursive_mutex> lock(front_mutex);
     return (front_stale_tail >= front_head ? front_stale_tail - front_head
             : front_stale_tail + buffer_size - front_head);
 }
 
 void virtual_queue::front_pop() throw() {
+    unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     if (front_egress_packet_flits_remaining == 0) { // head, update flit count
         assert(front_old_flow.is_valid()); // set in tick_negative_edge()
@@ -111,6 +121,7 @@ void virtual_queue::front_pop() throw() {
 
 void virtual_queue::front_set_next_hop(const node_id &nid,
                                        const flow_id &fid) throw() {
+    unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     assert(front_is_head_flit());
     assert(!front_next_hop_node.is_valid());
@@ -123,6 +134,7 @@ void virtual_queue::front_set_next_hop(const node_id &nid,
 }
 
 void virtual_queue::front_set_vq_id(const virtual_queue_id &vqid) throw() {
+    unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     assert(front_is_head_flit());
     assert(front_next_hop_node.is_valid());
@@ -135,10 +147,12 @@ void virtual_queue::front_set_vq_id(const virtual_queue_id &vqid) throw() {
 }
 
 bool virtual_queue::back_is_full() const throw() {
+    unique_lock<recursive_mutex> lock(back_mutex);
     return ((back_tail + 1) % buffer_size) == back_stale_head;
 }
 
 void virtual_queue::back_push(const flit &f) throw() {
+    unique_lock<recursive_mutex> lock(back_mutex);
     assert(!back_is_full());
     contents[back_tail] = f;
     back_tail = (back_tail + 1) % buffer_size;
@@ -154,14 +168,17 @@ void virtual_queue::back_push(const flit &f) throw() {
 }
 
 bool virtual_queue::back_is_mid_packet() const throw() {
+    unique_lock<recursive_mutex> lock(back_mutex);
     return back_ingress_packet_flits_remaining != 0;
 }
 
 bool virtual_queue::back_is_empty() const throw() {
+    unique_lock<recursive_mutex> lock(back_mutex);
     return back_stale_head == back_tail;
 }
 
 bool virtual_queue::back_has_old_flow(const flow_id &f) throw() {
+    unique_lock<recursive_mutex> lock(back_mutex);
     uint32_t remaining = back_stale_egress_packet_flits_remaining;
     for (virtual_queue::buffer_t::size_type i = back_stale_head;
          i != back_tail; i = (i + 1) % buffer_size) {
@@ -183,6 +200,8 @@ void virtual_queue::tick_positive_edge() throw() { }
 
 // synchronize front and back views of the virtual queue
 void virtual_queue::tick_negative_edge() throw() {
+    unique_lock<recursive_mutex> front_lock(front_mutex);
+    unique_lock<recursive_mutex> back_lock(back_mutex);
     if ((front_head != back_stale_head // head changed
          || (front_stale_tail == back_stale_head // was empty before
              && back_tail != front_stale_tail)) // but no longer
@@ -205,11 +224,15 @@ void virtual_queue::tick_negative_edge() throw() {
 }
 
 bool virtual_queue::is_drained() const throw() {
+    unique_lock<recursive_mutex> front_lock(front_mutex);
+    unique_lock<recursive_mutex> back_lock(back_mutex);
     assert(front_is_empty() == back_is_empty());
     return front_is_empty();
 }
 
 ostream &operator<<(ostream &out, const virtual_queue &vq) {
+    unique_lock<recursive_mutex> front_lock(vq.front_mutex);
+    unique_lock<recursive_mutex> back_lock(vq.back_mutex);
     uint32_t remaining = vq.front_egress_packet_flits_remaining;
     for (virtual_queue::buffer_t::size_type i = vq.front_head;
          i != vq.front_stale_tail; i = (i + 1) % vq.buffer_size) {

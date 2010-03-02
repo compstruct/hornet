@@ -5,8 +5,8 @@ AM_CPPFLAGS = $(BOOST_CPPFLAGS) \
               -I$(top_srcdir)/src/inject \
               -I$(top_srcdir)/src/sys
 AM_LDFLAGS = $(BOOST_LDFLAGS) $(BOOST_PROGRAM_OPTIONS_LIB) $(BOOST_THREAD_LIB) \
-             @LTLIBOBJS@
-AM_CXXFLAGS = -Wall -Werror -lpthread
+             $(PTHREAD_LIBS) @LTLIBOBJS@
+AM_CXXFLAGS = -Wall -Werror
 
 bin_PROGRAMS = darsim
 

@@ -11,6 +11,7 @@
 #include <fstream>
 #include <boost/shared_ptr.hpp>
 #include <boost/tuple/tuple.hpp>
+#include <boost/thread.hpp>
 #include "cstdint.hpp"
 #include "error.hpp"
 
@@ -72,6 +73,7 @@ private:
     bool initialized;
     bool finalized;
     shared_ptr<ofstream> out;
+    mutable recursive_mutex vcd_mutex;
 };
 
 inline void vcd_add(shared_ptr<vcd_writer> vcd, vcd_id_t id,

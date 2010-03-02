@@ -6,56 +6,52 @@
 
 #include <iostream>
 #include <cassert>
+#include <boost/thread.hpp>
 #include "cstdint.hpp"
 #include "flow_id.hpp"
 
 using namespace std;
+using namespace boost;
 
 typedef uint64_t flit_id;
 typedef uint64_t packet_id;
 
 class flit {
 public:
-    flit(uint64_t data, packet_id pid=0xffffffffffffffffULL) throw();
+    flit(uint64_t data, packet_id pid=UINT64_MAX) throw();
     flit(const flit &flit) throw();
     flit() throw();
     flit &operator=(const flit &flit) throw();
     const uint64_t &get_data() const throw();
     const flit_id &get_uid() const throw();
     const packet_id &get_packet_id() const throw();
-    uint64_t get_next_uid() throw();
 protected:
     uint64_t data;
     flit_id uid;
     packet_id pid;
 protected:
     static flit_id next_uid;
+    static mutex next_uid_mutex;
 };
 
 inline flit::flit(uint64_t new_data, packet_id new_pid) throw()
-    : data(new_data), uid(get_next_uid()), pid(new_pid) {
-    assert(next_uid != 0);
+    : data(new_data), pid(new_pid) {
+    unique_lock<mutex> lock(next_uid_mutex);
+    assert(next_uid != UINT64_MAX);
+   uid = next_uid;
+   ++next_uid;
 }
 
 inline flit::flit(const flit &f) throw()
     : data(f.data), uid(f.uid), pid(f.pid) { }
 
 inline flit::flit() throw()
-    : data(0xdeadbeefdeadbeefULL), uid(0xffffffffffffffffULL),
-      pid(0xffffffffffffffffULL) { }
+    : data(0xdeadbeefdeadbeefULL), uid(UINT64_MAX), pid(UINT64_MAX) { }
 
 inline flit &flit::operator=(const flit &f) throw() {
     data = f.data;
     uid = f.uid;
     return *this;
-}
-
-inline uint64_t flit::get_next_uid() throw() {
-   static pthread_mutex_t fuid_mutex = PTHREAD_MUTEX_INITIALIZER;
-   pthread_mutex_lock (&fuid_mutex);
-   uint64_t l_next_uid = next_uid++;
-   pthread_mutex_unlock (&fuid_mutex);
-   return l_next_uid;
 }
 
 inline const uint64_t &flit::get_data() const throw() { return data; }

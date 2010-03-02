@@ -9,13 +9,11 @@
 #include <utility>
 #include <fstream>
 #include <boost/shared_ptr.hpp>
+#include <boost/thread.hpp>
 #include "cstdint.hpp"
 #include "logger.hpp"
 #include "statistics.hpp"
-#include "pe.hpp"
-#include "node.hpp"
-#include "arbiter.hpp"
-#include "bridge.hpp"
+#include "tile.hpp"
 #include "random.hpp"
 
 using namespace std;
@@ -33,34 +31,26 @@ public:
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
     bool is_drained() const throw();
-
-    void tick_positive_edge_par(int tile_id) throw(err);
-    void tick_negative_edge_par(int tile_id) throw(err);
-    uint32_t num_tiles;
+    // parallel support
+    uint32_t get_num_tiles() const throw();
+    void tick_positive_edge_tile(uint32_t tile) throw(err);
+    void tick_negative_edge_tile(uint32_t tile) throw(err);
 private:
-    typedef vector<shared_ptr<BoostRand> > rands_t;
-    typedef vector<shared_ptr<pe> > pes_t;
-    typedef vector<shared_ptr<bridge> > bridges_t;
-    typedef vector<shared_ptr<node> > nodes_t;
-    typedef map<tuple<unsigned, unsigned>, shared_ptr<arbiter> > arbiters_t;
+    typedef vector<shared_ptr<tile> > tiles_t;
 
-    rands_t rands;
-public:
-    pes_t pes;
 private:
+    const uint64_t &sys_time;
     typedef enum {
         TF_RANDOMIZE_NODE_ORDER = 1
     } test_flags_t;
 
-    bridges_t bridges;
-    nodes_t nodes;
-    arbiters_t arbiters;
+    tiles_t tiles;
+    vector<uint32_t> tile_indices;
 
-    const uint64_t &time;
-    shared_ptr<statistics> stats;
     logger &log;
     shared_ptr<BoostRand> sys_rand;
     uint64_t test_flags;
+    mutable mutex sys_mutex;
 };
 
 #endif // __SYS_HPP__

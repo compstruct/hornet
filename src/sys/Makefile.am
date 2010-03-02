@@ -9,6 +9,7 @@ AM_CXXFLAGS = -Wall -Werror
 noinst_LTLIBRARIES = libdarsys.la
 
 libdarsys_la_SOURCES = \
+    tile.hpp tile.cpp \
     sys.hpp sys.cpp \
     event_parser.hpp event_parser.cpp
 

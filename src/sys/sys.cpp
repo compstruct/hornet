@@ -56,27 +56,34 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
     if (in->bad()) throw err_bad_mem_img();
 }
 
-sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
+sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
          uint64_t stats_start, shared_ptr<vector<string> > events_files,
-         shared_ptr<statistics> new_stats,
+         shared_ptr<statistics> stats,
          logger &new_log, uint32_t seed, bool use_graphite_inj,
          uint64_t new_test_flags) throw(err)
-    : pes(), bridges(), nodes(), time(sys_time),
-      stats(new_stats), log(new_log), sys_rand(new BoostRand(-1, seed++)),
-      test_flags(new_test_flags) {
+    : sys_time(new_sys_time), log(new_log),
+      sys_rand(new BoostRand(-1, seed++)), test_flags(new_test_flags) {
+    unique_lock<mutex> lock(sys_mutex);
     shared_ptr<id_factory<packet_id> >
         packet_id_factory(new id_factory<packet_id>("packet id"));
     uint32_t num_nodes = read_word(img);
-    num_tiles = num_nodes;
     LOG(log,2) << "creating system with " << num_nodes << " node"
                << (num_nodes == 1 ? "" : "s") << "..." << endl;
-    rands.resize(num_nodes);
-    pes.resize(num_nodes);
-    bridges.resize(num_nodes);
-    nodes.resize(num_nodes);
+    for (uint32_t i = 0; i < num_nodes; ++i) {
+        tiles.push_back(shared_ptr<tile>(new tile(node_id(i), sys_time,
+                                                  stats, log)));
+    }
+    typedef vector<shared_ptr<pe> > pes_t;
+    typedef vector<shared_ptr<bridge> > bridges_t;
+    typedef vector<shared_ptr<node> > nodes_t;
+    typedef map<tuple<unsigned, unsigned>, shared_ptr<arbiter> > arbiters_t;
     typedef vector<shared_ptr<router> > routers_t;
     typedef vector<shared_ptr<channel_alloc> > vcas_t;
     typedef vector<shared_ptr<bridge_channel_alloc> > br_vcas_t;
+    pes_t pes(num_nodes);
+    nodes_t nodes(num_nodes);
+    bridges_t bridges(num_nodes);
+    arbiters_t arbiters;
     routers_t node_rts(num_nodes);
     vcas_t n_vcas(num_nodes);
     br_vcas_t br_vcas(num_nodes);
@@ -139,14 +146,15 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
 
             uint32_t cpu_entry_point = read_word(img);
             uint32_t cpu_stack_pointer = read_word(img);
-            p = shared_ptr<pe>(new cpu(pe_id(id), time, m, cpu_entry_point,
+            p = shared_ptr<pe>(new cpu(pe_id(id), sys_time, m, cpu_entry_point,
                                        cpu_stack_pointer, log));
             break;
         }
         case PE_INJECTOR: {
-            shared_ptr<injector> inj(new injector(id, time, packet_id_factory,
+            shared_ptr<injector> inj(new injector(id, sys_time,
+                                                  packet_id_factory,
                                                   stats, log, ran));
-            shared_ptr<ginj> g_inj(new ginj(id, time, packet_id_factory, 
+            shared_ptr<ginj> g_inj(new ginj(id, sys_time, packet_id_factory, 
                                             stats, log, ran));
             if (use_graphite_inj) {
                p = g_inj;
@@ -161,13 +169,15 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
             throw err_bad_mem_img();
         }
         p->connect(b);
-        rands[id] = ran;
         pes[id] = p;
         bridges[id] = b;
         nodes[id] = n;
         br_vcas[id] = b_vca;
         node_rts[id] = n_rt;
         n_vcas[id] = n_vca;
+        tiles[id]->add(p);
+        tiles[id]->add(b);
+        tiles[id]->add(n);
     }
     for (unsigned i = 0; i < num_nodes; ++i) {
         assert(nodes[i]);
@@ -176,7 +186,6 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
         assert(br_vcas[i]);
         assert(node_rts[i]);
         assert(n_vcas[i]);
-        assert(rands[i]);
     }
     arbitration_t arb_scheme = static_cast<arbitration_t>(read_word(img));
     unsigned arb_min_bw = 0;
@@ -231,11 +240,13 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
             tie(from, to) = *i;
             if (from <= to
                 && cxns.count(make_tuple(to, from)) > 0) {
-                arbiters[*i] =
-                    shared_ptr<arbiter>(new arbiter(time, nodes[from],
+                shared_ptr<arbiter> arb =
+                    shared_ptr<arbiter>(new arbiter(sys_time, nodes[from],
                                                     nodes[to], arb_scheme,
                                                     arb_min_bw, arb_period,
                                                     arb_delay, stats, log));
+                arbiters[*i] = arb;
+                tiles[from]->add(arb);
             }
         }
     }
@@ -291,130 +302,82 @@ sys::sys(const uint64_t &sys_time, shared_ptr<ifstream> img,
         }
     }
     event_parser ep(events_files, injectors, flow_starts);
+    for (uint32_t i = 0; i < tiles.size(); ++i) {
+        tile_indices.push_back(i);
+    }
     LOG(log,1) << "system created" << endl;
 }
 
+uint32_t sys::get_num_tiles() const throw() {
+    unique_lock<mutex> lock(sys_mutex);
+    return tiles.size();
+}
+
 void sys::tick_positive_edge() throw(err) {
-    LOG(log,1) << "[system] posedge " << dec << time << endl;
-    boost::function<int(int)> rr_fn =
-        bind(&BoostRand::random_range, sys_rand, _1);
-    for (arbiters_t::iterator i = arbiters.begin(); i != arbiters.end(); ++i) {
-        i->second->tick_positive_edge();
-    }
+    unique_lock<mutex> lock(sys_mutex);
+    LOG(log,1) << "[system] posedge " << dec << sys_time << endl;
     if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
-        random_shuffle(pes.begin(), pes.end(), rr_fn);
+        boost::function<int(int)> rr_fn =
+            bind(&BoostRand::random_range, sys_rand, _1);
+        random_shuffle(tile_indices.begin(), tile_indices.end(), rr_fn);
     }
-    for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
-        (*i)->tick_positive_edge();
-    }
-    if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
-        random_shuffle(nodes.begin(), nodes.end(), rr_fn);
-    }
-    for (nodes_t::iterator i = nodes.begin(); i != nodes.end(); ++i) {
-        (*i)->tick_positive_edge();
-    }
-    if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
-        random_shuffle(bridges.begin(), bridges.end(), rr_fn);
-    }
-    for (bridges_t::iterator i = bridges.begin(); i != bridges.end(); ++i) {
-        (*i)->tick_positive_edge();
+    for (vector<uint32_t>::const_iterator i = tile_indices.begin();
+         i != tile_indices.end(); ++i) {
+        tick_positive_edge_tile(*i);
     }
 }
 
 void sys::tick_negative_edge() throw(err) {
-    LOG(log,1) << "[system] negedge " << dec << time << endl;
-    boost::function<int(int)> rr_fn = bind(&BoostRand::random_range, sys_rand, _1);
-    for (arbiters_t::iterator i = arbiters.begin(); i != arbiters.end(); ++i) {
-        i->second->tick_negative_edge();
-    }
+    unique_lock<mutex> lock(sys_mutex);
+    LOG(log,1) << "[system] negedge " << dec << sys_time << endl;
     if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
-        random_shuffle(pes.begin(), pes.end(), rr_fn);
+        boost::function<int(int)> rr_fn =
+            bind(&BoostRand::random_range, sys_rand, _1);
+        random_shuffle(tile_indices.begin(), tile_indices.end(), rr_fn);
     }
-    for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
-        (*i)->tick_negative_edge();
-    }
-    if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
-        random_shuffle(nodes.begin(), nodes.end(), rr_fn);
-    }
-    for (nodes_t::iterator i = nodes.begin(); i != nodes.end(); ++i) {
-        (*i)->tick_negative_edge();
-    }
-    if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
-        random_shuffle(bridges.begin(), bridges.end(), rr_fn);
-    }
-    for (bridges_t::iterator i = bridges.begin(); i != bridges.end(); ++i) {
-        (*i)->tick_negative_edge();
+    for (vector<uint32_t>::const_iterator i = tile_indices.begin();
+         i != tile_indices.end(); ++i) {
+        tick_negative_edge_tile(*i);
     }
 }
 
-void sys::tick_positive_edge_par(int tile_id) throw(err) {
-   if (tile_id == 1) {
-      LOG(log,1) << "[system] posedge " << dec << time << endl;
-   }
-   arbiters_t::iterator i = arbiters.find(tile_id);
-   if ( i != arbiters.end() ) {
-      i->second->tick_positive_edge();
-   }
-   pes[tile_id]->tick_positive_edge();
-   nodes[tile_id]->tick_positive_edge();
-   bridges[tile_id]->tick_positive_edge();
+void sys::tick_positive_edge_tile(uint32_t tile_no) throw(err) {
+    assert(tile_no < tiles.size());
+    tiles[tile_no]->tick_positive_edge();
 }
 
-void sys::tick_negative_edge_par(int tile_id) throw(err) {
-   if (tile_id == 1) {
-      LOG(log,1) << "[system] negedge " << dec << time << endl;
-   }
-   arbiters_t::iterator i = arbiters.find(tile_id);
-   if ( i != arbiters.end() ) {
-      i->second->tick_negative_edge();
-   }
-   pes[tile_id]->tick_negative_edge();
-   nodes[tile_id]->tick_negative_edge();
-   bridges[tile_id]->tick_negative_edge();
+void sys::tick_negative_edge_tile(uint32_t tile_no) throw(err) {
+    assert(tile_no < tiles.size());
+    tiles[tile_no]->tick_negative_edge();
 }
 
-bool sys::work_tbd_darsim() throw(err) {
-    for (uint32_t i = 0; i < pes.size(); i++) {
-       if (pes[i]->work_queued()) {
-          return true;
-       }
+uint64_t sys::advance_time() throw(err) {
+    uint64_t next_time = UINT64_MAX;
+    for (tiles_t::const_iterator i = tiles.begin(); i != tiles.end(); ++i) {
+       uint64_t t = (*i)->next_pkt_time();
+       if (next_time > t) next_time = t;
     }
-    return false;
+    return next_time;
 }
 
-bool sys::nothing_to_offer() throw(err) {
-    bool offer = false;
-    for (uint32_t i = 0; i < pes.size(); i++) {
-       offer = pes[i]->is_ready_to_offer();
-       if (offer) {
-          return false;
-       }
+bool sys::is_drained() const throw() {
+    for (tiles_t::const_iterator i = tiles.begin(); i != tiles.end(); ++i) {
+        if (!(*i)->is_drained()) return false;
     }
     return true;
 }
 
-uint64_t sys::advance_time() throw(err) {
-    uint64_t pkt_time = pes[0]->next_pkt_time();
-    for (uint32_t i = 1; i < pes.size(); i++) {
-       if (pkt_time > pes[i]->next_pkt_time()) {
-           pkt_time = pes[i]->next_pkt_time();
-       }
+bool sys::nothing_to_offer() throw(err) {
+    for (tiles_t::const_iterator i = tiles.begin(); i != tiles.end(); ++i) {
+        if ((*i)->is_ready_to_offer()) return false;
     }
-    return pkt_time;
+    return true;
 }
 
-bool sys::is_drained() const throw() {
-    bool drained = true;
-    for (pes_t::const_iterator i = pes.begin(); i != pes.end(); ++i) {
-       drained &= (*i)->is_drained();
+bool sys::work_tbd_darsim() throw(err) {
+    for (tiles_t::const_iterator i = tiles.begin(); i != tiles.end(); ++i) {
+       if ((*i)->work_queued()) return true;
     }
-    if (!drained) return drained;
-    for (nodes_t::const_iterator i = nodes.begin(); i != nodes.end(); ++i) {
-        drained &= (*i)->is_drained();
-    }
-    if (!drained) return drained;
-    for (bridges_t::const_iterator i = bridges.begin(); i != bridges.end(); ++i) {
-        drained &= (*i)->is_drained();
-    }
-    return drained;
+    return false;
 }
+

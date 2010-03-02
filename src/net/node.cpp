@@ -92,11 +92,10 @@ void node::connect_from(const string &port_name,
 }
 
 void node::tick_positive_edge() throw(err) {
-    for (ingresses_t::iterator n = ingresses.begin(); n != ingresses.end(); ++n) {
-    //for (ingresses_t::reverse_iterator n = ingresses.rbegin(); n != ingresses.rend(); ++n) {
+    for (ingresses_t::iterator n = ingresses.begin();
+         n != ingresses.end(); ++n) {
         n->second->tick_positive_edge();
     }
-
     rt->route();
     vc_alloc->allocate();
     xbar.tick_positive_edge();

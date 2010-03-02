@@ -16,6 +16,7 @@ class pe_id {
 public:
     pe_id(uint32_t new_id) throw();
     bool operator==(const pe_id &) const throw();
+    bool operator!=(const pe_id &) const throw();
     bool operator<(const pe_id &) const throw();
     uint32_t get_numeric_id() const throw();
     friend ostream &operator<<(ostream &, const pe_id &);
@@ -28,6 +29,10 @@ inline pe_id::pe_id(uint32_t new_id) throw() : id(new_id) { }
 
 inline bool pe_id::operator==(const pe_id &o) const throw() {
     return id == o.id;
+}
+
+inline bool pe_id::operator!=(const pe_id &o) const throw() {
+    return id != o.id;
 }
 
 inline bool pe_id::operator<(const pe_id &o) const throw() {

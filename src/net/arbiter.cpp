@@ -12,7 +12,8 @@ arbiter::arbiter(const uint64_t &time,
                  unsigned new_period, unsigned new_delay,
                  shared_ptr<statistics> new_stats,
                  logger &l) throw(err)
-    : system_time(time), scheme(new_sch), min_bw(new_min_bw),
+    : id(src->get_id(), dst->get_id()),
+      system_time(time), scheme(new_sch), min_bw(new_min_bw),
       period(new_period), delay(new_delay), next_arb(time), arb_queue(),
       src_to_dst(src->get_egress_to(dst->get_id())),
       dst_to_src(dst->get_egress_to(src->get_id())),
@@ -37,6 +38,8 @@ arbiter::arbiter(const uint64_t &time,
                    << " and <-" << dst_to_src->get_bandwidth() << endl;
     }
 }
+
+const link_id &arbiter::get_id() const throw() { return id; }
 
 void arbiter::tick_positive_edge() throw(err) {
     if (next_arb > system_time) {

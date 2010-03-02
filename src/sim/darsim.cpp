@@ -58,14 +58,13 @@ void *clock_nodes (void *arg) {
         }
 
         for (uint32_t tile_id=(tid*NODES_PER_THREAD); tile_id < ((tid+1)*NODES_PER_THREAD); ++tile_id) {
-            s->tick_positive_edge_par(tile_id);
+            s->tick_positive_edge_tile(tile_id);
         }
 
         rc = barr->wait(); // BARRIER
 
         for (uint32_t tile_id=(tid*NODES_PER_THREAD); tile_id < ((tid+1)*NODES_PER_THREAD); ++tile_id) {
-            unique_lock<mutex> lock(global_mutex);
-            s->tick_negative_edge_par(tile_id);
+            s->tick_negative_edge_tile(tile_id);
         }
 
         rc = barr->wait(); // BARRIER
@@ -353,7 +352,7 @@ int main(int argc, char **argv) {
         uint32_t last_stats_start = stats_start;
         
         if (PARALLEL_DARSIM) {
-           uint32_t NODES = s->num_tiles;
+           uint32_t NODES = s->get_num_tiles();
            
            uint32_t THREADS = NODES/NODES_PER_THREAD;
 

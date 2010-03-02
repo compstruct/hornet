@@ -16,6 +16,7 @@ public:
     bool is_valid() const throw();
     void operator=(const node_id &) throw();
     bool operator==(const node_id &) const throw();
+    bool operator!=(const node_id &) const throw();
     bool operator<(const node_id &) const throw();
     uint32_t get_numeric_id() const throw();
     friend ostream &operator<<(ostream &, const node_id &);
@@ -34,6 +35,10 @@ inline void node_id::operator=(const node_id &o) throw() { id = o.id; }
 
 inline bool node_id::operator==(const node_id &o) const throw() {
     return id == o.id;
+}
+
+inline bool node_id::operator!=(const node_id &o) const throw() {
+    return id != o.id;
 }
 
 inline bool node_id::operator<(const node_id &o) const throw() {
