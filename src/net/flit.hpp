@@ -4,10 +4,10 @@
 #ifndef __FLIT_HPP__
 #define __FLIT_HPP__
 
+#include "cstdint.hpp"
 #include <iostream>
 #include <cassert>
 #include <boost/thread.hpp>
-#include "cstdint.hpp"
 #include "flow_id.hpp"
 
 using namespace std;

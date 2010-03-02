@@ -4,6 +4,7 @@
 #ifndef __VIRTUAL_QUEUE_HPP__
 #define __VIRTUAL_QUEUE_HPP__
 
+#include "cstdint.hpp"
 #include <iostream>
 #include <cassert>
 #include <cstddef>
@@ -14,7 +15,6 @@
 #include <boost/thread.hpp>
 #include "error.hpp"
 #include "logger.hpp"
-#include "cstdint.hpp"
 #include "flit.hpp"
 #include "node_id.hpp"
 #include "statistics.hpp"

@@ -4,6 +4,7 @@
 #ifndef __STATISTICS_HPP__
 #define __STATISTICS_HPP__
 
+#include "cstdint.hpp"
 #include <iostream>
 #include <set>
 #include <map>
@@ -11,7 +12,6 @@
 #include <boost/tuple/tuple.hpp>
 #include <boost/tuple/tuple_comparison.hpp>
 #include <boost/thread.hpp>
-#include "cstdint.hpp"
 #include "error.hpp"
 #include "flow_id.hpp"
 #include "node_id.hpp"

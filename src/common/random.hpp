@@ -5,7 +5,7 @@
 #define __RAND_HPP__
 
 
-#include <stdint.h>
+#include "cstdint.hpp"
 #include <boost/random.hpp>
 
 using namespace boost;
