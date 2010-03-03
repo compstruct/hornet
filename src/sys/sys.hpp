@@ -50,7 +50,6 @@ private:
     logger &log;
     shared_ptr<BoostRand> sys_rand;
     uint64_t test_flags;
-    mutable mutex sys_mutex;
 };
 
 #endif // __SYS_HPP__

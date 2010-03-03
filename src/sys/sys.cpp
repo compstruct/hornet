@@ -63,7 +63,6 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
          uint64_t new_test_flags) throw(err)
     : sys_time(new_sys_time), log(new_log),
       sys_rand(new BoostRand(-1, seed++)), test_flags(new_test_flags) {
-    unique_lock<mutex> lock(sys_mutex);
     shared_ptr<id_factory<packet_id> >
         packet_id_factory(new id_factory<packet_id>("packet id"));
     uint32_t num_nodes = read_word(img);
@@ -309,12 +308,10 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 }
 
 uint32_t sys::get_num_tiles() const throw() {
-    unique_lock<mutex> lock(sys_mutex);
     return tiles.size();
 }
 
 void sys::tick_positive_edge() throw(err) {
-    unique_lock<mutex> lock(sys_mutex);
     LOG(log,1) << "[system] posedge " << dec << sys_time << endl;
     if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
         boost::function<int(int)> rr_fn =
@@ -328,7 +325,6 @@ void sys::tick_positive_edge() throw(err) {
 }
 
 void sys::tick_negative_edge() throw(err) {
-    unique_lock<mutex> lock(sys_mutex);
     LOG(log,1) << "[system] negedge " << dec << sys_time << endl;
     if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
         boost::function<int(int)> rr_fn =
