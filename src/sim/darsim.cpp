@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <boost/shared_ptr.hpp>
 #include <boost/thread.hpp>
+#include <boost/thread/barrier.hpp>
 #include <boost/program_options.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include "endian.hpp"

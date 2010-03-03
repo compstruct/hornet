@@ -8,6 +8,9 @@
 extern "C" {
 #include "stdint.h"
 }
+#ifndef UINT64_MAX
+#define UINT64_MAX (0xffffffffffffffffULL)
+#endif
 
 #endif
 
