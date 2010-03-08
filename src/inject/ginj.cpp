@@ -11,7 +11,8 @@
 
 ginj::ginj(const pe_id &id, const uint64_t &t,
                    shared_ptr<id_factory<packet_id> > pif,
-                   shared_ptr<statistics> st, logger &l, shared_ptr<BoostRand> r) throw(err)
+                   shared_ptr<tile_statistics> st, logger &l,
+                   shared_ptr<BoostRand> r) throw(err)
     : pe(id), system_time(t), net(), events(), next_event(events.begin()),
       waiting_packets(), waiting_packets_queue(), incoming_packets(), flows(), flow_ids(), flow_ids_queue(), queue_ids(),
       packet_id_factory(pif), stats(st), log(l), ran(r) { 
@@ -63,7 +64,7 @@ void ginj::tick_positive_edge() throw(err) {
        if (incoming_packets.find(i) != incoming_packets.end()) {
           g_incoming_packet &ip = incoming_packets[i];
           if (net->get_transmission_done(ip.xmit)) {
-             stats->complete_packet(ip.flow, ip.len, ip.id);
+             // XXX stats->complete_packet(ip.flow, ip.len, ip.id);
              incoming_packets.erase(i);
           }
        }
@@ -92,7 +93,7 @@ void ginj::tick_positive_edge() throw(err) {
                 bool td = (pkt.time <= system_time) && (!pkt.offered);
                 LOG(log,2) << "[ginj " << get_id() << "] pkt time " << dec << pkt.time << " DAR time " << dec << system_time << " TD " << td << endl;
                 pkt.offered = 1;
-                stats->offer_packet(pkt.flow, pkt.len, pkt.id);
+                // XXX stats->offer_packet(pkt.flow, pkt.len, pkt.id);
              }
              if (pkt.offered) {
                 vector<flow_id>::iterator fi;

@@ -33,7 +33,7 @@ static const uint32_t version = 200907220;
 typedef void (*custom_signal_handler_t)(int);
 
 static logger syslog;
-static shared_ptr<statistics> stats;
+static shared_ptr<system_statistics> stats;
 static shared_ptr<vcd_writer> vcd;
 static bool report_stats = true;
 
@@ -48,9 +48,6 @@ shared_ptr<sys> s;
 void *clock_nodes (void *arg) {
     int rc = barr->wait();
     int tid = (long)arg;
-
-    cout << "thread " << dec << tid
-         << " has " << NODES_PER_THREAD << " tasks" << endl;
 
     for (unsigned cycle = 0; cycle < num_cycles_par; ++cycle) {
         rc = barr->wait(); // BARRIER
@@ -82,13 +79,15 @@ void *clock_nodes (void *arg) {
     pthread_exit((void*) 0);
 }
 
+custom_signal_handler_t prev_sig_int_handler;
 
 void sig_int_handler(int signo) {
+    signal(SIGINT, prev_sig_int_handler);
     if (vcd) vcd->commit();
     stats->end_sim();
     if (vcd) vcd->finalize();
     LOG(syslog,0) << endl << "simulation ended on keyboard interrupt" << endl;
-    if (report_stats) {
+    if (stats && report_stats) {
         LOG(syslog,0) << endl << *stats << endl;
     }
     exit(1);
@@ -122,7 +121,7 @@ shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
         throw err_parse(file, msg.str());
     }
     shared_ptr<sys> s(new sys(sys_time, img, stats_start,
-                              evt_files, stats, syslog,  g_random_seed, false,
+                              evt_files, vcd, syslog, g_random_seed, false,
                               test_flags));
     img->close();
     return s;
@@ -220,7 +219,6 @@ int main(int argc, char **argv) {
     uint64_t num_packets = 0;
     uint64_t stats_start = 0;
     uint64_t stats_reset = 0;
-    //uint64_t sys_time = 0;
     uint32_t g_random_seed = 0xdeadbeef;
     if (opts.count("parallel")) {
        PARALLEL_DARSIM = true;
@@ -316,11 +314,10 @@ int main(int argc, char **argv) {
     if (opts.count("test-flags")) {
         test_flags = opts["test-flags"].as<uint64_t>();
     }
-    stats = shared_ptr<statistics>(new statistics(sys_time, stats_start,
-                                                  syslog, vcd));
     try {
         s = new_system(sys_time, mem_image, stats_start, events_files,
                        g_random_seed, test_flags);
+        stats = s->get_statistics();
     } catch (const err_parse &e) {
         cerr << e << endl;
         exit(1);
@@ -328,8 +325,7 @@ int main(int argc, char **argv) {
         cerr << "ERROR: " << e << endl;
         exit(1);
     }
-    custom_signal_handler_t prev_sig_int_handler =
-        signal(SIGINT, sig_int_handler);
+    prev_sig_int_handler = signal(SIGINT, sig_int_handler);
     if (prev_sig_int_handler == SIG_IGN) signal(SIGINT, prev_sig_int_handler);
     stats->start_sim();
     try {
@@ -375,14 +371,11 @@ int main(int argc, char **argv) {
                return -1;
            }
 
-           cout << "Ready to spawn " << THREADS << " threads" << endl;
-
            for (uint32_t i=0; i<THREADS; ++i) {
               if (pthread_create (&thr[i], NULL, &clock_nodes, (void*)i)) {
                  cerr << "could not create thread " << dec << i << endl;
                  return -1;
               }
-              printf ("spawned thread id %d \n", i);
            }
            for (uint32_t i=0; i<THREADS; ++i) {
               if (pthread_join (thr[i], NULL)) {
@@ -390,9 +383,7 @@ int main(int argc, char **argv) {
                  return -1;
               }
            }
-           cout << "all threads joined" << endl;
-        }
-        else {
+        } else {
          while (true) {
             if (vcd) vcd->commit();
             bool drained = s->is_drained() && (!vcd || vcd->is_drained());
@@ -406,18 +397,20 @@ int main(int argc, char **argv) {
                 }
                 break;
             }
+            /* XXX
             if (num_packets != 0
                 && stats->get_received_packet_count() >= num_packets) {
                 break;
             }
+            */
             if (drained && next_time != UINT64_MAX && next_time > sys_time) {
                 sys_time = next_time;
             }
             s->tick_positive_edge();
             s->tick_negative_edge();
             ++sys_time;
-            if (report_stats && (stats_reset != 0) && (sys_time > stats_start)
-                && (sys_time % stats_reset == 0)) {
+            if (stats && report_stats && (stats_reset != 0)
+                && (sys_time > stats_start) && (sys_time % stats_reset == 0)) {
                 stats->end_sim();
                 LOG(syslog,0) << "statistics for period ["
                               << dec << last_stats_start
@@ -433,7 +426,7 @@ int main(int argc, char **argv) {
         stats->end_sim();
         if (vcd) vcd->finalize();
         LOG(syslog,0) << endl << "simulation ended successfully" << endl;
-        if (report_stats) {
+        if (stats && report_stats) {
             if (last_stats_start < sys_time) {
                 LOG(syslog,0) << "statistics for period [" << last_stats_start
                     << "," << sys_time << ")" << endl;
@@ -456,7 +449,7 @@ int main(int argc, char **argv) {
         stats->end_sim();
         if (vcd) vcd->finalize();
         LOG(syslog,0) << endl << "simulation ended on CPU exit()" << endl;
-        if (report_stats) {
+        if (stats && report_stats) {
             LOG(syslog,0) << endl << *stats << endl;
         }
         exit(e.exit_code);

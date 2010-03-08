@@ -1,13 +1,28 @@
 // -*- mode:c++; c-style:k&r; c-basic-offset:4; indent-tabs-mode: nil; -*-
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
+#include <climits>
 #include "cstdint.hpp"
 #include "tile.hpp"
 
-tile::tile(const node_id &new_id, const uint64_t &init_time,
-           shared_ptr<statistics> new_stats, logger &new_log) throw()
+tile::tile(const node_id &new_id, const uint32_t num_tiles,
+           const uint64_t &init_time, const uint64_t &stats_t0,
+           shared_ptr<flow_rename_table> flow_renames,
+           logger &new_log) throw()
     : id(new_id), time(init_time), pes(), nodes(), bridges(), arbiters(),
-      stats(new_stats), log(new_log) { }
+      stats(new tile_statistics(time, stats_t0, flow_renames)),
+      log(new_log) {
+    uint32_t num_id_bits = 0;
+    for (uint32_t t = num_tiles-1; t; ++num_id_bits, t >>= 1);
+    uint32_t pid_bits = sizeof(packet_id) * CHAR_BIT;
+    uint32_t id_offset = pid_bits - num_id_bits;
+    packet_id mask = ~((1ULL << id_offset) - 1ULL);
+    packet_id templ =
+        static_cast<packet_id>(id.get_numeric_id()) << id_offset;
+    pid_factory =
+        shared_ptr<id_factory<packet_id> >(new id_factory<packet_id>(templ,
+                                                                     mask));
+}
 
 void tile::add(shared_ptr<pe> p) throw() {
     for (pes_t::const_iterator i = pes.begin(); i != pes.end(); ++i) {
@@ -39,6 +54,18 @@ void tile::add(shared_ptr<arbiter> a) throw() {
     arbiters.push_back(a);
 }
 
+const uint64_t &tile::get_time() const throw() {
+    return time;
+}
+
+shared_ptr<tile_statistics> tile::get_statistics() const throw() {
+    return stats;
+}
+
+shared_ptr<id_factory<packet_id> > tile::get_packet_id_factory() const throw() {
+    return pid_factory;
+}
+
 void tile::tick_positive_edge() throw(err) {
     for (pes_t::iterator i = pes.begin(); i != pes.end(); ++i) {
         (*i)->tick_positive_edge();
@@ -67,6 +94,13 @@ void tile::tick_negative_edge() throw(err) {
     for (arbiters_t::iterator i = arbiters.begin(); i != arbiters.end(); ++i) {
         (*i)->tick_negative_edge();
     }
+    ++time;
+}
+
+void tile::fast_forward_time(uint64_t new_time) throw() {
+    assert(new_time >= time);
+    assert(is_drained());
+    time = new_time;
 }
 
 bool tile::is_ready_to_offer() const throw() {

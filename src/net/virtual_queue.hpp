@@ -17,6 +17,7 @@
 #include "logger.hpp"
 #include "flit.hpp"
 #include "node_id.hpp"
+#include "vcd.hpp"
 #include "statistics.hpp"
 #include "virtual_queue_id.hpp"
 #include "pressure_tracker.hpp"
@@ -43,7 +44,8 @@ public:
                            node_id src_node_id, uint32_t max_size,
                            shared_ptr<channel_alloc> vc_alloc,
                            shared_ptr<pressure_tracker> pressures,
-                           shared_ptr<statistics> stats,
+                           shared_ptr<tile_statistics> stats,
+                           shared_ptr<vcd_writer> vcd,
                            logger &log) throw();
 
     // methods which do not change over the life of the queue
@@ -119,13 +121,19 @@ private:
     shared_ptr<channel_alloc> vc_alloc;
     shared_ptr<pressure_tracker> pressures;
 
-    shared_ptr<statistics> stats;
+    shared_ptr<tile_statistics> stats;
+    shared_ptr<vcd_writer> vcd;
     logger &log;
 
     mutable recursive_mutex front_mutex;
     mutable recursive_mutex back_mutex;
+
 private:
     friend ostream &operator<<(ostream &, const virtual_queue &);
+    typedef struct {
+        char v_size;
+    } vcd_hooks_t;
+    vcd_hooks_t vcd_hooks;
 };
 
 ostream &operator<<(ostream &out, const virtual_queue &vq);

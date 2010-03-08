@@ -10,7 +10,7 @@ arbiter::arbiter(const uint64_t &time,
                  shared_ptr<node> src, shared_ptr<node> dst,
                  arbitration_t new_sch, unsigned new_min_bw,
                  unsigned new_period, unsigned new_delay,
-                 shared_ptr<statistics> new_stats,
+                 shared_ptr<tile_statistics> new_stats,
                  logger &l) throw(err)
     : id(src->get_id(), dst->get_id()),
       system_time(time), scheme(new_sch), min_bw(new_min_bw),
@@ -28,8 +28,8 @@ arbiter::arbiter(const uint64_t &time,
                                  src_to_dst->get_bandwidth(),
                                  dst_to_src->get_bandwidth(), min_bw);
     }
-    stats->register_links(src_to_dst->get_id(), dst_to_src->get_id(),
-                          total_bw);
+    // XXX stats->register_links(src_to_dst->get_id(), dst_to_src->get_id(),
+    // XXX                       total_bw);
     if (scheme != AS_NONE) {
         LOG(log,3) << "arbiter " << hex << setfill('0')
                    << src_to_dst->get_id() << "<->" << dst_to_src->get_id()

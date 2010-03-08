@@ -46,11 +46,11 @@ protected:
     flow_id flow;
     uint32_t remaining_flits;
     void *mem;
-    shared_ptr<statistics> stats;
+    shared_ptr<tile_statistics> stats;
     logger &log;
 protected:
     dma_channel(node_id n_id, dma_channel_id d_id, unsigned bw,
-                shared_ptr<virtual_queue> vq, shared_ptr<statistics> stats,
+                shared_ptr<virtual_queue> vq, shared_ptr<tile_statistics> stats,
                 logger &log) throw();
 private:
     dma_channel(); // not defined
@@ -61,7 +61,7 @@ class ingress_dma_channel : public dma_channel {
 public:
     ingress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned bw,
                         shared_ptr<virtual_queue> vq,
-                        shared_ptr<statistics> stats, logger &log) throw();
+                        shared_ptr<tile_statistics> stats, logger &log) throw();
     virtual ~ingress_dma_channel();
     void receive(void *dst, packet_id *pid, uint32_t num_flits) throw(err);
     bool has_waiting_flow() const throw();
@@ -81,7 +81,7 @@ public:
     egress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned bw,
                        shared_ptr<virtual_queue> vq,
                        shared_ptr<bridge_channel_alloc> vca,
-                       shared_ptr<statistics> stats, logger &log) throw();
+                       shared_ptr<tile_statistics> stats, logger &log) throw();
     virtual ~egress_dma_channel();
     void send(flow_id flow, void *src, uint32_t num_flits,
               const packet_id &pid) throw(err);

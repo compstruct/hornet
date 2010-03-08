@@ -20,7 +20,7 @@ class arbiter {
 public:
     arbiter(const uint64_t &time, shared_ptr<node> src, shared_ptr<node> dst,
             arbitration_t scheme, unsigned min_bw, unsigned period,
-            unsigned delay, shared_ptr<statistics> stats,
+            unsigned delay, shared_ptr<tile_statistics> stats,
             logger &log) throw(err);
     const link_id &get_id() const throw();
     void tick_positive_edge() throw(err);
@@ -38,7 +38,7 @@ private:
     shared_ptr<egress> dst_to_src;
     unsigned total_bw;
     unsigned last_queued_src_to_dst_bw;
-    shared_ptr<statistics> stats;
+    shared_ptr<tile_statistics> stats;
     logger &log;
 private:
     arbiter();                // not implemented

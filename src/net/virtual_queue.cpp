@@ -3,6 +3,7 @@
 
 #include <iomanip>
 #include <cassert>
+#include <sstream>
 #include "virtual_queue.hpp"
 #include "channel_alloc.hpp"
 
@@ -10,7 +11,9 @@ virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
                              node_id new_src_node_id, uint32_t new_max_size,
                              shared_ptr<channel_alloc> new_vc_alloc,
                              shared_ptr<pressure_tracker> new_pt,
-                             shared_ptr<statistics> st, logger &l) throw()
+                             shared_ptr<tile_statistics> st,
+                             shared_ptr<vcd_writer> new_vcd,
+                             logger &l) throw()
     : id(make_tuple(new_node_id, new_vq_id)), src_node_id(new_src_node_id),
       buffer_size(new_max_size + 1), contents(new_max_size + 1),
       front_head(0), front_stale_tail(0),
@@ -20,8 +23,16 @@ virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
       back_ingress_packet_flits_remaining(0),
       back_stale_egress_packet_flits_remaining(0),
       vc_alloc(new_vc_alloc), pressures(new_pt),
-      stats(st), log(l) {
-    stats->register_queue(id);
+      stats(st), vcd(new_vcd), log(l) {
+    if (vcd) {
+        vector<string> path;
+        ostringstream oss;
+        oss << id.get<0>() << "_" << id.get<1>();
+        path.push_back("queues");
+        path.push_back("size");
+        path.push_back(oss.str());
+        vcd->new_signal(&vcd_hooks.v_size, path, 32);
+    }
 }
 
 const virtual_queue_node_id &virtual_queue::get_id() const throw() {
@@ -220,7 +231,13 @@ void virtual_queue::tick_negative_edge() throw() {
         vc_alloc->release(*vqi);
     }
     front_vqs_to_release_at_negedge.clear();
-    stats->virtual_queue(id, front_size());
+    for (virtual_queue::buffer_t::size_type i = front_head;
+         i != front_stale_tail; i = (i + 1) % buffer_size) {
+        contents[i].age();
+    }
+    if (vcd) {
+        vcd->add_value(&vcd_hooks.v_size, front_size());
+    }
 }
 
 bool virtual_queue::is_drained() const throw() {

@@ -40,10 +40,12 @@ bridge::bridge(shared_ptr<node> n,
                unsigned flits_per_queue, unsigned b2n_bw_to_xbar,
                bool one_q_per_f, bool one_f_per_q,
                shared_ptr<id_factory<packet_id> > pif,
-               shared_ptr<statistics> st, logger &l) throw(err)
+               shared_ptr<tile_statistics> st,
+               shared_ptr<vcd_writer> new_vcd,
+               logger &l) throw(err)
     : id(n->get_id()), target(n), vc_alloc(bridge_vca), incoming(), outgoing(),
       ingress_dmas(), egress_dmas(), vqids(), packet_id_factory(pif),
-      stats(st), log(l) {
+      stats(st), vcd(new_vcd), log(l) {
     unsigned dma_no = 1;
     if (n2b_vq_ids.size() > 32)
         throw err_too_many_bridge_queues(id.get_numeric_id(),
@@ -57,7 +59,8 @@ bridge::bridge(shared_ptr<node> n,
                                         b2n_vq_ids, flits_per_queue,
                                         b2n_bw_to_xbar,
                                         target->get_channel_alloc(),
-                                        target->get_pressures(), stats, log));
+                                        target->get_pressures(), stats,
+                                        vcd, log));
     n->add_ingress(n->get_id(), node_ingress);
     shared_ptr<pressure_tracker> br_pt(new pressure_tracker(id, log));
     egress_id bridge_egress_id(n->get_id(), "X");
@@ -82,7 +85,7 @@ bridge::bridge(shared_ptr<node> n,
     incoming = shared_ptr<ingress>(new ingress(bridge_ingress_id, n->get_id(),
                                                n2b_vq_ids, flits_per_queue,
                                                UINT_MAX, br_vca, br_pt,
-                                               stats, log));
+                                               stats, vcd, log));
     for (ingress::queues_t::const_iterator q = incoming->get_queues().begin();
          q != incoming->get_queues().end(); ++q) {
         n->add_queue_id(q->first);
@@ -180,7 +183,7 @@ uint32_t bridge::send(uint32_t flow, void *src, uint32_t len,
     assert(!di->second->busy()); // otherwise VC alloc should have failed
     uint32_t xmit_id = q.get_numeric_id() + 1;
     LOG(log,3) << ": started (transmission ID " << dec << xmit_id << ")"
-        << endl;
+               << endl;
     di->second->send(flow, src, len, pid);
     return xmit_id;
 }

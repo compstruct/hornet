@@ -15,7 +15,8 @@ ostream &operator<<(ostream &out, const tuple<node_id, dma_channel_id> &id) {
 
 dma_channel::dma_channel(node_id n_id, dma_channel_id d_id, uint32_t new_bw,
                          shared_ptr<virtual_queue> q,
-                         shared_ptr<statistics> new_stats, logger &l) throw()
+                         shared_ptr<tile_statistics> new_stats,
+                         logger &l) throw()
     : id(make_tuple(n_id, d_id)), bandwidth(new_bw), vq(q), 
       started(false), flow(), remaining_flits(0),
       mem(NULL), stats(new_stats), log(l) { }
@@ -25,7 +26,7 @@ dma_channel::~dma_channel() { }
 ingress_dma_channel::
 ingress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned new_bw,
                     shared_ptr<virtual_queue> q,
-                    shared_ptr<statistics> s, logger &l) throw()
+                    shared_ptr<tile_statistics> s, logger &l) throw()
     : dma_channel(n_id, d_id, new_bw, q, s, l), pid_p(NULL) { }
 
 ingress_dma_channel::~ingress_dma_channel() { }
@@ -80,7 +81,7 @@ void ingress_dma_channel::tick_positive_edge() throw(err) {
             }
             const flit f = vq->front_flit();
             const head_flit &h = reinterpret_cast<const head_flit &>(f);
-            stats->receive_packet(flow, h);
+            stats->receive_packet(h);
         } else {
             if (mem) *((uint64_t *) mem) = endian(vq->front_flit().get_data());
             mem = mem ? (uint8_t *) mem + sizeof(uint64_t) : mem;
@@ -103,7 +104,7 @@ egress_dma_channel::
 egress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned new_bw,
                    shared_ptr<virtual_queue> q,
                    shared_ptr<bridge_channel_alloc> vca,
-                   shared_ptr<statistics> s, logger &l) throw()
+                   shared_ptr<tile_statistics> s, logger &l) throw()
     : dma_channel(n_id, d_id, new_bw, q, s, l), pid(0), vc_alloc(vca) { }
 
 egress_dma_channel::~egress_dma_channel() { }
@@ -125,16 +126,16 @@ void egress_dma_channel::tick_positive_edge() throw(err) {
                  && remaining_flits > 0 && !vq->back_is_full()
                  && (started || !vq->back_is_mid_packet())); ++i) {
         if (!started) {
-            head_flit f(flow, remaining_flits, pid);
+            head_flit f(flow, remaining_flits, pid, stats->is_started());
             vq->back_push(f);
-            stats->send_packet(flow, f);
+            stats->send_packet(flow, pid, remaining_flits);
             stats->send_flit(flow, f);
         } else {
             --remaining_flits;
             uint64_t v = (mem ? *((uint64_t *) mem)
                           : ((((uint64_t) flow.get_numeric_id()) << 32)
                              | remaining_flits));
-            flit f(endian(v), pid);
+            flit f(endian(v), pid, stats->is_started());
             vq->back_push(f);
             stats->send_flit(flow, f);
             mem = mem ? (uint8_t *) mem + sizeof(uint64_t) : mem;

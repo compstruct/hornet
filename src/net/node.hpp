@@ -22,7 +22,8 @@ public:
     explicit node(node_id id, uint32_t flits_per_queue,
                   shared_ptr<router> new_router,
                   shared_ptr<channel_alloc> new_vc_alloc,
-                  shared_ptr<statistics> stats, logger &log,
+                  shared_ptr<tile_statistics> stats,
+                  shared_ptr<vcd_writer> vcd, logger &log,
                   shared_ptr<BoostRand> ran) throw();
     const node_id &get_id() const throw();
     void add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err);
@@ -52,7 +53,8 @@ private:
     egresses_t egresses;
     crossbar xbar;
     set<virtual_queue_id> queue_ids;
-    shared_ptr<statistics> stats;
+    shared_ptr<tile_statistics> stats;
+    shared_ptr<vcd_writer> vcd;
     logger &log;
 };
 

@@ -8,7 +8,8 @@ ingress::ingress(const ingress_id &new_id, const node_id &new_src_node_id,
                  unsigned flits_per_queue, unsigned xbar_bw,
                  shared_ptr<channel_alloc> vca,
                  shared_ptr<pressure_tracker> pt,
-                 shared_ptr<statistics> st,
+                 shared_ptr<tile_statistics> st,
+                 shared_ptr<vcd_writer> vcd,
                  logger &l) throw(err)
     : id(new_id), bw_to_xbar(xbar_bw), src_node_id(new_src_node_id), vqs(),
       stats(st), log(l) {
@@ -20,7 +21,7 @@ ingress::ingress(const ingress_id &new_id, const node_id &new_src_node_id,
                                       i->get_numeric_id());
         shared_ptr<virtual_queue>
             q(new virtual_queue(parent_id, *i, src_node_id, flits_per_queue,
-                                vca, pt, stats, log));
+                                vca, pt, stats, vcd, log));
         vqs[q->get_id().get<1>()] = q;
     }
 }

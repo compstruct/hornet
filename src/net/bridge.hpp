@@ -34,7 +34,8 @@ public:
                     unsigned flits_per_queue, unsigned b2n_bw_to_xbar,
                     bool one_queue_per_flow, bool one_flow_per_queue,
                     shared_ptr<id_factory<packet_id> > packet_id_factory,
-                    shared_ptr<statistics> stats,
+                    shared_ptr<tile_statistics> stats,
+                    shared_ptr<vcd_writer> vcd,
                     logger &new_log) throw(err);
     const node_id &get_id() const throw();
     uint32_t get_transmission_done(uint32_t transmission) throw();
@@ -75,7 +76,8 @@ private:
     egress_dmas_t egress_dmas;
     vector<virtual_queue_id> vqids; // [0..31] queue index -> real queue id
     shared_ptr<id_factory<packet_id> > packet_id_factory;
-    shared_ptr<statistics> stats;
+    shared_ptr<tile_statistics> stats;
+    shared_ptr<vcd_writer> vcd;
     logger &log;
 private:
     bridge(); // not defined

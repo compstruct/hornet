@@ -10,13 +10,15 @@
 #include "ingress.hpp"
 #include "egress.hpp"
 #include "statistics.hpp"
+#include "vcd.hpp"
 #include "logger.hpp"
 #include "random.hpp"
 
 class crossbar {
 public:
-    crossbar(node_id parent, shared_ptr<statistics> stats,
-             logger &log, shared_ptr<BoostRand> ran) throw();
+    crossbar(node_id parent, shared_ptr<tile_statistics> stats,
+             shared_ptr<vcd_writer> vcd, logger &log,
+             shared_ptr<BoostRand> ran) throw();
     void add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err);
     void add_egress(node_id dst, shared_ptr<egress> egress) throw(err);
     void tick_positive_edge() throw(err);
@@ -35,9 +37,15 @@ private:
     nvqs_t ingress_qs;
     typedef vector<shared_ptr<virtual_queue> > vqs_t;
     vqs_t egress_qs;
-    shared_ptr<statistics> stats;
+    shared_ptr<tile_statistics> stats;
+    shared_ptr<vcd_writer> vcd;
     logger &log;
     shared_ptr<BoostRand> ran;
+    typedef struct {
+        char v_xbar_demand;
+        char v_xbar_use;
+    } vcd_hooks_t;
+    vcd_hooks_t vcd_hooks;
 };
 
 inline const node_id &crossbar::get_id() throw() { return id; }

@@ -57,20 +57,22 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
 }
 
 sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
-         uint64_t stats_start, shared_ptr<vector<string> > events_files,
-         shared_ptr<statistics> stats,
+         uint64_t stats_t0, shared_ptr<vector<string> > events_files,
+         shared_ptr<vcd_writer> vcd,
          logger &new_log, uint32_t seed, bool use_graphite_inj,
          uint64_t new_test_flags) throw(err)
-    : sys_time(new_sys_time), log(new_log),
+    : sys_time(new_sys_time), stats(new system_statistics()), log(new_log),
       sys_rand(new BoostRand(-1, seed++)), test_flags(new_test_flags) {
-    shared_ptr<id_factory<packet_id> >
-        packet_id_factory(new id_factory<packet_id>("packet id"));
     uint32_t num_nodes = read_word(img);
     LOG(log,2) << "creating system with " << num_nodes << " node"
                << (num_nodes == 1 ? "" : "s") << "..." << endl;
+    shared_ptr<flow_rename_table> flow_renames =
+        shared_ptr<flow_rename_table>(new flow_rename_table());
     for (uint32_t i = 0; i < num_nodes; ++i) {
-        tiles.push_back(shared_ptr<tile>(new tile(node_id(i), sys_time,
-                                                  stats, log)));
+        tiles.push_back(shared_ptr<tile>(new tile(node_id(i), num_nodes,
+                                                  sys_time, stats_t0,
+                                                  flow_renames, log)));
+        stats->add(i, tiles.back()->get_statistics());
     }
     typedef vector<shared_ptr<pe> > pes_t;
     typedef vector<shared_ptr<bridge> > bridges_t;
@@ -94,6 +96,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         uint32_t id = read_word(img);
         if (id < 0 || id >= num_nodes) throw err_bad_mem_img();
         if (nodes[id]) throw err_bad_mem_img();
+        shared_ptr<tile> t = tiles[id];
         shared_ptr<BoostRand> ran(new BoostRand(id, seed++));
         shared_ptr<router> n_rt(new set_router(id, log, ran));
         uint32_t one_q_per_f = read_word(img);
@@ -105,7 +108,9 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                                                log, ran));
         uint32_t flits_per_q = read_word(img);
         shared_ptr<node> n(new node(node_id(id), flits_per_q, n_rt, n_vca,
-                                    stats, log, ran));
+                                    t->get_statistics(), vcd, log, ran));
+        nodes[id] = n;
+        t->add(n);
         uint32_t n2b_bw = read_word(img);
         uint32_t b2n_bw = read_word(img);
         uint32_t b2n_xbar_bw = read_word(img);
@@ -123,7 +128,10 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                                         n2b_queues, n2b_bw, b2n_queues, b2n_bw,
                                         flits_per_q, b2n_xbar_bw,
                                         one_q_per_f, one_f_per_q,
-                                        packet_id_factory, stats, log));
+                                        t->get_packet_id_factory(),
+                                        t->get_statistics(), vcd, log));
+        bridges[id] = b;
+        t->add(b);
         shared_ptr<set_bridge_channel_alloc> vca =
             static_pointer_cast<set_bridge_channel_alloc>(b_vca);
         shared_ptr<ingress> b_n_i = n->get_ingress_from(b->get_id());
@@ -145,16 +153,19 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
             uint32_t cpu_entry_point = read_word(img);
             uint32_t cpu_stack_pointer = read_word(img);
-            p = shared_ptr<pe>(new cpu(pe_id(id), sys_time, m, cpu_entry_point,
+            p = shared_ptr<pe>(new cpu(pe_id(id), t->get_time(), m,
+                                       cpu_entry_point,
                                        cpu_stack_pointer, log));
             break;
         }
         case PE_INJECTOR: {
-            shared_ptr<injector> inj(new injector(id, sys_time,
-                                                  packet_id_factory,
-                                                  stats, log, ran));
-            shared_ptr<ginj> g_inj(new ginj(id, sys_time, packet_id_factory, 
-                                            stats, log, ran));
+            shared_ptr<injector> inj(new injector(id, t->get_time(),
+                                                  t->get_packet_id_factory(),
+                                                  t->get_statistics(),
+                                                  log, ran));
+            shared_ptr<ginj> g_inj(new ginj(id, t->get_time(),
+                                            t->get_packet_id_factory(), 
+                                            t->get_statistics(), log, ran));
             if (use_graphite_inj) {
                p = g_inj;
             }
@@ -167,16 +178,12 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         default:
             throw err_bad_mem_img();
         }
-        p->connect(b);
         pes[id] = p;
-        bridges[id] = b;
-        nodes[id] = n;
+        t->add(p);
+        p->connect(b);
         br_vcas[id] = b_vca;
         node_rts[id] = n_rt;
         n_vcas[id] = n_vca;
-        tiles[id]->add(p);
-        tiles[id]->add(b);
-        tiles[id]->add(n);
     }
     for (unsigned i = 0; i < num_nodes; ++i) {
         assert(nodes[i]);
@@ -239,13 +246,15 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             tie(from, to) = *i;
             if (from <= to
                 && cxns.count(make_tuple(to, from)) > 0) {
+                shared_ptr<tile> t = tiles[from];
                 shared_ptr<arbiter> arb =
-                    shared_ptr<arbiter>(new arbiter(sys_time, nodes[from],
+                    shared_ptr<arbiter>(new arbiter(t->get_time(), nodes[from],
                                                     nodes[to], arb_scheme,
                                                     arb_min_bw, arb_period,
-                                                    arb_delay, stats, log));
+                                                    arb_delay,
+                                                    t->get_statistics(), log));
                 arbiters[*i] = arb;
-                tiles[from]->add(arb);
+                t->add(arb);
             }
         }
     }
@@ -255,7 +264,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                << " routing " << (num_routes==1 ? "entry" : "entries") << endl;
     for (unsigned i = 0; i < num_routes; ++i) {
         uint32_t flow = read_word(img);
-        stats->register_flow(flow_id(flow));
+        // XXX stats->register_flow(flow_id(flow));
         uint32_t cur_n = read_word(img);
         uint32_t prev_n = read_word(img);
         if (prev_n == 0xffffffffUL) { // program the bridge
@@ -293,7 +302,9 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     static_pointer_cast<set_channel_alloc>(n_vcas[cur_n]);
                 vca->add_route(prev_n, flow_id(flow),
                                next_n, flow_id(next_f), next_qs);
-                if (flow != next_f) stats->register_flow_rename(flow, next_f);
+                if (flow != next_f) {
+                    flow_renames->add_flow_rename(flow, next_f);
+                }
             }
             shared_ptr<set_router> r =
                 static_pointer_cast<set_router>(node_rts[cur_n]);
@@ -305,6 +316,10 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         tile_indices.push_back(i);
     }
     LOG(log,1) << "system created" << endl;
+}
+
+shared_ptr<system_statistics> sys::get_statistics() const throw() {
+    return stats;
 }
 
 uint32_t sys::get_num_tiles() const throw() {
@@ -337,6 +352,21 @@ void sys::tick_negative_edge() throw(err) {
     }
 }
 
+void sys::fast_forward_time(uint64_t new_time) throw() {
+    assert(new_time >= sys_time);
+    LOG(log,1) << "[system] fast forward to  " << dec << new_time << endl;
+    if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
+        boost::function<int(int)> rr_fn =
+            bind(&BoostRand::random_range, sys_rand, _1);
+        random_shuffle(tile_indices.begin(), tile_indices.end(), rr_fn);
+    }
+    for (vector<uint32_t>::const_iterator i = tile_indices.begin();
+         i != tile_indices.end(); ++i) {
+        fast_forward_time_tile(*i, new_time);
+    }
+    sys_time = new_time;
+}
+
 void sys::tick_positive_edge_tile(uint32_t tile_no) throw(err) {
     assert(tile_no < tiles.size());
     tiles[tile_no]->tick_positive_edge();
@@ -345,6 +375,16 @@ void sys::tick_positive_edge_tile(uint32_t tile_no) throw(err) {
 void sys::tick_negative_edge_tile(uint32_t tile_no) throw(err) {
     assert(tile_no < tiles.size());
     tiles[tile_no]->tick_negative_edge();
+    if (tiles[tile_no]->get_time() > sys_time) {
+        sys_time = tiles[tile_no]->get_time();
+    }
+}
+
+void sys::fast_forward_time_tile(uint32_t tile_no, uint64_t new_time) throw() {
+    assert(new_time >= sys_time);
+    assert(tile_no < tiles.size());
+    tiles[tile_no]->fast_forward_time(new_time);
+    sys_time = new_time;
 }
 
 uint64_t sys::advance_time() throw(err) {

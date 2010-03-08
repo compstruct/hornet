@@ -6,36 +6,44 @@
 
 #include <string>
 #include <cassert>
-#include <boost/thread.hpp>
 
 using namespace std;
-using namespace boost;
 
 template<class T>
 class id_factory {
 public:
-    explicit id_factory(const string &name = "unknown") throw();
+    // template must leave a range of LSBs (~templ_mask) open for the actual ID
+    explicit id_factory(const T &templ, const T &templ_mask) throw();
+    T get_first_id() throw();
     T get_fresh_id() throw();
 private:
     T next_id;
-    mutex next_id_mutex;
-    const string name;
+    const T templ;
+    const T templ_mask;
 private:
     id_factory(); // not defined
     id_factory(const id_factory &); // not defined
 };
 
 template<class T>
-inline T id_factory<T>::get_fresh_id() throw() {
-    unique_lock<mutex> lock(next_id_mutex);
-    T id = next_id;
-    ++next_id;
-    return id;
+inline id_factory<T>::id_factory(const T &new_templ,
+                                 const T &new_templ_mask) throw()
+    : next_id(0), templ(new_templ), templ_mask(new_templ_mask) {
+    assert((new_templ & new_templ_mask) == new_templ);
 }
 
 template<class T>
-inline id_factory<T>::id_factory(const string &nm) throw()
-    : next_id(0), name(nm) { }
+inline T id_factory<T>::get_first_id() throw() {
+    return templ;
+}
+
+template<class T>
+inline T id_factory<T>::get_fresh_id() throw() {
+    assert((next_id & ~templ_mask) == next_id);
+    T id = templ | next_id;
+    ++next_id;
+    return id;
+}
 
 #endif // __ID_FACTORY__
 

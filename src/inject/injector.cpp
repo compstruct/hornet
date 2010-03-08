@@ -13,11 +13,9 @@
 
 injector::injector(const pe_id &id, const uint64_t &t,
                    shared_ptr<id_factory<packet_id> > pif,
-                   shared_ptr<statistics> st, logger &l,
+                   shared_ptr<tile_statistics> st, logger &l,
                    shared_ptr<BoostRand> r) throw(err)
-    : pe(id), system_time(t), net(), events(), next_event(events.begin()),
-      waiting_packets(), incoming_packets(), flows(),
-      flow_ids(), queue_ids(),
+    : pe(id), system_time(t), next_event(events.begin()),
       packet_id_factory(pif), stats(st), log(l), ran(r) { }
 
 injector::~injector() throw() { }
@@ -51,10 +49,9 @@ void injector::tick_positive_edge() throw(err) {
         if (p > 0) {
             flows[f] = make_tuple(system_time, l, p);
         } else if (l > 0) {
-            assert(l > 0);
             waiting_packet pkt = { packet_id_factory->get_fresh_id(), f, l };
             waiting_packets[f].push(pkt);
-            stats->offer_packet(f, l, pkt.id);
+            stats->offer_packet(pkt.flow, pkt.id, pkt.len);
         }
         LOG(log,2) << "[injector " << get_id() << "] flow " << f;
         if (l == 0) {
@@ -72,7 +69,6 @@ void injector::tick_positive_edge() throw(err) {
         if (incoming_packets.find(i) != incoming_packets.end()) {
             incoming_packet &ip = incoming_packets[i];
             if (net->get_transmission_done(ip.xmit)) {
-                stats->complete_packet(ip.flow, ip.len, ip.id);
                 incoming_packets.erase(i);
             }
         }
@@ -100,7 +96,7 @@ void injector::tick_positive_edge() throw(err) {
         if (l != 0 && t == system_time) {
             waiting_packet pkt = { packet_id_factory->get_fresh_id(), *fi, l };
             waiting_packets[*fi].push(pkt);
-            stats->offer_packet(*fi, l, pkt.id);
+            stats->offer_packet(pkt.flow, pkt.id, pkt.len);
             flows[*fi].get<0>() = t + p;
         }
     }
@@ -111,7 +107,9 @@ void injector::tick_positive_edge() throw(err) {
             queue<waiting_packet> &q = waiting_packets[*fi];
             if (!q.empty()) {
                 waiting_packet &pkt = q.front();
-                if (net->send(fi->get_numeric_id(), NULL, pkt.len, pkt.id)) q.pop();
+                if (net->send(fi->get_numeric_id(), NULL, pkt.len, pkt.id)) {
+                    q.pop();
+                }
             }
         }
     }

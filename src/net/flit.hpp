@@ -7,71 +7,80 @@
 #include "cstdint.hpp"
 #include <iostream>
 #include <cassert>
+#include <boost/tuple/tuple.hpp>
 #include <boost/thread.hpp>
 #include "flow_id.hpp"
 
 using namespace std;
 using namespace boost;
 
-typedef uint64_t flit_id;
 typedef uint64_t packet_id;
+
+typedef tuple<flow_id, packet_id> flow_packet_id;
 
 class flit {
 public:
-    flit(uint64_t data, packet_id pid=UINT64_MAX) throw();
+    flit(uint64_t data, packet_id pid, bool count_in_stats) throw();
     flit(const flit &flit) throw();
     flit() throw();
     flit &operator=(const flit &flit) throw();
     const uint64_t &get_data() const throw();
-    const flit_id &get_uid() const throw();
+    const uint64_t &get_age() const throw();
     const packet_id &get_packet_id() const throw();
+    bool get_count_in_stats() const throw();
+    void age(uint64_t ticks=1) throw();
 protected:
     uint64_t data;
-    flit_id uid;
+    uint64_t current_age;
     packet_id pid;
-protected:
-    static flit_id next_uid;
-    static mutex next_uid_mutex;
+    bool count_in_stats;
 };
 
-inline flit::flit(uint64_t new_data, packet_id new_pid) throw()
-    : data(new_data), pid(new_pid) {
-    unique_lock<mutex> lock(next_uid_mutex);
-    assert(next_uid != UINT64_MAX);
-   uid = next_uid;
-   ++next_uid;
+inline flit::flit(uint64_t new_data, packet_id new_pid, bool stats) throw()
+    : data(new_data), current_age(0), pid(new_pid), count_in_stats(stats) {
+    assert(new_pid != UINT64_MAX);
 }
 
 inline flit::flit(const flit &f) throw()
-    : data(f.data), uid(f.uid), pid(f.pid) { }
+    : data(f.data), current_age(f.current_age), pid(f.pid) { }
 
 inline flit::flit() throw()
-    : data(0xdeadbeefdeadbeefULL), uid(UINT64_MAX), pid(UINT64_MAX) { }
+    : data(UINT64_MAX), current_age(UINT64_MAX), pid(UINT64_MAX) { }
 
 inline flit &flit::operator=(const flit &f) throw() {
     data = f.data;
-    uid = f.uid;
+    current_age = f.current_age;
+    pid = f.pid;
+    count_in_stats = f.count_in_stats;
     return *this;
 }
 
 inline const uint64_t &flit::get_data() const throw() { return data; }
 
-inline const uint64_t &flit::get_uid() const throw() { return uid; }
+inline const uint64_t &flit::get_age() const throw() { return current_age; }
 
 inline const uint64_t &flit::get_packet_id() const throw() { return pid; }
+
+inline bool flit::get_count_in_stats() const throw() { return count_in_stats; }
+
+inline void flit::age(uint64_t ticks) throw() {
+    assert(ticks != 0);
+    current_age += ticks;
+}
 
 // for head flits, length is the number of packets that follow the head
 class head_flit : public flit {
 public:
-    head_flit(flow_id id, uint32_t length,
-              packet_id pid=0xffffffffffffffffULL) throw();
+    head_flit(flow_id id, uint32_t length, packet_id pid,
+              bool count_in_stats) throw();
     head_flit(const head_flit &f, flow_id new_id) throw();
     flow_id get_flow_id() const throw();
     uint32_t get_length() const throw();
 };
 
-inline head_flit::head_flit(flow_id id, uint32_t length, packet_id pid) throw()
-    : flit((((uint64_t) id.get_numeric_id()) << 32) | length, pid) {
+inline head_flit::head_flit(flow_id id, uint32_t length, packet_id pid,
+                            bool stats) throw()
+    : flit((((uint64_t) id.get_numeric_id()) << 32) | length, pid, stats) {
     assert(id.get_numeric_id() == (id.get_numeric_id() & 0xffffffffUL));
 }
 

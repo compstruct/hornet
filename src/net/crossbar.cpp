@@ -7,9 +7,22 @@
 #include "random.hpp"
 #include "crossbar.hpp"
 
-crossbar::crossbar(node_id parent, shared_ptr<statistics> s, logger &l, 
+crossbar::crossbar(node_id parent, shared_ptr<tile_statistics> s,
+                   shared_ptr<vcd_writer> v, logger &l,
                    shared_ptr<BoostRand> r) throw()
-    : id(parent), ingresses(), egresses(), stats(s), log(l), ran(r) { }
+    : id(parent), ingresses(), egresses(), stats(s), vcd(v), log(l), ran(r) {
+    if (vcd) {
+        vector<string> path;
+        ostringstream oss;
+        oss << id;
+        path.push_back("xbars");
+        path.push_back("demand");
+        path.push_back(oss.str());
+        vcd->new_signal(&vcd_hooks.v_xbar_demand, path, 32);
+        path[1] = "use";
+        vcd->new_signal(&vcd_hooks.v_xbar_use, path, 32);
+    }
+}
 
 void crossbar::add_ingress(node_id src, shared_ptr<ingress> ing) throw(err) {
     if (ingresses.find(src) != ingresses.end()) {
@@ -169,6 +182,10 @@ void crossbar::tick_positive_edge() throw(err) {
     double bw_frac =
         static_cast<double>(num_sent) / static_cast<double>(total_bw);
     stats->xbar(id, num_sent, num_reqs, req_frac, bw_frac);
+    if (vcd) {
+        vcd->add_value(&vcd_hooks.v_xbar_use, num_sent);
+        vcd->add_value(&vcd_hooks.v_xbar_demand, num_reqs);
+    }
     if (num_reqs > 0) {
         LOG(log,3) << "[xbar " << id << "] sent " << dec
             << num_sent << " of " << num_reqs

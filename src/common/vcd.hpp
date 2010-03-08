@@ -76,11 +76,4 @@ private:
     mutable recursive_mutex vcd_mutex;
 };
 
-inline void vcd_add(shared_ptr<vcd_writer> vcd, vcd_id_t id,
-                    uint64_t add_val) throw(err) {
-    if (vcd) {
-        vcd->add_value(id, add_val);
-    }
-}
-
 #endif // __VCD_HPP__
