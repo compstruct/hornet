@@ -438,8 +438,7 @@ ostream &operator<<(ostream &out, const system_statistics &s) {
         const flow_id &f = *i;
         if (received_flits.find(f) != received_flits.end()) {
             assert(flow_flit_lat_stats.find(f) != flow_flit_lat_stats.end());
-            uint64_t received = received_flits[f];
-            assert(received > 0);
+            assert(received_flits[f] > 0);
             running_stats &inc_stats = flow_flit_lat_stats[f];
             out << "    flow " << f << ": "
                 << dec << inc_stats.get_mean() << " +/- "
