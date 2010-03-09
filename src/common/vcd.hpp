@@ -40,6 +40,8 @@ public:
     void commit() throw(err); // call in the beginning of every tick
                               // to flush posedge values to VCD
     void finalize() throw(err); // call once at end to flush VCD
+    void tick() throw();
+    void fast_forward_time(uint64_t new_time) throw();
     bool is_drained() const throw();
 private:
     typedef map<vcd_id_t, string> id_map_t;
@@ -57,7 +59,7 @@ private:
                       const map<vcd_id_t, string> &ids) throw(err);
     bool is_sleeping() const throw();
 private:
-    const uint64_t &time;
+    uint64_t time;
     const uint64_t start_time;
     const uint64_t end_time;
     uint64_t last_timestamp;

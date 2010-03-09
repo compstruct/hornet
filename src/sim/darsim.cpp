@@ -37,43 +37,34 @@ static shared_ptr<system_statistics> stats;
 static shared_ptr<vcd_writer> vcd;
 static bool report_stats = true;
 
-uint32_t NODES_PER_THREAD;
+uint32_t nodes_per_thread = 0;
 shared_ptr<barrier> barr;
-mutex global_mutex;
-uint64_t sys_time = 0;
+bool par_running = true;
+bool par_barrier_frequency = 0;
+int vcd_thread_id = 0;
 uint64_t num_cycles_par = 0;
-bool g_clock_inc = true;
 shared_ptr<sys> s;
 
-void *clock_nodes (void *arg) {
-    int rc = barr->wait();
+void *clock_nodes(void *arg) {
     int tid = (long)arg;
-
-    for (unsigned cycle = 0; cycle < num_cycles_par; ++cycle) {
-        rc = barr->wait(); // BARRIER
-
-        if (cycle > 0) {
-            g_clock_inc = true;
-        }
-
-        for (uint32_t tile_id=(tid*NODES_PER_THREAD); tile_id < ((tid+1)*NODES_PER_THREAD); ++tile_id) {
+    barr->wait();
+    for (unsigned cycle = 0; par_running && cycle < num_cycles_par; ++cycle) {
+        if ((tid == vcd_thread_id) && vcd) vcd->commit();
+        for (uint32_t tile_id=(tid*nodes_per_thread);
+             tile_id < ((tid+1)*nodes_per_thread); ++tile_id) {
             s->tick_positive_edge_tile(tile_id);
         }
-
-        rc = barr->wait(); // BARRIER
-
-        for (uint32_t tile_id=(tid*NODES_PER_THREAD); tile_id < ((tid+1)*NODES_PER_THREAD); ++tile_id) {
+        if (par_barrier_frequency == 0) {
+            barr->wait();
+        }
+        for (uint32_t tile_id=(tid*nodes_per_thread);
+             tile_id < ((tid+1)*nodes_per_thread); ++tile_id) {
             s->tick_negative_edge_tile(tile_id);
         }
-
-        rc = barr->wait(); // BARRIER
-
-        {
-            unique_lock<mutex> lock(global_mutex);
-            if (g_clock_inc) {
-                ++sys_time;
-                g_clock_inc = false;
-            }
+        if ((tid == vcd_thread_id) && vcd) vcd->tick();
+        if ((par_barrier_frequency == 0)
+            || ((cycle % par_barrier_frequency) == 0)) {
+            barr->wait();
         }
     }
     pthread_exit((void*) 0);
@@ -162,6 +153,8 @@ int main(int argc, char **argv) {
          "enable parallel darsim (default: false)")
         ("nodes-per-thread", po::value<uint32_t>(),
          "run arg tiles/thread for parallel darsim\n(default: hardware concurrency)")
+        ("sync-frequency", po::value<uint32_t>(),
+         "synchronize parallel sim every arg cycles\n(default: every posedge/negedge)")
         ("version", po::value<vector<bool> >()->zero_tokens()->composing(),
          "show program version and exit")
         ("help,h", po::value<vector<bool> >()->zero_tokens()->composing(),
@@ -208,25 +201,35 @@ int main(int argc, char **argv) {
              fn != fns.end(); ++fn) {
             shared_ptr<ofstream> f(new ofstream(fn->c_str()));
             if (f->fail()) {
-                cerr << "failed to write log: " << *fn << endl;
+                cerr << "ERROR: failed to write log: " << *fn << endl;
                 exit(1);
             }
             syslog.add(f, log_verb);
         }
     }
-    bool PARALLEL_DARSIM = false;
+    bool run_parallel = false;
     uint64_t num_cycles = 0;
     uint64_t num_packets = 0;
     uint64_t stats_start = 0;
     uint64_t stats_reset = 0;
     uint32_t g_random_seed = 0xdeadbeef;
     if (opts.count("parallel")) {
-       PARALLEL_DARSIM = true;
+        run_parallel = true;
     }
     if (opts.count("nodes-per-thread")) {
-       NODES_PER_THREAD = opts["nodes-per-thread"].as<uint32_t>();
+        nodes_per_thread = opts["nodes-per-thread"].as<uint32_t>();
+        if (nodes_per_thread == 0) {
+            cerr << "ERROR: --nodes-per-thread argument must be positive"
+                 << endl;
+            exit(1);
+        }
     } else {
-       NODES_PER_THREAD = 0;
+        nodes_per_thread = 0;
+    }
+    if (opts.count("sync-frequency")) {
+        par_barrier_frequency = opts["sync-frequency"].as<uint32_t>();
+    } else {
+        par_barrier_frequency = 0;
     }
     if (opts.count("cycles")) {
         num_cycles = opts["cycles"].as<uint64_t>();
@@ -301,7 +304,7 @@ int main(int argc, char **argv) {
                 exit(1);
             }
         }
-        vcd = shared_ptr<vcd_writer>(new vcd_writer(sys_time, f,
+        vcd = shared_ptr<vcd_writer>(new vcd_writer(0, f,
                                                     vcd_start, vcd_end));
     } else if (opts.count("vcd-file") > 1) {
         cerr << "ERROR: option --vcd-file admits only one argument" << endl;
@@ -315,7 +318,7 @@ int main(int argc, char **argv) {
         test_flags = opts["test-flags"].as<uint64_t>();
     }
     try {
-        s = new_system(sys_time, mem_image, stats_start, events_files,
+        s = new_system(0, mem_image, stats_start, events_files,
                        g_random_seed, test_flags);
         stats = s->get_statistics();
     } catch (const err_parse &e) {
@@ -350,99 +353,101 @@ int main(int argc, char **argv) {
         ptime sim_start_time = microsec_clock::local_time();
         uint32_t last_stats_start = stats_start;
         
-        if (PARALLEL_DARSIM) {
-           uint32_t NODES = s->get_num_tiles();
-           
-           uint32_t THREADS;
-           if (NODES_PER_THREAD == 0) {
-               THREADS = hw_concurrency;
-               NODES_PER_THREAD = NODES/THREADS;
-           } else {
-               THREADS = NODES/NODES_PER_THREAD;
-           }
-           assert(NODES_PER_THREAD * THREADS == NODES);
-
-           pthread_t thr[THREADS];
-
-           try {
-               barr = shared_ptr<barrier>(new barrier(THREADS));
-           } catch (thread_resource_error e) {
-               cerr << "could not create a barrier" << endl;
-               return -1;
-           }
-
-           for (uint32_t i=0; i<THREADS; ++i) {
-              if (pthread_create (&thr[i], NULL, &clock_nodes, (void*)i)) {
-                 cerr << "could not create thread " << dec << i << endl;
-                 return -1;
-              }
-           }
-           for (uint32_t i=0; i<THREADS; ++i) {
-              if (pthread_join (thr[i], NULL)) {
-                 cerr << "could not joint thread " << dec << i << endl;
-                 return -1;
-              }
-           }
-        } else {
-         while (true) {
-            if (vcd) vcd->commit();
-            bool drained = s->is_drained() && (!vcd || vcd->is_drained());
-            uint64_t next_time = s->advance_time();
-            if (num_cycles != 0 && num_cycles <= sys_time) {
-                break;
+        if (run_parallel) {
+            uint32_t num_nodes = s->get_num_tiles();
+            uint32_t num_threads;
+            if (nodes_per_thread == 0) {
+                num_threads = hw_concurrency;
+                nodes_per_thread = num_nodes/num_threads;
+            } else {
+                num_threads = num_nodes/nodes_per_thread;
             }
-            if (drained && next_time == UINT64_MAX) {
-                if (num_cycles != 0) {
-                    num_cycles = sys_time;
+            assert(nodes_per_thread * num_threads == num_nodes);
+
+            vector<pthread_t> threads(num_threads);
+
+            try {
+                barr = shared_ptr<barrier>(new barrier(num_threads));
+            } catch (thread_resource_error e) {
+                cerr << "ERROR: could not create a barrier" << endl;
+                exit(1);
+            }
+            for (uint32_t i=0; i<num_threads; ++i) {
+                if (pthread_create(&threads[i], NULL, &clock_nodes,
+                                   (void*)i)) {
+                    cerr << "ERROR: could not create thread "
+                         << dec << i << endl;
+                    exit(1);
                 }
-                break;
             }
-            /* XXX
-            if (num_packets != 0
-                && stats->get_received_packet_count() >= num_packets) {
-                break;
+            for (uint32_t i=0; i<num_threads; ++i) {
+                if (pthread_join(threads[i], NULL)) {
+                    cerr << "ERROR: could not join thread "
+                         << dec << i << endl;
+                    exit(1);
+                }
             }
-            */
-            if (drained && next_time != UINT64_MAX && next_time > sys_time) {
-                sys_time = next_time;
+        } else {
+            while (true) {
+                if (vcd) vcd->commit();
+                bool drained = s->is_drained() && (!vcd || vcd->is_drained());
+                uint64_t next_time = s->advance_time();
+                if (num_cycles != 0 && num_cycles <= s->get_time()) {
+                    break;
+                }
+                if (drained && next_time == UINT64_MAX) {
+                    if (num_cycles != 0) {
+                        num_cycles = s->get_time();
+                    }
+                    break;
+                }
+                if (num_packets != 0
+                    && stats->get_received_packet_count() >= num_packets) {
+                    break;
+                }
+                if (drained && next_time != UINT64_MAX
+                    && next_time > s->get_time()) {
+                    s->fast_forward_time(next_time);
+                    if (vcd) vcd->fast_forward_time(next_time);
+                }
+                s->tick_positive_edge();
+                s->tick_negative_edge();
+                if (vcd) vcd->tick();
+                if (stats && report_stats && (stats_reset != 0)
+                    && (s->get_time() > stats_start)
+                    && (s->get_time() % stats_reset == 0)) {
+                    stats->end_sim();
+                    LOG(syslog,0) << "statistics for period ["
+                        << dec << last_stats_start
+                        << "," << s->get_time() << ")" << endl;
+                    LOG(syslog,0) << endl << *stats << endl;
+                    stats->reset();
+                    stats->start_sim();
+                    last_stats_start = s->get_time();
+                }
             }
-            s->tick_positive_edge();
-            s->tick_negative_edge();
-            ++sys_time;
-            if (stats && report_stats && (stats_reset != 0)
-                && (sys_time > stats_start) && (sys_time % stats_reset == 0)) {
-                stats->end_sim();
-                LOG(syslog,0) << "statistics for period ["
-                              << dec << last_stats_start
-                              << "," << sys_time << ")" << endl;
-                LOG(syslog,0) << endl << *stats << endl;
-                stats->reset();
-                stats->start_sim();
-                last_stats_start = sys_time;
-            }
-         }
         }
         ptime sim_end_time = microsec_clock::local_time();
         stats->end_sim();
         if (vcd) vcd->finalize();
         LOG(syslog,0) << endl << "simulation ended successfully" << endl;
         if (stats && report_stats) {
-            if (last_stats_start < sys_time) {
+            if (last_stats_start < s->get_time()) {
                 LOG(syslog,0) << "statistics for period [" << last_stats_start
-                    << "," << sys_time << ")" << endl;
+                    << "," << s->get_time() << ")" << endl;
                 LOG(syslog,0) << endl << *stats << endl;
             }
             time_duration sim_time = sim_end_time - sim_start_time;
             LOG(syslog,0) << endl;
             LOG(syslog,0) << "total simulation time:   "
-                          << dec << sim_time << endl
-                          << "total simulation cycles: "
-                          << dec << sys_time << endl
-                          << "total statistics cycles: "
-                          << dec << (sys_time - stats_start)
-                          << " (statistics start after cycle "
-                          << dec << stats_start
-                          << ")" << endl;
+                << dec << sim_time << endl
+                << "total simulation cycles: "
+                << dec << s->get_time() << endl
+                << "total statistics cycles: "
+                << dec << (s->get_time() - stats_start)
+                << " (statistics start after cycle "
+                << dec << stats_start
+                << ")" << endl;
         }
     } catch (const exc_syscall_exit &e) {
         if (vcd) vcd->commit();

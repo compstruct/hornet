@@ -417,3 +417,6 @@ bool sys::work_tbd_darsim() throw(err) {
     return false;
 }
 
+uint64_t sys::get_time() const throw() {
+    return sys_time;
+}

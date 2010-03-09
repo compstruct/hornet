@@ -7,6 +7,35 @@
 #include <iomanip>
 #include "statistics.hpp"
 
+void combine_left(uint64_t &lhs, const uint64_t &rhs) {
+    lhs += rhs;
+}
+
+void combine_left(running_stats &lhs, const running_stats &rhs) {
+    lhs.combine_with(rhs);
+}
+
+void combine_left(reorder_buffer &lhs, const reorder_buffer &rhs) {
+    abort();
+}
+
+template<class K, class V>
+inline void combine_left(map<K,V> &lhs, const map<K,V> &rhs) {
+    typename map<K,V>::iterator li = lhs.begin();
+    typename map<K,V>::const_iterator ri = rhs.begin();
+    while (li != lhs.end() || ri != rhs.end()) {
+        if (li != lhs.end() && ri != rhs.end() && li->first == ri->first) {
+            combine_left(li->second, ri->second);
+        } else if ((ri == rhs.end())
+                   || (li != lhs.end() && li->first < ri->first)) {
+            ++li;
+        } else {
+            lhs[ri->first] = ri->second;
+            ++ri;
+        }
+    }
+}
+
 flow_rename_table::flow_rename_table() throw() : table() { }
 
 void flow_rename_table::add_flow_rename(const flow_id &from,
@@ -263,6 +292,16 @@ void tile_statistics::cxn_xmit(node_id src, node_id dst, unsigned used,
 
 system_statistics::system_statistics() throw() { }
 
+uint64_t system_statistics::get_received_packet_count() const throw() {
+    uint64_t received_packets_count = 0;
+    for (system_statistics::tile_stats_t::const_iterator tsi =
+         tile_stats.begin(); tsi != tile_stats.end(); ++tsi) {
+        combine_left(received_packets_count,
+                     tsi->second->get_received_packet_count());
+    }
+    return received_packets_count;
+}
+
 void system_statistics::add(uint32_t id,
                             shared_ptr<tile_statistics> s) throw() {
     assert(tile_stats.find(id) == tile_stats.end());
@@ -287,35 +326,6 @@ void system_statistics::end_sim() throw() {
     for (tile_stats_t::iterator tsi = tile_stats.begin();
          tsi != tile_stats.end(); ++tsi) {
         tsi->second->end_sim();
-    }
-}
-
-void combine_left(uint64_t &lhs, const uint64_t &rhs) {
-    lhs += rhs;
-}
-
-void combine_left(running_stats &lhs, const running_stats &rhs) {
-    lhs.combine_with(rhs);
-}
-
-void combine_left(reorder_buffer &lhs, const reorder_buffer &rhs) {
-    abort();
-}
-
-template<class K, class V>
-inline void combine_left(map<K,V> &lhs, const map<K,V> &rhs) {
-    typename map<K,V>::iterator li = lhs.begin();
-    typename map<K,V>::const_iterator ri = rhs.begin();
-    while (li != lhs.end() || ri != rhs.end()) {
-        if (li != lhs.end() && ri != rhs.end() && li->first == ri->first) {
-            combine_left(li->second, ri->second);
-        } else if ((ri == rhs.end())
-                   || (li != lhs.end() && li->first < ri->first)) {
-            ++li;
-        } else {
-            lhs[ri->first] = ri->second;
-            ++ri;
-        }
     }
 }
 

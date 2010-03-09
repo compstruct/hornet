@@ -247,3 +247,12 @@ bool vcd_writer::is_sleeping() const throw() {
     unique_lock<recursive_mutex> lock(vcd_mutex);
     return time < start_time || (end_time != 0 && time > end_time);
 }
+
+void vcd_writer::tick() throw() {
+    ++time;
+}
+
+void vcd_writer::fast_forward_time(uint64_t new_time) throw() {
+    assert(new_time >= time);
+    time = new_time;
+}

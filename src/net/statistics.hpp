@@ -136,6 +136,7 @@ private:
 class system_statistics {
 public:
     explicit system_statistics() throw();
+    uint64_t get_received_packet_count() const throw();
     void add(uint32_t id, shared_ptr<tile_statistics> new_stats) throw();
     void reset() throw();
     void start_sim() throw();
