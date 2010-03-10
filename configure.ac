@@ -18,10 +18,25 @@ AX_BOOST_PROGRAM_OPTIONS
 AX_PTHREAD
 AC_CHECK_LIB([m],[ceil])
 AM_PATH_PYTHON([2.5])
+AC_ARG_ENABLE([testsuite],
+              AC_HELP_STRING([--enable-testsuite],
+                             [build testsuite using QMTest [default=yes]]),
+              [case "${enableval}" in
+               yes) enable_testsuite=true ;;
+               on) enable_testsuite=true ;;
+               true) enable_testsuite=true ;;
+               no) enable_testsuite=false ;;
+               false) enable_testsuite=false ;;
+               off) enable_testsuite=false ;;
+               *) AC_MSG_ERROR([bad arg to --enable-testsuite: ${enableval}]) ;;
+               esac], [enable_testsuite=true])
+AM_CONDITIONAL([ENABLE_TESTSUITE], [test x$enable_testsuite = xtrue])
+if test x$enable_testsuite = xtrue; then
 FANCY_PATH_PROG([QMTEST], [QMTest test infrastructure], [qmtest])
+fi
 AC_ARG_ENABLE([mips-rts],
               AC_HELP_STRING([--enable-mips-rts],
-                             [build MIPS runtime system [[default=no]]]),
+                             [build MIPS runtime system [default=no]]),
               [case "${enableval}" in
                yes) build_mips_rts=true ;;
                on) build_mips_rts=true ;;
