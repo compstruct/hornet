@@ -40,7 +40,7 @@ static bool report_stats = true;
 uint32_t nodes_per_thread = 0;
 shared_ptr<barrier> barr;
 bool par_running = true;
-bool par_barrier_frequency = 0;
+bool par_barrier_period = 0;
 int vcd_thread_id = 0;
 uint64_t num_cycles_par = 0;
 shared_ptr<sys> s;
@@ -54,7 +54,7 @@ void *clock_nodes(void *arg) {
              tile_id < ((tid+1)*nodes_per_thread); ++tile_id) {
             s->tick_positive_edge_tile(tile_id);
         }
-        if (par_barrier_frequency == 0) {
+        if (par_barrier_period == 0) {
             barr->wait();
         }
         for (uint32_t tile_id=(tid*nodes_per_thread);
@@ -62,8 +62,8 @@ void *clock_nodes(void *arg) {
             s->tick_negative_edge_tile(tile_id);
         }
         if ((tid == vcd_thread_id) && vcd) vcd->tick();
-        if ((par_barrier_frequency == 0)
-            || ((cycle % par_barrier_frequency) == 0)) {
+        if ((par_barrier_period == 0)
+            || ((cycle % par_barrier_period) == 0)) {
             barr->wait();
         }
     }
@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
          "enable parallel darsim (default: false)")
         ("nodes-per-thread", po::value<uint32_t>(),
          "run arg tiles/thread for parallel darsim\n(default: hardware concurrency)")
-        ("sync-frequency", po::value<uint32_t>(),
+        ("sync-period", po::value<uint32_t>(),
          "synchronize parallel sim every arg cycles\n(default: every posedge/negedge)")
         ("version", po::value<vector<bool> >()->zero_tokens()->composing(),
          "show program version and exit")
@@ -226,10 +226,10 @@ int main(int argc, char **argv) {
     } else {
         nodes_per_thread = 0;
     }
-    if (opts.count("sync-frequency")) {
-        par_barrier_frequency = opts["sync-frequency"].as<uint32_t>();
+    if (opts.count("sync-period")) {
+        par_barrier_period = opts["sync-period"].as<uint32_t>();
     } else {
-        par_barrier_frequency = 0;
+        par_barrier_period = 0;
     }
     if (opts.count("cycles")) {
         num_cycles = opts["cycles"].as<uint64_t>();
