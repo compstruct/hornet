@@ -259,9 +259,9 @@ void tile_statistics::send_packet(const flow_id &flow,
 
 void tile_statistics::receive_packet(const head_flit &flt) throw() {
     flow_id fid = flt.get_flow_id();
-    flow_reorder_stats[fid].add(reorder_buffers[fid].get_buffer_length(),
-                                system_time - last_received_times[fid]);
-    reorder_buffers[fid].receive_packet(flt);
+    // XXX flow_reorder_stats[fid].add(reorder_buffers[fid].get_buffer_length(),
+    // XXX                             system_time - last_received_times[fid]);
+    // XXX reorder_buffers[fid].receive_packet(flt);
     ++total_received_packets;
 }
 
