@@ -142,6 +142,8 @@ void virtual_queue::front_set_next_hop(const node_id &nid,
     assert(fid.is_valid());
     front_next_hop_node = nid;
     front_next_hop_flow = fid;
+    head_flit &h = reinterpret_cast<head_flit &>(contents[front_head]);
+    if (h.get_flow_id() != fid) h.set_flow_id(fid);
 }
 
 void virtual_queue::front_set_vq_id(const virtual_queue_id &vqid) throw() {

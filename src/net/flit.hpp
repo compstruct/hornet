@@ -73,8 +73,8 @@ class head_flit : public flit {
 public:
     head_flit(flow_id id, uint32_t length, packet_id pid,
               bool count_in_stats) throw();
-    head_flit(const head_flit &f, flow_id new_id) throw();
     flow_id get_flow_id() const throw();
+    void set_flow_id(const flow_id &fid) throw();
     uint32_t get_length() const throw();
 };
 
@@ -84,14 +84,14 @@ inline head_flit::head_flit(flow_id id, uint32_t length, packet_id pid,
     assert(id.get_numeric_id() == (id.get_numeric_id() & 0xffffffffUL));
 }
 
-inline head_flit::head_flit(const head_flit &f, flow_id new_id) throw()
-    : flit(f) {
-    assert(new_id.get_numeric_id() == (new_id.get_numeric_id() & 0xffffffffUL));
-    data = (((uint64_t) new_id.get_numeric_id()) << 32) | (data & 0xffffffffUL);
-}
-
 inline flow_id head_flit::get_flow_id() const throw() {
     return flow_id(data >> 32);
+}
+
+inline void head_flit::set_flow_id(const flow_id &fid) throw() {
+    assert(fid.is_valid());
+    assert(fid.get_numeric_id() == (fid.get_numeric_id() & 0xffffffffUL));
+    data = (((uint64_t) fid.get_numeric_id()) << 32) | (data & 0xffffffffUL);
 }
 
 inline uint32_t head_flit::get_length() const throw() {
