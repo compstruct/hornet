@@ -441,8 +441,8 @@ ostream &operator<<(ostream &out, const system_statistics &s) {
         << " (" << total_sent_flits - total_received_flits
         << " in flight)" << endl << endl;
 
-    out << "in-network sent flit latencies (mean +/- s.d., in # cycles):"
-        << endl;
+    out << "in-network sent flit latencies (mean +/- s.d., [min..max] "
+        << "in # cycles):" << endl;
     for (set<flow_id>::const_iterator i = flow_ids.begin();
          i != flow_ids.end(); ++i) {
         const flow_id &f = *i;
@@ -452,7 +452,9 @@ ostream &operator<<(ostream &out, const system_statistics &s) {
             running_stats &inc_stats = flow_flit_lat_stats[f];
             out << "    flow " << f << ": "
                 << dec << inc_stats.get_mean() << " +/- "
-                << inc_stats.get_std_dev() << endl;
+                << inc_stats.get_std_dev() << ", range ["
+                << inc_stats.get_min() << ".."
+                << inc_stats.get_max() << "]" << endl;
         }
     }
     out << "    all flows in-network flit latency: "
