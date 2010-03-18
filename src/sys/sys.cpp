@@ -49,6 +49,19 @@ static double read_double(shared_ptr<ifstream> in) throw(err) {
     return d;
 }
 
+static string read_string(shared_ptr<ifstream> in) throw(err) {
+    uint8_t len = 0xff;
+    in->read((char *) &len, 1);
+    if (in->bad()) throw err_bad_mem_img();
+    char *buf = new char[len];
+    assert(buf);
+    in->read(buf, len);
+    if (in->bad()) throw err_bad_mem_img();
+    string s(buf, len);
+    delete[] buf;
+    return s;
+}
+
 static void read_mem(uint8_t *ptr, uint32_t num_bytes,
                      shared_ptr<ifstream> in) throw(err) {
     assert(ptr);
@@ -222,9 +235,9 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     }
     for (unsigned i  = 0; i < num_cxns; ++i) {
         uint32_t link_src_n = read_word(img);
-        char link_src_port_name = static_cast<char>(read_word(img));
+        string link_src_port_name = read_string(img);
         uint32_t link_dst_n = read_word(img);
-        char link_dst_port_name = static_cast<char>(read_word(img));
+        string link_dst_port_name = read_string(img);
         uint32_t link_bw = read_word(img);
         uint32_t to_xbar_bw = read_word(img);
         uint32_t link_num_queues = read_word(img);
@@ -234,9 +247,9 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         }
         if (link_src_n >= num_nodes) throw err_bad_mem_img();
         if (link_dst_n >= num_nodes) throw err_bad_mem_img();
-        nodes[link_dst_n]->connect_from(string(1, link_dst_port_name),
+        nodes[link_dst_n]->connect_from(link_dst_port_name,
                                         nodes[link_src_n],
-                                        string(1, link_src_port_name),
+                                        link_src_port_name,
                                         queues, link_bw, to_xbar_bw);
         cxns.insert(make_tuple(link_src_n, link_dst_n));
     }

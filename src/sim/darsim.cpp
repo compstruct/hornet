@@ -28,7 +28,7 @@ using namespace boost::posix_time;
 namespace po = boost::program_options;
 
 static const string magic = "DAR ";
-static const uint32_t version = 200907220;
+static const uint32_t version = 201003170;
 
 typedef void (*custom_signal_handler_t)(int);
 

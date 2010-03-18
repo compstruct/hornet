@@ -8,7 +8,7 @@ import sys, os, optparse, re, subprocess, struct, ConfigParser
 
 objdump = 'objdump'
 file_magic = 'DAR '
-file_version = 200907220
+file_version = 201003170
 
 class Err(Exception):
     pass
@@ -19,6 +19,10 @@ def w2bs(w):
     assert w <= (1 << 32)
     assert struct.calcsize('>I') == 4
     return struct.pack('>I', w)
+
+def str2bs(s):
+    '''convert a string into length (one byte) followed by characters data'''
+    return struct.pack('>p', s)
 
 def f2bs(f):
     '''convert a double into eight bytes in big-endian order'''
@@ -186,9 +190,9 @@ def write_cxn(out, src, src_port, dst, dst_port, bw, xbar_bw, queues,
     assert len(src_port) == 1
     assert len(dst_port) == 1
     out.write(w2bs(src))
-    out.write(w2bs(ord(src_port)))
+    out.write(str2bs(src_port))
     out.write(w2bs(dst))
-    out.write(w2bs(ord(dst_port)))
+    out.write(str2bs(dst_port))
     out.write(w2bs(bw))
     out.write(w2bs(xbar_bw if xbar_bw is not None else 0xffffffff))
     out.write(w2bs(len(queues)))
