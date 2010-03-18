@@ -50,15 +50,10 @@ static double read_double(shared_ptr<ifstream> in) throw(err) {
 }
 
 static string read_string(shared_ptr<ifstream> in) throw(err) {
-    uint8_t len = 0xff;
-    in->read((char *) &len, 1);
+    char buf[256];
+    in->read((char *) &buf, 256);
     if (in->bad()) throw err_bad_mem_img();
-    char *buf = new char[len];
-    assert(buf);
-    in->read(buf, len);
-    if (in->bad()) throw err_bad_mem_img();
-    string s(buf, len);
-    delete[] buf;
+    string s(&buf[1], (int) buf[0]);
     return s;
 }
 

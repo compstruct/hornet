@@ -8,7 +8,7 @@ import sys, os, optparse, re, subprocess, struct, ConfigParser
 
 objdump = 'objdump'
 file_magic = 'DAR '
-file_version = 201003170
+file_version = 201003171
 
 class Err(Exception):
     pass
@@ -22,7 +22,7 @@ def w2bs(w):
 
 def str2bs(s):
     '''convert a string into length (one byte) followed by characters data'''
-    return struct.pack('>p', s)
+    return struct.pack('>256p', s)
 
 def f2bs(f):
     '''convert a double into eight bytes in big-endian order'''
