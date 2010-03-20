@@ -77,7 +77,8 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     shared_ptr<flow_rename_table> flow_renames =
         shared_ptr<flow_rename_table>(new flow_rename_table());
     for (uint32_t i = 0; i < num_nodes; ++i) {
-        tiles.push_back(shared_ptr<tile>(new tile(node_id(i), num_nodes,
+        tile_indices.push_back(tile_id(i));
+        tiles.push_back(shared_ptr<tile>(new tile(tile_id(i), num_nodes,
                                                   sys_time, stats_t0,
                                                   flow_renames, log)));
         stats->add(i, tiles.back()->get_statistics());
@@ -320,9 +321,6 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         }
     }
     event_parser ep(events_files, injectors, flow_starts);
-    for (uint32_t i = 0; i < tiles.size(); ++i) {
-        tile_indices.push_back(i);
-    }
     LOG(log,1) << "system created" << endl;
 }
 
@@ -341,7 +339,7 @@ void sys::tick_positive_edge() throw(err) {
             bind(&BoostRand::random_range, sys_rand, _1);
         random_shuffle(tile_indices.begin(), tile_indices.end(), rr_fn);
     }
-    for (vector<uint32_t>::const_iterator i = tile_indices.begin();
+    for (vector<tile_id>::const_iterator i = tile_indices.begin();
          i != tile_indices.end(); ++i) {
         tick_positive_edge_tile(*i);
     }
@@ -354,7 +352,7 @@ void sys::tick_negative_edge() throw(err) {
             bind(&BoostRand::random_range, sys_rand, _1);
         random_shuffle(tile_indices.begin(), tile_indices.end(), rr_fn);
     }
-    for (vector<uint32_t>::const_iterator i = tile_indices.begin();
+    for (vector<tile_id>::const_iterator i = tile_indices.begin();
          i != tile_indices.end(); ++i) {
         tick_negative_edge_tile(*i);
     }
@@ -368,30 +366,30 @@ void sys::fast_forward_time(uint64_t new_time) throw() {
             bind(&BoostRand::random_range, sys_rand, _1);
         random_shuffle(tile_indices.begin(), tile_indices.end(), rr_fn);
     }
-    for (vector<uint32_t>::const_iterator i = tile_indices.begin();
+    for (vector<tile_id>::const_iterator i = tile_indices.begin();
          i != tile_indices.end(); ++i) {
         fast_forward_time_tile(*i, new_time);
     }
     sys_time = new_time;
 }
 
-void sys::tick_positive_edge_tile(uint32_t tile_no) throw(err) {
-    assert(tile_no < tiles.size());
-    tiles[tile_no]->tick_positive_edge();
+void sys::tick_positive_edge_tile(tile_id tile_no) throw(err) {
+    assert(tile_no.get_numeric_id() < tiles.size());
+    tiles[tile_no.get_numeric_id()]->tick_positive_edge();
 }
 
-void sys::tick_negative_edge_tile(uint32_t tile_no) throw(err) {
-    assert(tile_no < tiles.size());
-    tiles[tile_no]->tick_negative_edge();
-    if (tiles[tile_no]->get_time() > sys_time) {
-        sys_time = tiles[tile_no]->get_time();
+void sys::tick_negative_edge_tile(tile_id tile_no) throw(err) {
+    assert(tile_no.get_numeric_id() < tiles.size());
+    tiles[tile_no.get_numeric_id()]->tick_negative_edge();
+    if (tiles[tile_no.get_numeric_id()]->get_time() > sys_time) {
+        sys_time = tiles[tile_no.get_numeric_id()]->get_time();
     }
 }
 
-void sys::fast_forward_time_tile(uint32_t tile_no, uint64_t new_time) throw() {
+void sys::fast_forward_time_tile(tile_id tile_no, uint64_t new_time) throw() {
     assert(new_time >= sys_time);
-    assert(tile_no < tiles.size());
-    tiles[tile_no]->fast_forward_time(new_time);
+    assert(tile_no.get_numeric_id() < tiles.size());
+    tiles[tile_no.get_numeric_id()]->fast_forward_time(new_time);
     sys_time = new_time;
 }
 

@@ -5,7 +5,7 @@
 #include "cstdint.hpp"
 #include "tile.hpp"
 
-tile::tile(const node_id &new_id, const uint32_t num_tiles,
+tile::tile(const tile_id &new_id, const uint32_t num_tiles,
            const uint64_t &init_time, const uint64_t &stats_t0,
            shared_ptr<flow_rename_table> flow_renames,
            logger &new_log) throw()

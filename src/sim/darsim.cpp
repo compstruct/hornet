@@ -1,7 +1,6 @@
 // -*- mode:c++; c-style:k&r; c-basic-offset:4; indent-tabs-mode: nil; -*-
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
-#include <pthread.h>
 #include "cstdint.hpp"
 #include <cstdlib>
 #include <iostream>
@@ -37,7 +36,6 @@ static shared_ptr<system_statistics> stats;
 static shared_ptr<vcd_writer> vcd;
 static bool report_stats = true;
 
-uint32_t nodes_per_thread = 0;
 shared_ptr<barrier> barr;
 bool par_running = true;
 bool par_barrier_period = 0;
@@ -45,29 +43,27 @@ int vcd_thread_id = 0;
 uint64_t num_cycles_par = 0;
 shared_ptr<sys> s;
 
-void *clock_nodes(void *arg) {
-    int tid = (long)arg;
+void clock_nodes(const bool is_vcd_thread, vector<tile_id> &my_tile_ids) {
     barr->wait();
     for (unsigned cycle = 0; par_running && cycle < num_cycles_par; ++cycle) {
-        if ((tid == vcd_thread_id) && vcd) vcd->commit();
-        for (uint32_t tile_id=(tid*nodes_per_thread);
-             tile_id < ((tid+1)*nodes_per_thread); ++tile_id) {
-            s->tick_positive_edge_tile(tile_id);
+        if (is_vcd_thread && vcd) vcd->commit();
+        for (vector<tile_id>::const_iterator ti = my_tile_ids.begin();
+             ti != my_tile_ids.end(); ++ti) {
+            s->tick_positive_edge_tile(*ti);
         }
         if (par_barrier_period == 0) {
             barr->wait();
         }
-        for (uint32_t tile_id=(tid*nodes_per_thread);
-             tile_id < ((tid+1)*nodes_per_thread); ++tile_id) {
-            s->tick_negative_edge_tile(tile_id);
+        for (vector<tile_id>::const_iterator ti = my_tile_ids.begin();
+             ti != my_tile_ids.end(); ++ti) {
+            s->tick_negative_edge_tile(*ti);
         }
-        if ((tid == vcd_thread_id) && vcd) vcd->tick();
+        if (is_vcd_thread && vcd) vcd->tick();
         if ((par_barrier_period == 0)
             || ((cycle % par_barrier_period) == 0)) {
             barr->wait();
         }
     }
-    pthread_exit((void*) 0);
 }
 
 custom_signal_handler_t prev_sig_int_handler;
@@ -149,12 +145,10 @@ int main(int argc, char **argv) {
         ("log-verbosity", po::value<int>(), "set log verbosity")
         ("random-seed", po::value<uint32_t>(),
          "set random seed (default: use system entropy)")
-        ("parallel", po::value<vector<bool> >()->zero_tokens()->composing(),
-         "enable parallel darsim (default: false)")
-        ("nodes-per-thread", po::value<uint32_t>(),
-         "run arg tiles/thread for parallel darsim\n(default: hardware concurrency)")
+        ("concurrency", po::value<uint32_t>(),
+         "simulator concurrency (default: hardware concurrency)")
         ("sync-period", po::value<uint32_t>(),
-         "synchronize parallel sim every arg cycles\n(default: every posedge/negedge)")
+         "synchronize concurrent simulator every arg cycles\n(default: 0 = every posedge/negedge)")
         ("version", po::value<vector<bool> >()->zero_tokens()->composing(),
          "show program version and exit")
         ("help,h", po::value<vector<bool> >()->zero_tokens()->composing(),
@@ -164,8 +158,6 @@ int main(int argc, char **argv) {
         ("test-flags", po::value<uint64_t>(), "test flags");
     args_desc.add("mem-image", 1);
     po::variables_map opts;
-    uint32_t hw_concurrency = thread::hardware_concurrency();
-    if (hw_concurrency == 0) hw_concurrency = 1;
     all_opts_desc.add(opts_desc).add(hidden_opts_desc);
     try {
         po::store(po::command_line_parser(argc, argv).options(all_opts_desc).
@@ -207,24 +199,24 @@ int main(int argc, char **argv) {
             syslog.add(f, log_verb);
         }
     }
-    bool run_parallel = false;
     uint64_t num_cycles = 0;
     uint64_t num_packets = 0;
     uint64_t stats_start = 0;
     uint64_t stats_reset = 0;
     uint32_t g_random_seed = 0xdeadbeef;
-    if (opts.count("parallel")) {
-        run_parallel = true;
-    }
-    if (opts.count("nodes-per-thread")) {
-        nodes_per_thread = opts["nodes-per-thread"].as<uint32_t>();
-        if (nodes_per_thread == 0) {
-            cerr << "ERROR: --nodes-per-thread argument must be positive"
+    uint32_t num_threads = 0;
+    if (opts.count("concurrency")) {
+        num_threads = opts["concurrency"].as<uint32_t>();
+        if (num_threads == 0) {
+            cerr << "ERROR: --concurrency argument must be positive"
                  << endl;
             exit(1);
         }
     } else {
-        nodes_per_thread = 0;
+        num_threads = thread::hardware_concurrency();
+        if (num_threads == 0) {
+            num_threads = 1;
+        }
     }
     if (opts.count("sync-period")) {
         par_barrier_period = opts["sync-period"].as<uint32_t>();
@@ -353,39 +345,30 @@ int main(int argc, char **argv) {
         ptime sim_start_time = microsec_clock::local_time();
         uint32_t last_stats_start = stats_start;
         
-        if (run_parallel) {
-            uint32_t num_nodes = s->get_num_tiles();
-            uint32_t num_threads;
-            if (nodes_per_thread == 0) {
-                num_threads = hw_concurrency;
-                nodes_per_thread = num_nodes/num_threads;
-            } else {
-                num_threads = num_nodes/nodes_per_thread;
+        if (num_threads > 1) {
+            vector<vector<tile_id> > tiles_per_thread(num_threads);
+            for (uint32_t tl = 0, thr = 0; tl < s->get_num_tiles();
+                 tl += 1, thr = (thr + 1) % num_threads) {
+                assert(thr < tiles_per_thread.size());
+                tiles_per_thread[thr].push_back(tl);
             }
-            assert(nodes_per_thread * num_threads == num_nodes);
-
-            vector<pthread_t> threads(num_threads);
-
+            vector<shared_ptr<thread> > threads;
             try {
                 barr = shared_ptr<barrier>(new barrier(num_threads));
-            } catch (thread_resource_error e) {
-                cerr << "ERROR: could not create a barrier" << endl;
+                for (uint32_t i = 0; i < num_threads; ++i) {
+                    shared_ptr<thread> t = 
+                        shared_ptr<thread>(new thread(clock_nodes, i == 0,
+                                                      tiles_per_thread[i]));
+                    threads.push_back(t);
+                }
+                for (vector<shared_ptr<thread> >::iterator ti = threads.begin();
+                     ti != threads.end(); ++ti) {
+                    (*ti)->join();
+                }
+            } catch (const thread_resource_error &e) {
+                cerr << "ERROR: failed to spawn " << num_threads
+                     << " threads: " << e.what() << endl;
                 exit(1);
-            }
-            for (uint32_t i=0; i<num_threads; ++i) {
-                if (pthread_create(&threads[i], NULL, &clock_nodes,
-                                   (void*)i)) {
-                    cerr << "ERROR: could not create thread "
-                         << dec << i << endl;
-                    exit(1);
-                }
-            }
-            for (uint32_t i=0; i<num_threads; ++i) {
-                if (pthread_join(threads[i], NULL)) {
-                    cerr << "ERROR: could not join thread "
-                         << dec << i << endl;
-                    exit(1);
-                }
             }
         } else {
             while (true) {

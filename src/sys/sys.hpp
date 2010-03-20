@@ -38,9 +38,9 @@ public:
     bool is_drained() const throw();
     // parallel support
     uint32_t get_num_tiles() const throw();
-    void tick_positive_edge_tile(uint32_t tile) throw(err);
-    void tick_negative_edge_tile(uint32_t tile) throw(err);
-    void fast_forward_time_tile(uint32_t tile, uint64_t new_time) throw();
+    void tick_positive_edge_tile(tile_id tile) throw(err);
+    void tick_negative_edge_tile(tile_id tile) throw(err);
+    void fast_forward_time_tile(tile_id tile, uint64_t new_time) throw();
 private:
     typedef vector<shared_ptr<tile> > tiles_t;
 
@@ -51,7 +51,7 @@ private:
     } test_flags_t;
 
     tiles_t tiles;
-    vector<uint32_t> tile_indices;
+    vector<tile_id> tile_indices;
 
     shared_ptr<system_statistics> stats;
     logger &log;

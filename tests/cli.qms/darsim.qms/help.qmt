@@ -1,23 +1,21 @@
 <?xml version="1.0" ?><!DOCTYPE extension  PUBLIC '-//QM/2.6/Extension//EN'  'http://www.codesourcery.com/qm/dtds/2.6/-//qm/2.6/extension//en.dtd'><extension class="command.ShellCommandTest" kind="test"><argument name="target_group"><text>.*</text></argument><argument name="timeout"><integer>-1</integer></argument><argument name="stdout"><text>Usage: darsim SYSTEM_IMAGE
 Options:
-  --cycles arg           simulate for arg cycles (0 = until drained)
-  --packets arg          simulate until arg packets arrive (0 = until drained)
-  --stats-start arg      start statistics after cycle arg (default: 0)
-  --stats-reset arg      reset statistics every arg cycles (default: never)
-  --no-stats             do not report statistics
-  --events arg           read event schedule from file arg
-  --log-file arg         write a log to file arg
-  --vcd-file arg         write trace in VCD format to file arg
-  --vcd-start arg        start VCD dump at time arg (default: 0)
-  --vcd-end arg          end VCD dump at time arg (default: end of simulation)
-  --verbosity arg        set console verbosity
-  --log-verbosity arg    set log verbosity
-  --random-seed arg      set random seed (default: use system entropy)
-  --parallel             enable parallel darsim (default: false)
-  --nodes-per-thread arg run arg tiles/thread for parallel darsim
-                         (default: hardware concurrency)
-  --sync-period arg      synchronize parallel sim every arg cycles
-                         (default: every posedge/negedge)
-  --version              show program version and exit
-  -h [ --help ]          show this help message and exit
+  --cycles arg          simulate for arg cycles (0 = until drained)
+  --packets arg         simulate until arg packets arrive (0 = until drained)
+  --stats-start arg     start statistics after cycle arg (default: 0)
+  --stats-reset arg     reset statistics every arg cycles (default: never)
+  --no-stats            do not report statistics
+  --events arg          read event schedule from file arg
+  --log-file arg        write a log to file arg
+  --vcd-file arg        write trace in VCD format to file arg
+  --vcd-start arg       start VCD dump at time arg (default: 0)
+  --vcd-end arg         end VCD dump at time arg (default: end of simulation)
+  --verbosity arg       set console verbosity
+  --log-verbosity arg   set log verbosity
+  --random-seed arg     set random seed (default: use system entropy)
+  --concurrency arg     simulator concurrency (default: hardware concurrency)
+  --sync-period arg     synchronize concurrent simulator every arg cycles
+                        (default: 0 = every posedge/negedge)
+  --version             show program version and exit
+  -h [ --help ]         show this help message and exit
 </text></argument><argument name="prerequisites"><set/></argument><argument name="stdin"><text/></argument><argument name="exit_code"><integer>0</integer></argument><argument name="environment"><set/></argument><argument name="command"><text>../src/sim/darsim --help</text></argument><argument name="stderr"><text/></argument><argument name="resources"><set/></argument></extension>

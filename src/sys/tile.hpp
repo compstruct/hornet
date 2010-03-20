@@ -18,9 +18,11 @@
 using namespace std;
 using namespace boost;
 
+typedef node_id tile_id;
+
 class tile {
 public:
-    tile(const node_id &id, const uint32_t num_tiles,
+    tile(const tile_id &id, const uint32_t num_tiles,
          const uint64_t &init_time, const uint64_t &stats_start_time,
          shared_ptr<flow_rename_table> flow_renames, logger &log) throw();
     void add(shared_ptr<pe> p) throw();
@@ -43,7 +45,7 @@ private:
     typedef vector<shared_ptr<bridge> > bridges_t;
     typedef vector<shared_ptr<arbiter> > arbiters_t;
 private:
-    const node_id id;
+    const tile_id id;
     uint64_t time;
     pes_t pes;
     nodes_t nodes;
