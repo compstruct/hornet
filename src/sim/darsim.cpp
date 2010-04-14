@@ -10,8 +10,6 @@
 #include <iterator>
 #include <algorithm>
 #include <boost/shared_ptr.hpp>
-#include <boost/thread.hpp>
-#include <boost/thread/barrier.hpp>
 #include <boost/program_options.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include "endian.hpp"
@@ -20,6 +18,7 @@
 #include "vcd.hpp"
 #include "statistics.hpp"
 #include "sys.hpp"
+#include "sim.hpp"
 
 using namespace std;
 using namespace boost;
@@ -32,39 +31,10 @@ static const uint32_t version = 201003171;
 typedef void (*custom_signal_handler_t)(int);
 
 static logger syslog;
+static shared_ptr<sys> s;
 static shared_ptr<system_statistics> stats;
 static shared_ptr<vcd_writer> vcd;
 static bool report_stats = true;
-
-shared_ptr<barrier> barr;
-bool par_running = true;
-bool par_barrier_period = 0;
-int vcd_thread_id = 0;
-uint64_t num_cycles_par = 0;
-shared_ptr<sys> s;
-
-void clock_nodes(const bool is_vcd_thread, vector<tile_id> &my_tile_ids) {
-    barr->wait();
-    for (unsigned cycle = 0; par_running && cycle < num_cycles_par; ++cycle) {
-        if (is_vcd_thread && vcd) vcd->commit();
-        for (vector<tile_id>::const_iterator ti = my_tile_ids.begin();
-             ti != my_tile_ids.end(); ++ti) {
-            s->tick_positive_edge_tile(*ti);
-        }
-        if (par_barrier_period == 0) {
-            barr->wait();
-        }
-        for (vector<tile_id>::const_iterator ti = my_tile_ids.begin();
-             ti != my_tile_ids.end(); ++ti) {
-            s->tick_negative_edge_tile(*ti);
-        }
-        if (is_vcd_thread && vcd) vcd->tick();
-        if ((par_barrier_period == 0)
-            || ((cycle % par_barrier_period) == 0)) {
-            barr->wait();
-        }
-    }
-}
 
 custom_signal_handler_t prev_sig_int_handler;
 
@@ -147,7 +117,7 @@ int main(int argc, char **argv) {
          "set random seed (default: use system entropy)")
         ("concurrency", po::value<uint32_t>(),
          "simulator concurrency (default: hardware concurrency)")
-        ("sync-period", po::value<uint32_t>(),
+        ("sync-period", po::value<uint64_t>(),
          "synchronize concurrent simulator every arg cycles\n(default: 0 = every posedge/negedge)")
         ("version", po::value<vector<bool> >()->zero_tokens()->composing(),
          "show program version and exit")
@@ -204,28 +174,23 @@ int main(int argc, char **argv) {
     uint64_t stats_start = 0;
     uint64_t stats_reset = 0;
     uint32_t g_random_seed = 0xdeadbeef;
-    uint32_t num_threads = 0;
+    uint32_t concurrency = 0;
     if (opts.count("concurrency")) {
-        num_threads = opts["concurrency"].as<uint32_t>();
-        if (num_threads == 0) {
+        concurrency = opts["concurrency"].as<uint32_t>();
+        if (concurrency == 0) {
             cerr << "ERROR: --concurrency argument must be positive"
                  << endl;
             exit(1);
         }
-    } else {
-        num_threads = thread::hardware_concurrency();
-        if (num_threads == 0) {
-            num_threads = 1;
-        }
     }
+    uint64_t sync_period;
     if (opts.count("sync-period")) {
-        par_barrier_period = opts["sync-period"].as<uint32_t>();
+        sync_period = opts["sync-period"].as<uint64_t>();
     } else {
-        par_barrier_period = 0;
+        sync_period = 0;
     }
     if (opts.count("cycles")) {
         num_cycles = opts["cycles"].as<uint64_t>();
-        num_cycles_par = num_cycles;
     }
     if (opts.count("packets")) {
         num_packets = opts["packets"].as<uint64_t>();
@@ -345,31 +310,9 @@ int main(int argc, char **argv) {
         ptime sim_start_time = microsec_clock::local_time();
         uint32_t last_stats_start = stats_start;
         
-        if (num_threads > 1) {
-            vector<vector<tile_id> > tiles_per_thread(num_threads);
-            for (uint32_t tl = 0, thr = 0; tl < s->get_num_tiles();
-                 tl += 1, thr = (thr + 1) % num_threads) {
-                assert(thr < tiles_per_thread.size());
-                tiles_per_thread[thr].push_back(tl);
-            }
-            vector<shared_ptr<thread> > threads;
-            try {
-                barr = shared_ptr<barrier>(new barrier(num_threads));
-                for (uint32_t i = 0; i < num_threads; ++i) {
-                    shared_ptr<thread> t = 
-                        shared_ptr<thread>(new thread(clock_nodes, i == 0,
-                                                      tiles_per_thread[i]));
-                    threads.push_back(t);
-                }
-                for (vector<shared_ptr<thread> >::iterator ti = threads.begin();
-                     ti != threads.end(); ++ti) {
-                    (*ti)->join();
-                }
-            } catch (const thread_resource_error &e) {
-                cerr << "ERROR: failed to spawn " << num_threads
-                     << " threads: " << e.what() << endl;
-                exit(1);
-            }
+        if (concurrency > 1) {
+            sim the_sim(s, num_cycles, num_packets, sync_period, concurrency,
+                        vcd);
         } else {
             while (true) {
                 if (vcd) vcd->commit();

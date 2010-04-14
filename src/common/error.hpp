@@ -36,6 +36,12 @@ public:
     virtual ~err_out_of_mem() throw();
 };
 
+class err_thread_spawn : public err_panic {
+public:
+    explicit err_thread_spawn(const string &msg) throw();
+    virtual ~err_thread_spawn() throw();
+};
+
 class err_tbd : public err_panic {
 public:
     explicit err_tbd(const string &message) throw();

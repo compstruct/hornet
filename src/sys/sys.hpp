@@ -28,6 +28,7 @@ public:
         logger &log, uint32_t seed, bool use_graphite_inj,
         uint64_t test_flags) throw(err);
     shared_ptr<system_statistics> get_statistics() const throw();
+    shared_ptr<tile_statistics> get_statistics_tile(tile_id t) const throw();
     bool work_tbd_darsim() throw(err);
     bool nothing_to_offer() throw(err);
     uint64_t advance_time() throw(err);
@@ -38,9 +39,12 @@ public:
     bool is_drained() const throw();
     // parallel support
     uint32_t get_num_tiles() const throw();
+    uint64_t get_time_tile(tile_id tile) const throw();
     void tick_positive_edge_tile(tile_id tile) throw(err);
     void tick_negative_edge_tile(tile_id tile) throw(err);
     void fast_forward_time_tile(tile_id tile, uint64_t new_time) throw();
+    uint64_t advance_time_tile(tile_id tile) throw(err);
+    bool is_drained_tile(tile_id tile) const throw();
 private:
     typedef vector<shared_ptr<tile> > tiles_t;
 

@@ -28,6 +28,10 @@ void err_tbd::show_to(ostream &out) const {
 err_out_of_mem::err_out_of_mem() throw() : err_panic("out of memory") { }
 err_out_of_mem::~err_out_of_mem() throw() { }
 
+err_thread_spawn::err_thread_spawn(const string &s) throw()
+    : err_panic("thread creation failed: " + s) { }
+err_thread_spawn::~err_thread_spawn() throw() { }
+
 err_bad_mem_img::err_bad_mem_img() throw() { }
 err_bad_mem_img::~err_bad_mem_img() throw() { }
 void err_bad_mem_img::show_to(ostream &out) const {

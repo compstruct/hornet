@@ -5,12 +5,14 @@ AM_CPPFLAGS = $(BOOST_CPPFLAGS) \
               -I$(top_srcdir)/src/inject \
               -I$(top_srcdir)/src/sys
 AM_LDFLAGS = $(BOOST_LDFLAGS) $(BOOST_PROGRAM_OPTIONS_LIB) $(BOOST_THREAD_LIB) \
-             $(PTHREAD_LIBS) @LTLIBOBJS@
+             @LTLIBOBJS@
 AM_CXXFLAGS = -Wall -Werror
 
 bin_PROGRAMS = darsim
 
-darsim_SOURCES = darsim.cpp 
+darsim_SOURCES = \
+    sim.hpp sim.cpp \
+    darsim.cpp 
 darsim_LDADD = \
     $(top_builddir)/src/sys/libdarsys.la \
     $(top_builddir)/src/inject/libdarinject.la \

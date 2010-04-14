@@ -328,12 +328,17 @@ shared_ptr<system_statistics> sys::get_statistics() const throw() {
     return stats;
 }
 
+shared_ptr<tile_statistics> sys::get_statistics_tile(tile_id t) const throw() {
+    assert(t.get_numeric_id() < tiles.size());
+    return tiles[t.get_numeric_id()]->get_statistics();
+}
+
 uint32_t sys::get_num_tiles() const throw() {
     return tiles.size();
 }
 
 void sys::tick_positive_edge() throw(err) {
-    LOG(log,1) << "[system] posedge " << dec << sys_time << endl;
+    LOG(log,1) << "[system] posedge " << dec << get_time() << endl;
     if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
         boost::function<int(int)> rr_fn =
             bind(&BoostRand::random_range, sys_rand, _1);
@@ -346,7 +351,7 @@ void sys::tick_positive_edge() throw(err) {
 }
 
 void sys::tick_negative_edge() throw(err) {
-    LOG(log,1) << "[system] negedge " << dec << sys_time << endl;
+    LOG(log,1) << "[system] negedge " << dec << get_time() << endl;
     if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
         boost::function<int(int)> rr_fn =
             bind(&BoostRand::random_range, sys_rand, _1);
@@ -359,7 +364,7 @@ void sys::tick_negative_edge() throw(err) {
 }
 
 void sys::fast_forward_time(uint64_t new_time) throw() {
-    assert(new_time >= sys_time);
+    assert(new_time >= get_time());
     LOG(log,1) << "[system] fast forward to  " << dec << new_time << endl;
     if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
         boost::function<int(int)> rr_fn =
@@ -381,32 +386,46 @@ void sys::tick_positive_edge_tile(tile_id tile_no) throw(err) {
 void sys::tick_negative_edge_tile(tile_id tile_no) throw(err) {
     assert(tile_no.get_numeric_id() < tiles.size());
     tiles[tile_no.get_numeric_id()]->tick_negative_edge();
-    if (tiles[tile_no.get_numeric_id()]->get_time() > sys_time) {
+    if (tiles[tile_no.get_numeric_id()]->get_time() > get_time()) {
         sys_time = tiles[tile_no.get_numeric_id()]->get_time();
     }
 }
 
 void sys::fast_forward_time_tile(tile_id tile_no, uint64_t new_time) throw() {
-    assert(new_time >= sys_time);
+    assert(new_time >= get_time());
     assert(tile_no.get_numeric_id() < tiles.size());
     tiles[tile_no.get_numeric_id()]->fast_forward_time(new_time);
     sys_time = new_time;
 }
 
+uint64_t sys::get_time_tile(tile_id tile_no) const throw() {
+    return tiles[tile_no.get_numeric_id()]->get_time();
+}
+
 uint64_t sys::advance_time() throw(err) {
     uint64_t next_time = UINT64_MAX;
-    for (tiles_t::const_iterator i = tiles.begin(); i != tiles.end(); ++i) {
-       uint64_t t = (*i)->next_pkt_time();
+    for (vector<tile_id>::const_iterator i = tile_indices.begin();
+         i != tile_indices.end(); ++i) {
+       uint64_t t = advance_time_tile(*i);
        if (next_time > t) next_time = t;
     }
     return next_time;
 }
 
+uint64_t sys::advance_time_tile(tile_id tile_no) throw(err) {
+    return tiles[tile_no.get_numeric_id()]->next_pkt_time();
+}
+
 bool sys::is_drained() const throw() {
-    for (tiles_t::const_iterator i = tiles.begin(); i != tiles.end(); ++i) {
-        if (!(*i)->is_drained()) return false;
+    for (vector<tile_id>::const_iterator i = tile_indices.begin();
+         i != tile_indices.end(); ++i) {
+        if (!is_drained_tile(*i)) return false;
     }
     return true;
+}
+
+bool sys::is_drained_tile(tile_id tile_no) const throw() {
+    return tiles[tile_no.get_numeric_id()]->is_drained();
 }
 
 bool sys::nothing_to_offer() throw(err) {
