@@ -245,8 +245,7 @@ void virtual_queue::tick_negative_edge() throw() {
 bool virtual_queue::is_drained() const throw() {
     unique_lock<recursive_mutex> front_lock(front_mutex);
     unique_lock<recursive_mutex> back_lock(back_mutex);
-    assert(front_is_empty() == back_is_empty());
-    return front_is_empty();
+    return front_is_empty() && back_is_empty();
 }
 
 ostream &operator<<(ostream &out, const virtual_queue &vq) {

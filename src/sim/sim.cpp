@@ -73,8 +73,10 @@ void sim_thread::operator()() {
         assert(my_packet_count >= per_thread_packet_count[my_thread_index]);
         per_thread_packet_count[my_thread_index] = my_packet_count;
         per_thread_drained[my_thread_index] = my_drained;
-        assert(my_next_time >= per_thread_next_time[my_thread_index]);
-        per_thread_next_time[my_thread_index] = my_next_time;
+        if (my_drained) {
+            assert(my_next_time >= per_thread_next_time[my_thread_index]);
+            per_thread_next_time[my_thread_index] = my_next_time;
+        }
         if (sync_period == 0) {
             sync_barrier->wait();
         }
