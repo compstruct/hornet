@@ -41,6 +41,7 @@ public:
                               // to flush posedge values to VCD
     void finalize() throw(err); // call once at end to flush VCD
     void tick() throw();
+    uint64_t get_time() const throw();
     void fast_forward_time(uint64_t new_time) throw();
     bool is_drained() const throw();
 private:

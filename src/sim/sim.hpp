@@ -10,6 +10,7 @@
 #include <boost/thread/barrier.hpp>
 #include "vcd.hpp"
 #include "sys.hpp"
+#include "logger.hpp"
 
 using namespace std;
 using namespace boost;
@@ -57,7 +58,7 @@ public:
     sim(shared_ptr<sys> system,
         const uint64_t num_cycles, const uint64_t num_packets,
         const uint64_t sync_period, const uint32_t concurrency,
-        shared_ptr<vcd_writer> vcd);
+        shared_ptr<vcd_writer> vcd, logger &log);
     virtual ~sim();
 private:
     vector<shared_ptr<sim_thread> > sim_threads;
@@ -71,6 +72,7 @@ private:
     vector<bool> per_thread_time_exceeded;
     vector<uint64_t> per_thread_packet_count;
     vector<uint64_t> per_thread_next_time;
+    logger &log;
 };
 
 #endif // __SIM_HPP__

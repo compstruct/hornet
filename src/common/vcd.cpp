@@ -256,3 +256,7 @@ void vcd_writer::fast_forward_time(uint64_t new_time) throw() {
     assert(new_time >= time);
     time = new_time;
 }
+
+uint64_t vcd_writer::get_time() const throw() {
+    return time;
+}

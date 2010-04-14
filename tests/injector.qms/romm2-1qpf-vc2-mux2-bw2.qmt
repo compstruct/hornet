@@ -1,7 +1,8 @@
 <?xml version="1.0" ?><!DOCTYPE extension  PUBLIC '-//QM/2.6/Extension//EN'  'http://www.codesourcery.com/qm/dtds/2.6/-//qm/2.6/extension//en.dtd'><extension class="command.ShellCommandTest" kind="test"><argument name="stdin"><text/></argument><argument name="timeout"><integer>-1</integer></argument><argument name="stdout"><text>dar version 0.05 (miyakowasure)
 
 simulating for 10000 cycles
+no concurrency
 
 
 simulation ended successfully
-</text></argument><argument name="prerequisites"><set/></argument><argument name="target_group"><text>.*</text></argument><argument name="exit_code"><integer>0</integer></argument><argument name="environment"><set/></argument><argument name="command"><text>../src/tools/darimg -o data/romm2-xy-1qpf-vc2-mux2-bw2.img data/romm2-xy-1qpf-vc2-mux2-bw2.cfg &amp;&amp; ../src/sim/darsim data/romm2-xy-1qpf-vc2-mux2-bw2.img --random-seed=42 --events data/shuffle-s8-p8.evt --cycles 10000 --no-stats</text></argument><argument name="stderr"><text/></argument><argument name="resources"><set/></argument></extension>
+</text></argument><argument name="prerequisites"><set/></argument><argument name="target_group"><text>.*</text></argument><argument name="exit_code"><integer>0</integer></argument><argument name="environment"><set/></argument><argument name="command"><text>../src/tools/darimg -o data/romm2-xy-1qpf-vc2-mux2-bw2.img data/romm2-xy-1qpf-vc2-mux2-bw2.cfg &amp;&amp; ../src/sim/darsim data/romm2-xy-1qpf-vc2-mux2-bw2.img --random-seed=42 --events data/shuffle-s8-p8.evt --cycles 10000 --no-stats --concurrency=1</text></argument><argument name="stderr"><text/></argument><argument name="resources"><set/></argument></extension>

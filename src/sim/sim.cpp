@@ -47,15 +47,13 @@ sim_thread::sim_thread(uint32_t new_thread_index,
 
 void sim_thread::operator()() {
     sync_barrier->wait();
-    while (!(global_time_exceeded || global_num_packets_exceeded)) {
+    while (!(global_time_exceeded || global_num_packets_exceeded
+             || (global_drained && global_next_time == UINT64_MAX))) {
         if (vcd) vcd->commit();
         assert(!my_tile_ids.empty());
         for (vector<tile_id>::const_iterator ti = my_tile_ids.begin();
              ti != my_tile_ids.end(); ++ti) {
             s->tick_positive_edge_tile(*ti);
-        }
-        if (sync_period == 0) {
-            sync_barrier->wait();
         }
         uint64_t my_packet_count = 0;
         bool my_drained = true;
@@ -63,7 +61,6 @@ void sim_thread::operator()() {
         uint64_t min_clock = UINT64_MAX;
         for (vector<tile_id>::const_iterator ti = my_tile_ids.begin();
              ti != my_tile_ids.end(); ++ti) {
-            s->tick_negative_edge_tile(*ti);
             my_packet_count +=
                 s->get_statistics_tile(*ti)->get_received_packet_count();
             my_drained = my_drained && s->is_drained_tile(*ti);
@@ -78,6 +75,13 @@ void sim_thread::operator()() {
         per_thread_drained[my_thread_index] = my_drained;
         assert(my_next_time >= per_thread_next_time[my_thread_index]);
         per_thread_next_time[my_thread_index] = my_next_time;
+        if (sync_period == 0) {
+            sync_barrier->wait();
+        }
+        for (vector<tile_id>::const_iterator ti = my_tile_ids.begin();
+             ti != my_tile_ids.end(); ++ti) {
+            s->tick_negative_edge_tile(*ti);
+        }
         if (my_thread_index == 0) { // no sync, undercount at worst
             bool system_drained =
                 accumulate(per_thread_drained.begin(),
@@ -112,10 +116,18 @@ void sim_thread::operator()() {
         if (vcd) vcd->tick();
         if ((sync_period == 0) || ((min_clock % sync_period) == 0)) {
             sync_barrier->wait();
-            for (vector<tile_id>::const_iterator ti = my_tile_ids.begin();
-                 ti != my_tile_ids.end(); ++ti) {
-                if (global_next_time >= s->get_time_tile(*ti)) {
-                    s->fast_forward_time_tile(*ti, global_next_time);
+            if (global_drained) {
+                uint64_t ff_time =
+                    global_next_time == UINT64_MAX ?
+                    max_num_cycles : global_next_time;
+                for (vector<tile_id>::const_iterator ti = my_tile_ids.begin();
+                     ti != my_tile_ids.end(); ++ti) {
+                    if (ff_time > s->get_time_tile(*ti)) {
+                        s->fast_forward_time_tile(*ti, ff_time);
+                    }
+                }
+                if (vcd && ff_time > vcd->get_time()) {
+                    vcd->fast_forward_time(ff_time);
                 }
             }
         }
@@ -126,12 +138,42 @@ void sim_thread::operator()() {
 sim::sim(shared_ptr<sys> s,
          const uint64_t num_cycles, const uint64_t num_packets,
          const uint64_t sync_period, const uint32_t concurrency,
-         shared_ptr<vcd_writer> vcd)
+         shared_ptr<vcd_writer> vcd, logger &new_log)
     : global_drained(false), global_time_exceeded(false),
-      global_num_packets_exceeded(false), global_next_time(0) {
+      global_num_packets_exceeded(false), global_next_time(0),
+      log(new_log) {
     uint32_t num_threads =
         concurrency != 0 ? concurrency : thread::hardware_concurrency();
     if (num_threads == 0) num_threads = 1; // hardware_concurrency() failed
+    if (num_cycles == 0 && num_packets == 0) {
+        LOG(log,0) << "simulating until drained" << endl;
+    } else {
+        ostringstream oss;
+        if (num_cycles > 0) {
+            oss << " for " << dec << num_cycles
+                << " cycle" << (num_cycles == 1 ? "" : "s");
+        }
+        if (num_cycles > 0 && num_packets >> 0) {
+            oss << " or";
+        }
+        if (num_packets > 0) {
+            oss << " until " << dec << num_packets
+                << " packet" << (num_packets == 1 ? "" : "s") << " arrive";
+        }
+        LOG(log,0) << "simulating" << oss.str() << endl;
+    }
+    if (num_threads == 1) {
+        LOG(log,0) << "no concurrency";
+    } else {
+        LOG(log,0) << dec << num_threads << "-way concurrency, ";
+        if (sync_period == 0) {
+            LOG(log,0) << "cycle-accurate synchronization";
+        } else {
+            LOG(log,0) << "synchronization every " << dec << sync_period 
+                << " cycle" << (sync_period == 1 ? "" : "s");
+        }
+    }
+    LOG(log,0) << endl << endl;
     vector<vector<tile_id> > tiles_per_thread(num_threads);
     for (uint32_t tl = 0, thr = 0; tl < s->get_num_tiles();
             tl += 1, thr = (thr + 1) % num_threads) {

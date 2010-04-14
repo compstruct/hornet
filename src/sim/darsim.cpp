@@ -97,8 +97,8 @@ int main(int argc, char **argv) {
          "simulate until arg packets arrive (0 = until drained)")
         ("stats-start", po::value<uint64_t>(),
          "start statistics after cycle arg (default: 0)")
-        ("stats-reset", po::value<uint64_t>(),
-         "reset statistics every arg cycles (default: never)")
+        //("stats-reset", po::value<uint64_t>(),
+        // "reset statistics every arg cycles (default: never)")
         ("no-stats", po::value<vector<bool> >()->zero_tokens()->composing(),
          "do not report statistics")
         ("events", po::value<vector<string> >()->composing(),
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
         ("random-seed", po::value<uint32_t>(),
          "set random seed (default: use system entropy)")
         ("concurrency", po::value<uint32_t>(),
-         "simulator concurrency (default: hardware concurrency)")
+         "simulator concurrency (default: automatic)")
         ("sync-period", po::value<uint64_t>(),
          "synchronize concurrent simulator every arg cycles\n(default: 0 = every posedge/negedge)")
         ("version", po::value<vector<bool> >()->zero_tokens()->composing(),
@@ -289,69 +289,12 @@ int main(int argc, char **argv) {
     if (prev_sig_int_handler == SIG_IGN) signal(SIGINT, prev_sig_int_handler);
     stats->start_sim();
     try {
-        if (num_cycles == 0 && num_packets == 0) {
-            LOG(syslog,0) << "simulating until drained" << endl;
-        } else {
-        	ostringstream oss;
-            if (num_cycles > 0) {
-                oss << " for " << dec << num_cycles
-                    << " cycle" << (num_cycles == 1 ? "" : "s");
-            }
-            if (num_cycles > 0 && num_packets >> 0) {
-                oss << " or";
-            }
-            if (num_packets > 0) {
-                oss << " until " << dec << num_packets
-                    << " packet" << (num_packets == 1 ? "" : "s") << " arrive";
-            }
-            LOG(syslog,0) << "simulating" << oss.str() << endl;
-        }
-        LOG(syslog,0) << endl;
         ptime sim_start_time = microsec_clock::local_time();
         uint32_t last_stats_start = stats_start;
-        
-        if (concurrency > 1) {
+        {
+            // the_sim does not leave the scope until simulation ends
             sim the_sim(s, num_cycles, num_packets, sync_period, concurrency,
-                        vcd);
-        } else {
-            while (true) {
-                if (vcd) vcd->commit();
-                bool drained = s->is_drained() && (!vcd || vcd->is_drained());
-                uint64_t next_time = s->advance_time();
-                if (num_cycles != 0 && num_cycles <= s->get_time()) {
-                    break;
-                }
-                if (drained && next_time == UINT64_MAX) {
-                    if (num_cycles != 0) {
-                        num_cycles = s->get_time();
-                    }
-                    break;
-                }
-                if (num_packets != 0
-                    && stats->get_received_packet_count() >= num_packets) {
-                    break;
-                }
-                if (drained && next_time != UINT64_MAX
-                    && next_time > s->get_time()) {
-                    s->fast_forward_time(next_time);
-                    if (vcd) vcd->fast_forward_time(next_time);
-                }
-                s->tick_positive_edge();
-                s->tick_negative_edge();
-                if (vcd) vcd->tick();
-                if (stats && report_stats && (stats_reset != 0)
-                    && (s->get_time() > stats_start)
-                    && (s->get_time() % stats_reset == 0)) {
-                    stats->end_sim();
-                    LOG(syslog,0) << "statistics for period ["
-                        << dec << last_stats_start
-                        << "," << s->get_time() << ")" << endl;
-                    LOG(syslog,0) << endl << *stats << endl;
-                    stats->reset();
-                    stats->start_sim();
-                    last_stats_start = s->get_time();
-                }
-            }
+                        vcd, syslog);
         }
         ptime sim_end_time = microsec_clock::local_time();
         stats->end_sim();

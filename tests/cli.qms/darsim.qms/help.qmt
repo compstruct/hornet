@@ -3,7 +3,6 @@ Options:
   --cycles arg          simulate for arg cycles (0 = until drained)
   --packets arg         simulate until arg packets arrive (0 = until drained)
   --stats-start arg     start statistics after cycle arg (default: 0)
-  --stats-reset arg     reset statistics every arg cycles (default: never)
   --no-stats            do not report statistics
   --events arg          read event schedule from file arg
   --log-file arg        write a log to file arg
@@ -13,7 +12,7 @@ Options:
   --verbosity arg       set console verbosity
   --log-verbosity arg   set log verbosity
   --random-seed arg     set random seed (default: use system entropy)
-  --concurrency arg     simulator concurrency (default: hardware concurrency)
+  --concurrency arg     simulator concurrency (default: automatic)
   --sync-period arg     synchronize concurrent simulator every arg cycles
                         (default: 0 = every posedge/negedge)
   --version             show program version and exit
