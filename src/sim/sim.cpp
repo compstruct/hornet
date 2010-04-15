@@ -87,13 +87,10 @@ void sim_thread::operator()() {
             s->tick_negative_edge_tile(*ti);
         }
         if (my_thread_index == 0) { // no sync, undercount at worst
-            bool system_drained =
+            global_drained =
                 accumulate(per_thread_drained.begin(),
                            per_thread_drained.end(), true,
                            logical_and<bool>());
-            if (system_drained) {
-                global_drained = true;
-            }
             bool system_time_exceeded = 
                 accumulate(per_thread_time_exceeded.begin(),
                            per_thread_time_exceeded.end(), true,
@@ -120,19 +117,19 @@ void sim_thread::operator()() {
         if (vcd) vcd->tick();
         if ((sync_period == 0) || ((min_clock % sync_period) == 0)) {
             sync_barrier->wait();
-            if (enable_fast_forward && global_drained) {
-                uint64_t ff_time =
-                    global_next_time == UINT64_MAX ?
-                    max_num_cycles : global_next_time;
-                for (vector<tile_id>::const_iterator ti = my_tile_ids.begin();
-                     ti != my_tile_ids.end(); ++ti) {
-                    if (ff_time > s->get_time_tile(*ti)) {
-                        s->fast_forward_time_tile(*ti, ff_time);
-                    }
+        }
+        if (enable_fast_forward && global_drained) {
+            uint64_t ff_time =
+                global_next_time == UINT64_MAX ?
+                max_num_cycles : global_next_time;
+            for (vector<tile_id>::const_iterator ti = my_tile_ids.begin();
+                 ti != my_tile_ids.end(); ++ti) {
+                if (ff_time > s->get_time_tile(*ti)) {
+                    s->fast_forward_time_tile(*ti, ff_time);
                 }
-                if (vcd && ff_time > vcd->get_time()) {
-                    vcd->fast_forward_time(ff_time);
-                }
+            }
+            if (vcd && ff_time > vcd->get_time()) {
+                vcd->fast_forward_time(ff_time);
             }
         }
     }
