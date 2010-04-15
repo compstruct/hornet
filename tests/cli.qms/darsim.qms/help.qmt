@@ -4,6 +4,7 @@ Options:
   --packets arg         simulate until arg packets arrive (0 = until drained)
   --stats-start arg     start statistics after cycle arg (default: 0)
   --no-stats            do not report statistics
+  --no-fast-forward     do not fast-forward when system is drained
   --events arg          read event schedule from file arg
   --log-file arg        write a log to file arg
   --vcd-file arg        write trace in VCD format to file arg

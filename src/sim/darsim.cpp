@@ -101,6 +101,9 @@ int main(int argc, char **argv) {
         // "reset statistics every arg cycles (default: never)")
         ("no-stats", po::value<vector<bool> >()->zero_tokens()->composing(),
          "do not report statistics")
+        ("no-fast-forward",
+         po::value<vector<bool> >()->zero_tokens()->composing(),
+         "do not fast-forward when system is drained")
         ("events", po::value<vector<string> >()->composing(),
          "read event schedule from file arg")
         ("log-file", po::value<vector<string> >()->composing(),
@@ -228,6 +231,10 @@ int main(int argc, char **argv) {
     if (opts.count("no-stats")) {
         report_stats = false;
     }
+    bool fast_forward = true;
+    if (opts.count("no-fast-forward")) {
+        fast_forward = false;
+    }
     LOG(syslog,0) << dar_full_version << endl << endl;
     vcd = shared_ptr<vcd_writer>();
     if (opts.count("vcd-file") == 1) {
@@ -294,7 +301,7 @@ int main(int argc, char **argv) {
         {
             // the_sim does not leave the scope until simulation ends
             sim the_sim(s, num_cycles, num_packets, sync_period, concurrency,
-                        vcd, syslog);
+                        fast_forward, vcd, syslog);
         }
         ptime sim_end_time = microsec_clock::local_time();
         stats->end_sim();

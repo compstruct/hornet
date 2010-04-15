@@ -29,6 +29,7 @@ sim_thread::sim_thread(uint32_t new_thread_index,
                        vector<bool> &new_per_thread_time_exceeded,
                        vector<uint64_t> &new_per_thread_packet_count,
                        vector<uint64_t> &new_per_thread_next_time,
+                       bool new_enable_fast_forward,
                        shared_ptr<vcd_writer> new_vcd)
     : my_thread_index(new_thread_index), s(new_sys),
       my_tile_ids(tids.begin(), tids.end()),
@@ -43,6 +44,7 @@ sim_thread::sim_thread(uint32_t new_thread_index,
       per_thread_time_exceeded(new_per_thread_time_exceeded),
       per_thread_packet_count(new_per_thread_packet_count),
       per_thread_next_time(new_per_thread_next_time),
+      enable_fast_forward(new_enable_fast_forward),
       vcd(new_vcd) { }
 
 void sim_thread::operator()() {
@@ -118,7 +120,7 @@ void sim_thread::operator()() {
         if (vcd) vcd->tick();
         if ((sync_period == 0) || ((min_clock % sync_period) == 0)) {
             sync_barrier->wait();
-            if (global_drained) {
+            if (enable_fast_forward && global_drained) {
                 uint64_t ff_time =
                     global_next_time == UINT64_MAX ?
                     max_num_cycles : global_next_time;
@@ -140,6 +142,7 @@ void sim_thread::operator()() {
 sim::sim(shared_ptr<sys> s,
          const uint64_t num_cycles, const uint64_t num_packets,
          const uint64_t sync_period, const uint32_t concurrency,
+         bool enable_fast_forward,
          shared_ptr<vcd_writer> vcd, logger &new_log)
     : global_drained(false), global_time_exceeded(false),
       global_num_packets_exceeded(false), global_next_time(0),
@@ -204,6 +207,7 @@ sim::sim(shared_ptr<sys> s,
                                                   per_thread_time_exceeded,
                                                   per_thread_packet_count,
                                                   per_thread_next_time,
+                                                  enable_fast_forward,
                                                   thr_vcd));
         sim_threads.push_back(st);
         try {

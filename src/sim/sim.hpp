@@ -32,6 +32,7 @@ public:
                vector<bool> &per_thread_time_exceeded,
                vector<uint64_t> &per_thread_packet_count,
                vector<uint64_t> &per_thread_next_time,
+               bool enable_fast_forward,
                shared_ptr<vcd_writer> vcd);
     void operator()();
 private:
@@ -50,6 +51,7 @@ private:
     vector<bool> &per_thread_time_exceeded;
     vector<uint64_t> &per_thread_packet_count;
     vector<uint64_t> &per_thread_next_time;
+    bool enable_fast_forward;
     shared_ptr<vcd_writer> vcd;
 };
 
@@ -58,6 +60,7 @@ public:
     sim(shared_ptr<sys> system,
         const uint64_t num_cycles, const uint64_t num_packets,
         const uint64_t sync_period, const uint32_t concurrency,
+        bool enable_fast_forward,
         shared_ptr<vcd_writer> vcd, logger &log);
     virtual ~sim();
 private:
