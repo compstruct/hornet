@@ -61,7 +61,7 @@ static uint32_t fresh_random_seed() {
 shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
                            uint64_t stats_start,
                            shared_ptr<vector<string> > evt_files,
-                           uint32_t g_random_seed,
+                           uint32_t random_seed,
                            uint32_t test_flags) throw(err) {
     shared_ptr<ifstream> img(new ifstream(file.c_str(), ios::in | ios::binary));
     if (img->fail()) throw err_parse(file, "cannot read file");
@@ -78,7 +78,7 @@ shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
         throw err_parse(file, msg.str());
     }
     shared_ptr<sys> s(new sys(sys_time, img, stats_start,
-                              evt_files, vcd, syslog, g_random_seed, false,
+                              evt_files, vcd, syslog, random_seed, false,
                               test_flags));
     img->close();
     return s;
@@ -176,7 +176,7 @@ int main(int argc, char **argv) {
     uint64_t num_packets = 0;
     uint64_t stats_start = 0;
     uint64_t stats_reset = 0;
-    uint32_t g_random_seed = 0xdeadbeef;
+    uint32_t random_seed = 0xdeadbeef;
     uint32_t concurrency = 0;
     if (opts.count("concurrency")) {
         concurrency = opts["concurrency"].as<uint32_t>();
@@ -216,10 +216,10 @@ int main(int argc, char **argv) {
     }
     if (opts.count("random-seed")) {
         srandom(opts["random-seed"].as<uint32_t>());
-        g_random_seed = opts["random-seed"].as<uint32_t>();
+        random_seed = opts["random-seed"].as<uint32_t>();
     } else {
         srandom(fresh_random_seed());
-        g_random_seed = fresh_random_seed();
+        random_seed = fresh_random_seed();
     }
     shared_ptr<vector<string> > events_files;
     if (opts.count("events")) {
@@ -283,7 +283,7 @@ int main(int argc, char **argv) {
     }
     try {
         s = new_system(0, mem_image, stats_start, events_files,
-                       g_random_seed, test_flags);
+                       random_seed, test_flags);
         stats = s->get_statistics();
     } catch (const err_parse &e) {
         cerr << e << endl;
@@ -300,8 +300,9 @@ int main(int argc, char **argv) {
         uint32_t last_stats_start = stats_start;
         {
             // the_sim does not leave the scope until simulation ends
+            shared_ptr<random_gen> rng(new random_gen(-2, random_seed));
             sim the_sim(s, num_cycles, num_packets, sync_period, concurrency,
-                        fast_forward, vcd, syslog);
+                        fast_forward, vcd, syslog, rng);
         }
         ptime sim_end_time = microsec_clock::local_time();
         stats->end_sim();

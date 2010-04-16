@@ -10,13 +10,13 @@
 
 using namespace boost;
 
-class BoostRand { 
+class random_gen { 
 private:
    boost::mt19937 rng;
    boost::uniform_01<boost::mt19937> gen;
 
 public:
-   BoostRand(const uint32_t id, const uint32_t seed) throw();
+   random_gen(const uint32_t id, const uint32_t seed) throw();
    
    // return a natural number selected u.a.r. from [0..max)
    int random_range(int max) throw();

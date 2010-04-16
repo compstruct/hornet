@@ -9,4 +9,4 @@ no concurrency
 [cpu 03 out] hello from cpu 3
 
 simulation ended successfully
-</text></argument><argument name="prerequisites"><set/></argument><argument name="target_group"><text>.*</text></argument><argument name="exit_code"><integer>0</integer></argument><argument name="environment"><set/></argument><argument name="command"><text>../src/tools/darimg -o data/hello.img data/hello.cfg &amp;&amp; ../src/sim/darsim data/hello.img --no-stats --concurrency=1</text></argument><argument name="stderr"><text/></argument><argument name="resources"><set/></argument></extension>
+</text></argument><argument name="prerequisites"><set/></argument><argument name="target_group"><text>.*</text></argument><argument name="exit_code"><integer>0</integer></argument><argument name="environment"><set/></argument><argument name="command"><text>../src/tools/darimg -o data/hello.img data/hello.cfg &amp;&amp; ../src/sim/darsim data/hello.img --random-seed=14 --no-stats --concurrency=1</text></argument><argument name="stderr"><text/></argument><argument name="resources"><set/></argument></extension>

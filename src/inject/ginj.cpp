@@ -12,7 +12,7 @@
 ginj::ginj(const pe_id &id, const uint64_t &t,
                    shared_ptr<id_factory<packet_id> > pif,
                    shared_ptr<tile_statistics> st, logger &l,
-                   shared_ptr<BoostRand> r) throw(err)
+                   shared_ptr<random_gen> r) throw(err)
     : pe(id), system_time(t), net(), events(), next_event(events.begin()),
       waiting_packets(), waiting_packets_queue(), incoming_packets(), flows(), flow_ids(), flow_ids_queue(), queue_ids(),
       packet_id_factory(pif), stats(st), log(l), ran(r) { 

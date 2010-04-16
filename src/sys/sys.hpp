@@ -59,7 +59,7 @@ private:
 
     shared_ptr<system_statistics> stats;
     logger &log;
-    shared_ptr<BoostRand> sys_rand;
+    shared_ptr<random_gen> sys_rand;
     uint64_t test_flags;
 };
 

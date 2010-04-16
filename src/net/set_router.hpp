@@ -14,7 +14,7 @@ using namespace boost;
 
 class set_router : public router {
 public:
-    set_router(node_id id, logger &log, shared_ptr<BoostRand> ran) throw();
+    set_router(node_id id, logger &log, shared_ptr<random_gen> ran) throw();
     virtual ~set_router() throw();
     virtual void route() throw(err);
     virtual void add_egress(shared_ptr<egress> egress) throw(err);
@@ -27,7 +27,7 @@ private:
     typedef vector<tuple<node_id,flow_id,double> > route_nodes_t;
     typedef map<route_query_t, route_nodes_t> routes_t;
     routes_t routes;
-    shared_ptr<BoostRand> ran;
+    shared_ptr<random_gen> ran;
 };
 
 #endif // __SET_ROUTER_HPP__

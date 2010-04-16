@@ -11,7 +11,7 @@
 
 set_channel_alloc::set_channel_alloc(node_id n, bool one_q_per_f,
                                      bool one_f_per_q, logger &l,
-                                     shared_ptr<BoostRand> r) throw()
+                                     shared_ptr<random_gen> r) throw()
     : channel_alloc(n, one_q_per_f, one_f_per_q, l), egresses(), ran(r) {
     if (one_q_per_f || one_f_per_q) {
         LOG(log,3) << "node " << get_id() << " set channel alloc: ";
@@ -96,7 +96,7 @@ void set_channel_alloc::allocate() throw(err) {
     }
     int num_reqs = in_qs.size();
     int num_grants = 0;
-    boost::function<int(int)> rr_fn = bind(&BoostRand::random_range, ran, _1);
+    boost::function<int(int)> rr_fn = bind(&random_gen::random_range, ran, _1);
     random_shuffle(in_qs.begin(), in_qs.end(), rr_fn);
     for (qs_t::iterator qi = in_qs.begin(); qi != in_qs.end(); ++qi) {
         shared_ptr<virtual_queue> &iq = *qi;

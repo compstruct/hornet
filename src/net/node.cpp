@@ -11,7 +11,7 @@ node::node(node_id new_id, uint32_t memsz, shared_ptr<router> new_rt,
            shared_ptr<channel_alloc> new_vca,
            shared_ptr<tile_statistics> st,
            shared_ptr<vcd_writer> v,
-           logger &l, shared_ptr<BoostRand> ran) throw()
+           logger &l, shared_ptr<random_gen> ran) throw()
     : id(new_id), flits_per_queue(memsz), rt(new_rt), vc_alloc(new_vca),
       pressures(new pressure_tracker(new_id, l)), ingresses(), egresses(),
       xbar(new_id, st, v, l, ran), queue_ids(), stats(st), vcd(v), log(l)  {

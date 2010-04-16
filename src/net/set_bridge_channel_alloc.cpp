@@ -7,7 +7,7 @@
 set_bridge_channel_alloc::set_bridge_channel_alloc(node_id n, bool one_q_per_f,
                                                    bool one_f_per_q,
                                                    logger &l,
-                                                   shared_ptr<BoostRand> r) throw()
+                                                   shared_ptr<random_gen> r) throw()
     : bridge_channel_alloc(n, one_q_per_f, one_f_per_q, l), queues(),
       routes(), ran(r) { }
 

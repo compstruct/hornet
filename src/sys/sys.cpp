@@ -70,7 +70,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
          logger &new_log, uint32_t seed, bool use_graphite_inj,
          uint64_t new_test_flags) throw(err)
     : sys_time(new_sys_time), stats(new system_statistics()), log(new_log),
-      sys_rand(new BoostRand(-1, seed++)), test_flags(new_test_flags) {
+      sys_rand(new random_gen(-1, seed++)), test_flags(new_test_flags) {
     uint32_t num_nodes = read_word(img);
     LOG(log,2) << "creating system with " << num_nodes << " node"
                << (num_nodes == 1 ? "" : "s") << "..." << endl;
@@ -106,7 +106,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         if (id < 0 || id >= num_nodes) throw err_bad_mem_img();
         if (nodes[id]) throw err_bad_mem_img();
         shared_ptr<tile> t = tiles[id];
-        shared_ptr<BoostRand> ran(new BoostRand(id, seed++));
+        shared_ptr<random_gen> ran(new random_gen(id, seed++));
         shared_ptr<router> n_rt(new set_router(id, log, ran));
         uint32_t one_q_per_f = read_word(img);
         uint32_t one_f_per_q = read_word(img);
@@ -341,7 +341,7 @@ void sys::tick_positive_edge() throw(err) {
     LOG(log,1) << "[system] posedge " << dec << get_time() << endl;
     if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
         boost::function<int(int)> rr_fn =
-            bind(&BoostRand::random_range, sys_rand, _1);
+            bind(&random_gen::random_range, sys_rand, _1);
         random_shuffle(tile_indices.begin(), tile_indices.end(), rr_fn);
     }
     for (vector<tile_id>::const_iterator i = tile_indices.begin();
@@ -354,7 +354,7 @@ void sys::tick_negative_edge() throw(err) {
     LOG(log,1) << "[system] negedge " << dec << get_time() << endl;
     if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
         boost::function<int(int)> rr_fn =
-            bind(&BoostRand::random_range, sys_rand, _1);
+            bind(&random_gen::random_range, sys_rand, _1);
         random_shuffle(tile_indices.begin(), tile_indices.end(), rr_fn);
     }
     for (vector<tile_id>::const_iterator i = tile_indices.begin();
@@ -368,7 +368,7 @@ void sys::fast_forward_time(uint64_t new_time) throw() {
     LOG(log,1) << "[system] fast forward to  " << dec << new_time << endl;
     if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
         boost::function<int(int)> rr_fn =
-            bind(&BoostRand::random_range, sys_rand, _1);
+            bind(&random_gen::random_range, sys_rand, _1);
         random_shuffle(tile_indices.begin(), tile_indices.end(), rr_fn);
     }
     for (vector<tile_id>::const_iterator i = tile_indices.begin();

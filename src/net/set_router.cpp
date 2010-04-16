@@ -6,7 +6,7 @@
 #include "random.hpp"
 #include "set_router.hpp"
 
-set_router::set_router(node_id i, logger &l, shared_ptr<BoostRand> r) throw() 
+set_router::set_router(node_id i, logger &l, shared_ptr<random_gen> r) throw() 
     : router(i,l), routes(), ran(r) { }
 
 set_router::~set_router() throw() { }

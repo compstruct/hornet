@@ -18,7 +18,7 @@ class crossbar {
 public:
     crossbar(node_id parent, shared_ptr<tile_statistics> stats,
              shared_ptr<vcd_writer> vcd, logger &log,
-             shared_ptr<BoostRand> ran) throw();
+             shared_ptr<random_gen> ran) throw();
     void add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err);
     void add_egress(node_id dst, shared_ptr<egress> egress) throw(err);
     void tick_positive_edge() throw(err);
@@ -40,7 +40,7 @@ private:
     shared_ptr<tile_statistics> stats;
     shared_ptr<vcd_writer> vcd;
     logger &log;
-    shared_ptr<BoostRand> ran;
+    shared_ptr<random_gen> ran;
     typedef struct {
         char v_xbar_demand;
         char v_xbar_use;

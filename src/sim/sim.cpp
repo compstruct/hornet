@@ -4,6 +4,8 @@
 #include <cassert>
 #include <algorithm>
 #include <numeric>
+#include <boost/function.hpp>
+#include <boost/bind.hpp>
 #include "sim.hpp"
 
 template<typename T>
@@ -137,9 +139,10 @@ sim::sim(shared_ptr<sys> s,
          const uint64_t num_cycles, const uint64_t num_packets,
          const uint64_t sync_period, const uint32_t concurrency,
          bool enable_fast_forward,
-         shared_ptr<vcd_writer> vcd, logger &new_log)
+         shared_ptr<vcd_writer> vcd, logger &new_log,
+         shared_ptr<random_gen> new_rng)
     : global_drained(false), global_next_time(0),
-      global_max_sync_count(UINT64_MAX), log(new_log) {
+      global_max_sync_count(UINT64_MAX), log(new_log), rng(new_rng) {
     uint32_t num_threads =
         concurrency != 0 ? concurrency : thread::hardware_concurrency();
     if (num_threads == 0) num_threads = 1; // hardware_concurrency() failed
@@ -172,11 +175,21 @@ sim::sim(shared_ptr<sys> s,
         }
     }
     LOG(log,0) << endl << endl;
+    vector<tile_id> all_tile_ids;
+    for (uint32_t tl = 0; tl < s->get_num_tiles(); ++tl) {
+        all_tile_ids.push_back(tl);
+    }
+    boost::function<int(int)> rr_fn = bind(&random_gen::random_range, rng, _1);
+    random_shuffle(all_tile_ids.begin(), all_tile_ids.end(), rr_fn);
     vector<vector<tile_id> > tiles_per_thread(num_threads);
-    for (uint32_t tl = 0, thr = 0; tl < s->get_num_tiles();
-            tl += 1, thr = (thr + 1) % num_threads) {
-        assert(thr < tiles_per_thread.size());
-        tiles_per_thread[thr].push_back(tl);
+    {
+        uint64_t thr;
+        vector<tile_id>::const_iterator ti;
+        for (ti = all_tile_ids.begin(), thr = 0; ti != all_tile_ids.end();
+             ++ti, thr = (thr + 1) % num_threads) {
+            assert(thr < tiles_per_thread.size());
+            tiles_per_thread[thr].push_back(*ti);
+        }
     }
     sync_barrier = shared_ptr<barrier>(new barrier(num_threads));
     for (uint32_t i = 0; i < num_threads; ++i) {

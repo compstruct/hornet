@@ -40,7 +40,7 @@ public:
     injector(const pe_id &id, const uint64_t &system_time,
              shared_ptr<id_factory<packet_id> > packet_id_factory,
              shared_ptr<tile_statistics> stats, logger &log,
-             shared_ptr<BoostRand> ran) throw(err);
+             shared_ptr<random_gen> ran) throw(err);
     virtual ~injector() throw();
     virtual void connect(shared_ptr<bridge> net_bridge) throw(err);
     virtual void add_packet(uint64_t time, const flow_id &flow, uint32_t len) throw(err);
@@ -74,7 +74,7 @@ private:
     shared_ptr<id_factory<packet_id> > packet_id_factory;
     shared_ptr<tile_statistics> stats;
     logger &log;
-    shared_ptr<BoostRand> ran;
+    shared_ptr<random_gen> ran;
 };
 
 #endif // __INJECTOR_HPP__

@@ -8,6 +8,7 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/thread.hpp>
 #include <boost/thread/barrier.hpp>
+#include "random.hpp"
 #include "vcd.hpp"
 #include "sys.hpp"
 #include "logger.hpp"
@@ -59,7 +60,8 @@ public:
         const uint64_t num_cycles, const uint64_t num_packets,
         const uint64_t sync_period, const uint32_t concurrency,
         bool enable_fast_forward,
-        shared_ptr<vcd_writer> vcd, logger &log);
+        shared_ptr<vcd_writer> vcd, logger &log,
+        shared_ptr<random_gen> rng);
     virtual ~sim();
 private:
     vector<shared_ptr<sim_thread> > sim_threads;
@@ -73,6 +75,7 @@ private:
     vector<uint64_t> per_thread_packet_count;
     vector<uint64_t> per_thread_next_time;
     logger &log;
+    shared_ptr<random_gen> rng;
 };
 
 #endif // __SIM_HPP__

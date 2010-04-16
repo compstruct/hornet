@@ -14,7 +14,7 @@
 injector::injector(const pe_id &id, const uint64_t &t,
                    shared_ptr<id_factory<packet_id> > pif,
                    shared_ptr<tile_statistics> st, logger &l,
-                   shared_ptr<BoostRand> r) throw(err)
+                   shared_ptr<random_gen> r) throw(err)
     : pe(id), system_time(t), next_event(events.begin()),
       packet_id_factory(pif), stats(st), log(l), ran(r) { }
 
@@ -74,7 +74,7 @@ void injector::tick_positive_edge() throw(err) {
         }
     }
     uint32_t waiting = net->get_waiting_queues();
-    boost::function<int(int)> rr_fn = bind(&BoostRand::random_range, ran, _1);
+    boost::function<int(int)> rr_fn = bind(&random_gen::random_range, ran, _1);
     if (waiting != 0) {
         random_shuffle(queue_ids.begin(), queue_ids.end(), rr_fn);
         for (vector<uint32_t>::iterator i = queue_ids.begin();

@@ -9,7 +9,7 @@
 
 crossbar::crossbar(node_id parent, shared_ptr<tile_statistics> s,
                    shared_ptr<vcd_writer> v, logger &l,
-                   shared_ptr<BoostRand> r) throw()
+                   shared_ptr<random_gen> r) throw()
     : id(parent), ingresses(), egresses(), stats(s), vcd(v), log(l), ran(r) {
     if (vcd) {
         vector<string> path;
@@ -99,7 +99,7 @@ void crossbar::tick_positive_edge() throw(err) {
         ebws[i->first] = i->second->get_bandwidth();
         egress_demands[i->first] = 0;
     }
-    boost::function<int(int)> rr_fn = bind(&BoostRand::random_range, ran, _1);
+    boost::function<int(int)> rr_fn = bind(&random_gen::random_range, ran, _1);
     random_shuffle(egress_qs.begin(), egress_qs.end(), rr_fn);
     random_shuffle(ingress_qs.begin(), ingress_qs.end(), rr_fn);
     vqs_t ingress_ready_qs; // ingress VCs that are ready to transmit

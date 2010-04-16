@@ -24,7 +24,7 @@ public:
                   shared_ptr<channel_alloc> new_vc_alloc,
                   shared_ptr<tile_statistics> stats,
                   shared_ptr<vcd_writer> vcd, logger &log,
-                  shared_ptr<BoostRand> ran) throw();
+                  shared_ptr<random_gen> ran) throw();
     const node_id &get_id() const throw();
     void add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err);
     void add_egress(node_id dst, shared_ptr<egress> egress) throw(err);
