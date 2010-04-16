@@ -139,6 +139,7 @@ sim::sim(shared_ptr<sys> s,
          const uint64_t num_cycles, const uint64_t num_packets,
          const uint64_t sync_period, const uint32_t concurrency,
          bool enable_fast_forward,
+         tile_mapping_t tile_mapping,
          shared_ptr<vcd_writer> vcd, logger &new_log,
          shared_ptr<random_gen> new_rng)
     : global_drained(false), global_next_time(0),
@@ -179,14 +180,28 @@ sim::sim(shared_ptr<sys> s,
     for (uint32_t tl = 0; tl < s->get_num_tiles(); ++tl) {
         all_tile_ids.push_back(tl);
     }
-    boost::function<int(int)> rr_fn = bind(&random_gen::random_range, rng, _1);
-    random_shuffle(all_tile_ids.begin(), all_tile_ids.end(), rr_fn);
+    if (tile_mapping == TM_RANDOM) {
+        boost::function<int(int)> rr_fn =
+            bind(&random_gen::random_range, rng, _1);
+        random_shuffle(all_tile_ids.begin(), all_tile_ids.end(), rr_fn);
+    }
     vector<vector<tile_id> > tiles_per_thread(num_threads);
     {
         uint64_t thr;
+        uint64_t tile_index;
         vector<tile_id>::const_iterator ti;
-        for (ti = all_tile_ids.begin(), thr = 0; ti != all_tile_ids.end();
-             ++ti, thr = (thr + 1) % num_threads) {
+        for (ti = all_tile_ids.begin(), thr = num_threads - 1, tile_index = 0;
+             ti != all_tile_ids.end(); ++ti, ++tile_index) {
+            switch (tile_mapping) {
+            case TM_SEQUENTIAL:
+                thr = tile_index * num_threads / all_tile_ids.size();
+                break;
+            case TM_ROUND_ROBIN:
+            case TM_RANDOM:
+                thr = (thr + 1) % num_threads;
+                break;
+            default: abort();
+            }
             assert(thr < tiles_per_thread.size());
             tiles_per_thread[thr].push_back(*ti);
         }

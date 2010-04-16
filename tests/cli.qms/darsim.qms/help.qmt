@@ -16,6 +16,8 @@ Options:
   --concurrency arg     simulator concurrency (default: automatic)
   --sync-period arg     synchronize concurrent simulator every arg cycles
                         (default: 0 = every posedge/negedge)
+  --tile-mapping arg    specify the tiles-to-threads mapping; arg is one of:
+                        sequential, round-robin, random (default: random)
   --version             show program version and exit
   -h [ --help ]         show this help message and exit
 </text></argument><argument name="prerequisites"><set/></argument><argument name="stdin"><text/></argument><argument name="exit_code"><integer>0</integer></argument><argument name="environment"><set/></argument><argument name="command"><text>../src/sim/darsim --help</text></argument><argument name="stderr"><text/></argument><argument name="resources"><set/></argument></extension>

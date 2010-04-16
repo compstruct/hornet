@@ -122,6 +122,8 @@ int main(int argc, char **argv) {
          "simulator concurrency (default: automatic)")
         ("sync-period", po::value<uint64_t>(),
          "synchronize concurrent simulator every arg cycles\n(default: 0 = every posedge/negedge)")
+        ("tile-mapping", po::value<string>(),
+         "specify the tiles-to-threads mapping; arg is one of:\nsequential, round-robin, random (default: random)")
         ("version", po::value<vector<bool> >()->zero_tokens()->composing(),
          "show program version and exit")
         ("help,h", po::value<vector<bool> >()->zero_tokens()->composing(),
@@ -191,6 +193,23 @@ int main(int argc, char **argv) {
         sync_period = opts["sync-period"].as<uint64_t>();
     } else {
         sync_period = 0;
+    }
+    sim::tile_mapping_t tile_mapping;
+    if (opts.count("tile-mapping")) {
+        string tm = opts["tile-mapping"].as<string>();
+        if (tm == "sequential") {
+            tile_mapping = sim::TM_SEQUENTIAL;
+        } else if (tm == "round-robin") {
+            tile_mapping = sim::TM_ROUND_ROBIN;
+        } else if (tm == "random") {
+            tile_mapping = sim::TM_RANDOM;
+        } else {
+            cerr << "ERROR: --tile-mapping argument must be one of: "
+                 << "sequential, round-robin, random" << endl;
+            exit(1);
+        }
+    } else {
+        tile_mapping = sim::TM_RANDOM;
     }
     if (opts.count("cycles")) {
         num_cycles = opts["cycles"].as<uint64_t>();
@@ -302,7 +321,7 @@ int main(int argc, char **argv) {
             // the_sim does not leave the scope until simulation ends
             shared_ptr<random_gen> rng(new random_gen(-2, random_seed));
             sim the_sim(s, num_cycles, num_packets, sync_period, concurrency,
-                        fast_forward, vcd, syslog, rng);
+                        fast_forward, tile_mapping, vcd, syslog, rng);
         }
         ptime sim_end_time = microsec_clock::local_time();
         stats->end_sim();

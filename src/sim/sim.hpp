@@ -56,10 +56,13 @@ private:
 
 class sim {
 public:
+    typedef enum { TM_SEQUENTIAL, TM_ROUND_ROBIN, TM_RANDOM } tile_mapping_t;
+public:
     sim(shared_ptr<sys> system,
         const uint64_t num_cycles, const uint64_t num_packets,
         const uint64_t sync_period, const uint32_t concurrency,
         bool enable_fast_forward,
+        tile_mapping_t tile_mapping,
         shared_ptr<vcd_writer> vcd, logger &log,
         shared_ptr<random_gen> rng);
     virtual ~sim();
