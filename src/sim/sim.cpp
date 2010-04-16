@@ -22,9 +22,8 @@ sim_thread::sim_thread(uint32_t new_thread_index,
                        const uint64_t new_sync_period,
                        shared_ptr<barrier> new_sync_barrier,
                        bool &new_global_drained,
-                       bool &new_global_time_exceeded,
-                       bool &new_global_num_packets_exceeded,
                        uint64_t &new_global_next_time,
+                       uint64_t &new_global_max_sync_count,
                        vector<bool> &new_per_thread_drained,
                        vector<bool> &new_per_thread_time_exceeded,
                        vector<uint64_t> &new_per_thread_packet_count,
@@ -37,9 +36,8 @@ sim_thread::sim_thread(uint32_t new_thread_index,
       sync_period(new_sync_period),
       sync_barrier(new_sync_barrier),
       global_drained(new_global_drained),
-      global_time_exceeded(new_global_time_exceeded),
-      global_num_packets_exceeded(new_global_num_packets_exceeded),
       global_next_time(new_global_next_time),
+      global_max_sync_count(new_global_max_sync_count),
       per_thread_drained(new_per_thread_drained),
       per_thread_time_exceeded(new_per_thread_time_exceeded),
       per_thread_packet_count(new_per_thread_packet_count),
@@ -49,8 +47,8 @@ sim_thread::sim_thread(uint32_t new_thread_index,
 
 void sim_thread::operator()() {
     sync_barrier->wait();
-    while (!(global_time_exceeded || global_num_packets_exceeded
-             || (global_drained && global_next_time == UINT64_MAX))) {
+    uint64_t sync_count = 0; // count only post-negedge syncs
+    while (sync_count < global_max_sync_count) {
         if (vcd) vcd->commit();
         assert(!my_tile_ids.empty());
         for (vector<tile_id>::const_iterator ti = my_tile_ids.begin();
@@ -87,7 +85,7 @@ void sim_thread::operator()() {
             s->tick_negative_edge_tile(*ti);
         }
         if (my_thread_index == 0) { // no sync, undercount at worst
-            global_drained =
+            bool system_drained =
                 accumulate(per_thread_drained.begin(),
                            per_thread_drained.end(), true,
                            logical_and<bool>());
@@ -95,28 +93,27 @@ void sim_thread::operator()() {
                 accumulate(per_thread_time_exceeded.begin(),
                            per_thread_time_exceeded.end(), true,
                            logical_and<bool>());
-            if (system_time_exceeded) {
-                global_time_exceeded = true;
-            }
             uint64_t system_packet_count =
                 accumulate(per_thread_packet_count.begin(),
                            per_thread_packet_count.end(), 0ULL);
-            if ((max_num_packets != 0)
-                && (system_packet_count >= max_num_packets)) {
-                global_num_packets_exceeded = true;
-            }
+            bool system_num_packets_exceeded =
+                ((max_num_packets != 0)
+                 && (system_packet_count >= max_num_packets));
             uint64_t system_next_time =
                 accumulate(per_thread_next_time.begin(),
                            per_thread_next_time.end(), UINT64_MAX,
                            minimum<uint64_t>());
-            assert(system_next_time >= global_next_time);
-            if (system_next_time > global_next_time) {
-                global_next_time = system_next_time;
+            if ((system_time_exceeded || system_num_packets_exceeded
+                 || (system_drained && system_next_time == UINT64_MAX))) {
+                global_max_sync_count = sync_count + 1;
             }
+            global_drained = system_drained;
+            global_next_time = system_next_time;
         }
         if (vcd) vcd->tick();
         if ((sync_period == 0) || ((min_clock % sync_period) == 0)) {
             sync_barrier->wait();
+            ++sync_count;
         }
         if (enable_fast_forward && global_drained) {
             uint64_t ff_time =
@@ -141,9 +138,8 @@ sim::sim(shared_ptr<sys> s,
          const uint64_t sync_period, const uint32_t concurrency,
          bool enable_fast_forward,
          shared_ptr<vcd_writer> vcd, logger &new_log)
-    : global_drained(false), global_time_exceeded(false),
-      global_num_packets_exceeded(false), global_next_time(0),
-      log(new_log) {
+    : global_drained(false), global_next_time(0),
+      global_max_sync_count(UINT64_MAX), log(new_log) {
     uint32_t num_threads =
         concurrency != 0 ? concurrency : thread::hardware_concurrency();
     if (num_threads == 0) num_threads = 1; // hardware_concurrency() failed
@@ -197,9 +193,8 @@ sim::sim(shared_ptr<sys> s,
                                                   num_cycles, num_packets,
                                                   sync_period, sync_barrier,
                                                   global_drained,
-                                                  global_time_exceeded,
-                                                  global_num_packets_exceeded,
                                                   global_next_time,
+                                                  global_max_sync_count,
                                                   per_thread_drained,
                                                   per_thread_time_exceeded,
                                                   per_thread_packet_count,

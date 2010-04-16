@@ -25,9 +25,8 @@ public:
                const uint64_t sync_period,
                shared_ptr<barrier> sync_barrier,
                bool &global_drained,
-               bool &global_time_exceeded,
-               bool &global_num_packets_exceeded,
                uint64_t &global_next_time,
+               uint64_t &global_max_sync_count,
                vector<bool> &per_thread_drained,
                vector<bool> &per_thread_time_exceeded,
                vector<uint64_t> &per_thread_packet_count,
@@ -44,9 +43,8 @@ private:
     const uint64_t sync_period;
     shared_ptr<barrier> sync_barrier;
     bool &global_drained; // written only by thread 0
-    bool &global_time_exceeded; // written only by thread 0
-    bool &global_num_packets_exceeded; // written only by thread 0
     uint64_t &global_next_time; // written only by thread 0
+    uint64_t &global_max_sync_count; // written only by thread 0
     vector<bool> &per_thread_drained;
     vector<bool> &per_thread_time_exceeded;
     vector<uint64_t> &per_thread_packet_count;
@@ -68,9 +66,8 @@ private:
     thread_group threads;
     shared_ptr<barrier> sync_barrier;
     bool global_drained; // written only by thread 0
-    bool global_time_exceeded; // written only by thread 0
-    bool global_num_packets_exceeded; // written only by thread 0
     uint64_t global_next_time; // written only by thread 0
+    uint64_t global_max_sync_count; // written only by thread 0
     vector<bool> per_thread_drained;
     vector<bool> per_thread_time_exceeded;
     vector<uint64_t> per_thread_packet_count;
