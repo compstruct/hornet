@@ -40,7 +40,10 @@ Since each tile can be run in a separate thread, inter-tile communication is syn
 <figure id="fig:sys"><title>A system as simulated by DARSIM</title>
 <mediaobject>
 <imageobject>
-<imagedata fileref="sys"/>
+<imagedata fileref="sys.pdf" format="PDF"/>
+</imageobject>
+<imageobject>
+<imagedata fileref="sys.svg" format="SVG"/>
 </imageobject>
 <textobject><phrase>System level overview</phrase></textobject>
 </mediaobject>
@@ -66,7 +69,10 @@ The interconnected switch nodes (see <xref linkend="fig:node"/>) that form the n
 <figure id="fig:node"><title>A DARSIM network node</title>
 <mediaobject>
 <imageobject>
-<imagedata fileref="node"/>
+<imagedata fileref="node.pdf" format="PDF"/>
+</imageobject>
+<imageobject>
+<imagedata fileref="node.svg" format="SVG"/>
 </imageobject>
 <textobject><phrase>A network node</phrase></textobject>
 </mediaobject>

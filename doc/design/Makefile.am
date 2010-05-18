@@ -1,8 +1,7 @@
 htmldir = $(prefix)/share/doc/$(PACKAGE)
 designdir = $(htmldir)/design
 
-#dist_design_DATA = design.html design.pdf sys.svg node.svg docs.css
-dist_design_DATA = design.pdf
+dist_design_DATA = design.html design.pdf sys.svg node.svg docs.css
 EXTRA_DIST = design.xml dbdar.sty config.xsl
 
 %.html: %.xml config.xsl docs.css
