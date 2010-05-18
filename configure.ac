@@ -33,6 +33,23 @@ AM_CONDITIONAL([ENABLE_TESTSUITE], [test x$enable_testsuite = xtrue])
 if test x$enable_testsuite = xtrue; then
 FANCY_PATH_PROG([QMTEST], [QMTest test infrastructure], [qmtest])
 fi
+AC_ARG_ENABLE([docs],
+              AC_HELP_STRING([--enable-docs],
+                             [build documentation [default=no]]),
+              [case "${enableval}" in
+               yes) enable_docs=true ;;
+               on) enable_docs=true ;;
+               true) enable_docs=true ;;
+               no) enable_docs=false ;;
+               false) enable_docs=false ;;
+               off) enable_docs=false ;;
+               *) AC_MSG_ERROR([bad arg to --enable-docs: ${enableval}]) ;;
+               esac], [enable_docs=false])
+AM_CONDITIONAL([ENABLE_DOCS], [test x$enable_docs = xtrue])
+if test x$enable_docs = xtrue; then
+FANCY_PATH_PROG([DBLATEX], [DBLaTeX DocBook processor], [dblatex])
+FANCY_PATH_PROG([XMLTO], [XMLto DocBook processor], [xmlto])
+fi
 AC_ARG_ENABLE([mips-rts],
               AC_HELP_STRING([--enable-mips-rts],
                              [build MIPS runtime system [default=no]]),
@@ -68,5 +85,7 @@ AC_OUTPUT(\
     src/tools/Makefile \
     src/rts/Makefile \
     tests/Makefile \
+    doc/Makefile \
+    doc/design/Makefile \
     )
 

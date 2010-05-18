@@ -1,0 +1,49 @@
+body {
+    margin: 5% 10%;
+    font-family: Cambria, Lucida Bright, DejaVu Serif, serif;
+    font-size: 12pt;
+    text-align: justify;
+}
+.emphasis {
+    font-style: italic;
+}
+.titlepage {
+    font-family: Calibri, Lucida Sans, DejaVu Sans, sans-serif;
+}
+.toc {
+    font-family: Calibri, Lucida Sans, DejaVu Sans, sans-serif;
+}
+.literal {
+    font-family: Consolas, Lucida Sans Typewriter, Lucida Console, DejaVu Sans Mono, monospace;
+}
+.filename {
+    font-family: Consolas, Lucida Sans Typewriter, Lucida Console, DejaVu Sans Mono, monospace;
+}
+.envar {
+    font-family: Consolas, Lucida Sans Typewriter, Lucida Console, DejaVu Sans Mono, monospace;
+}
+.option {
+    font-family: Consolas, Lucida Sans Typewriter, Lucida Console, DejaVu Sans Mono, monospace;
+}
+.userinput {
+    background-color: #eee;
+    font-family: Consolas, Lucida Sans Typewriter, Lucida Console, DejaVu Sans Mono, monospace;
+}
+.programlisting {
+    display: block;
+    font-family: Consolas, Lucida Sans Typewriter, Lucida Console, DejaVu Sans Mono, monospace;
+    padding: 10px;
+    border: 1px solid #ccc;
+    background-color: #eee;
+    overflow: auto;
+    border-radius: 2.5px;
+}
+.screen {
+    display: block;
+    font-family: Consolas, Lucida Sans Typewriter, Lucida Console, DejaVu Sans Mono, monospace;
+    padding: 5px;
+    border: 1px solid #ccc;
+    background-color: #eee;
+    overflow: auto;
+    border-radius: 2.5px;
+}

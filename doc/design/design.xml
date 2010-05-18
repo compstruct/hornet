@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- -*- mode: nxml; coding: utf-8; ident-tabs-mode: nil; nxml-attribute-indent: 0; -*- -->
+<!-- vim: fenc=utf-8:ft=xml:inde=:set et: -->
+<!DOCTYPE article PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd">
+
+<article>
+<articleinfo>
+<title>DARSIM Design Overview</title>
+<releaseinfo>0.06</releaseinfo>
+<author><personname><firstname>Mieszko</firstname><surname>Lis</surname></personname></author>
+<copyright><year>2010</year><holder>MIT</holder></copyright>
+</articleinfo>
+
+<section><title>Introduction</title>
+<para>
+This document provides an overview of DARSIM parallel cycle-level network-on-chip (NoC) simulator <citation>DS</citation>, including the major components and their interfaces as well as a trace of a packet as it transits the system.
+</para>
+</section>
+
+<section><title>Design Overview</title>
+
+<section><title>Simulating registered hardware</title>
+<para>
+Since DARSIM simulates a parallel hardware system inside a partially sequential program at cycle level, it must reflect the parallel behavior of the hardware: all values computed within a single clock cycle and stored in registers become visible simultaneously at the beginning of the next clock cycle.  To simulate this, most simulator objects respond to <methodname>tick_positive_edge()</methodname> and <methodname>tick_negative_edge()</methodname> methods, which correspond to the rising and falling edges of the clock; conceptually, computation occurs on the positive clock edge and the results are stored in a shadow state, which then becomes the current state at the next negative clock edge. (See <xref linkend="sec:synchronization"/> for more details).
+</para>
+<para>
+For cycle-accurate results in a multi-threaded simulation, a the simulation threads must be barrier-synchronized on every positive edge and every negative edge.  A speed-vs-accuracy tradeoff is possible by performing barrier synchronization less often: while per-flit and per-packet statistics are transmitted with the packets and still accurately measure transit times, the flits may observe different system states and congestions along the way and the results may nevertheless differ (cf. <xref linkend="sec:statistics"/>).
+</para>
+</section>
+
+<section><title>Tile-based system model</title>
+<para>
+The DARSIM NoC system model (defined in <filename>sys.hpp</filename> and <filename>sys.cpp</filename>) is composed of a number of interconnected tiles (defined in <filename>tile.hpp</filename> and <filename>tile.cpp</filename>). As shown in <xref linkend="fig:sys"/>, each tile comprises a processing element (PE), which can be a MIPS CPU simulator or a script-driven injector, a bridge that converts packets to flits, and, finally, the network switch node itself.
+</para>
+
+<para>
+Since each tile can be run in a separate thread, inter-tile communication is synchronized using fine-grained locks (see <xref linkend="sec:synchronization"/>). To avoid unnecessary synchronization, each tile has a private independently initialized Mersenne Twister random number generator and collects its own statistics; at the end of the simulation, the per-tile statistics are collected and combined into whole-system statistics.
+</para>
+
+<figure id="fig:sys"><title>A system as simulated by DARSIM</title>
+<mediaobject>
+<imageobject>
+<imagedata fileref="sys"/>
+</imageobject>
+<textobject><phrase>System level overview</phrase></textobject>
+</mediaobject>
+</figure>
+</section>
+
+<section><title>The PE and the bridge</title>
+<para>
+In addition to the base <classname>pe</classname> class (defined in <filename>pe.hpp</filename> and <filename>pe.cpp</filename>), DARSIM includes a cycle-level MIPS CPU simulator with a local memory (<filename>cpu.hpp</filename> and <filename>cpu.cpp</filename>) and a script-driven injector (<filename>injector.hpp</filename> and <filename>injector.cpp</filename>).
+</para>
+<para>
+The PE interacts with the network via a bridge (<filename>bridge.hpp</filename> and <filename>bridge.cpp</filename>), which exposes a packet-based interface to the PE and a flit-based interface to the network. The bridge exposes a number of incoming queues which the PE can query and interact with, and provides a number of DMA channels for sending and receiving packet data.  The processing element can check if any incoming queues have waiting data using <methodname>bridge::get_waiting_queues()</methodname> and query waiting packets with <methodname>bridge::get_queue_flow_id()</methodname> and <methodname>bridge::get_queue_length()</methodname>; it can also initiate a packet transfer from one of the incoming queues with <methodname>bridge::receive()</methodname>, start an outgoing packet transfer via <methodname>bridge::send()</methodname>, and check whether the transfer has completed with <methodname>bridge::get_transmission_done()</methodname>.
+</para>
+<para>
+Once the bridge receives a request to send or receive packet data, it claims a free DMA channel (defined in <filename>dma.hpp</filename> and <filename>dma.cpp</filename>) if one is available or reports failure if no channels are free.  Each DMA channel corresponds to a queue inside the network switch node, and slices the packet into flits (<filename>flit.hpp</filename> and <filename>flit.cpp</filename>), appending or stripping a head flit as necessary.  The transfer itself is driven by the system clock in <methodname>ingress_dma_channel::tick_positive_edge()</methodname> and <methodname>egress_dma_channel::tick_positive_edge()</methodname>.
+</para>
+</section>
+
+<section><title>The network switch node</title>
+<para>
+The interconnected switch nodes (see <xref linkend="fig:node"/>) that form the network fabric are responsible for delivering flits from the source bridge to the destination bridge.  The node (defined in <filename>node.hpp</filename> and <filename>node.cpp</filename>) models an ingress-queued wormhole router with highly configurable, table-based route and virtual channel allocation and a configurable crossbar.
+</para>
+<figure id="fig:node"><title>A DARSIM network node</title>
+<mediaobject>
+<imageobject>
+<imagedata fileref="node"/>
+</imageobject>
+<textobject><phrase>A network node</phrase></textobject>
+</mediaobject>
+</figure>
+<para>
+The <classname>ingress</classname> class (<filename>ingress.hpp</filename> and <filename>ingress.cpp</filename>) models a router ingress port; there is (at least) one ingress for each neighboring network node and one ingress for each connected bridge; each ingress manages a number of virtual queues (<filename>virtual_queue.hpp</filename> and <filename>virtual_queue.cpp</filename>). Egresses (<filename>egress.hpp</filename> and <filename>egress.cpp</filename>) contain no buffering and only hold references to the corresponding neighbor-node ingresses.
+</para>
+<para>
+Next-hop routes and flow IDs are allocated by <methodname>router::route()</methodname> (in <filename>router.hpp</filename> and <filename>router.cpp</filename>) whenever a head flit arrives at the front of a virtual queue; the router holds references to all virtual queues in the node and directly modifies them by invoking <methodname>virtual_queue::front_set_next_hop()</methodname>. Specific router implementations inherit from the <classname>router</classname> class (for example, the configurable table-driven <classname>set_router</classname> in <filename>set_router.hpp</filename> and <filename>set_router.cpp</filename>).  Similarly, next-hop virtual channel allocation is handled by <methodname>channel_alloc::allocate()</methodname> via a call to <methodname>virtual_queue::front_set_vq_id()</methodname>, and specific channel allocator implementations like <classname>set_channel_alloc</classname> in <filename>set_channel_alloc.hpp</filename> and <filename>set_channel_alloc.cpp</filename>.  Each virtual queue remembers its next-hop assignments until the last flit of the current packet has left the queue.
+</para>
+<para>
+Virtual queues with valid next-hop assignments compete for crossbar transfers to the next-hop node or bridge.  In each clock cycle, <methodname>crossbar::tick_positive_edge()</methodname> examines the competing ingress queues and invokes <methodname>virtual_queue::front_pop()</methodname> of the winning queues and
+<methodname>virtual_queue::back_push()</methodname> of the corresponding next-hop queues until crossbar bandwidth for that cycle is exhausted.
+</para>
+</section>
+
+<section id="sec:synchronization"><title>Synchronized communication</title>
+<para>
+The virtual queue (defined in <filename>virtual_queue.hpp</filename> and <filename>virtual_queue.cpp</filename>) models a virtual channel buffer, and, as the only point of inter-thread communication, is synchronized in multi-thread simulations. The fine-grained synchronization ensures correctness even if the simulation threads are only loosely synchronized.
+</para>
+<para>
+Synchronization is achieved via two mutual exclusion locks: <varname>virtual_queue::front_mutex</varname> and <varname>virtual_queue::back_mutex</varname>. During a positive edge of the clock, the two ends of the queue are independent, and operations on the front of the queue (e.g., <methodname>virtual_queue::front_pop()</methodname>) only lock <varname>front_mutex</varname> while operations on the back (e.g., <methodname>virtual_queue::back_push()</methodname>) only lock <varname>back_mutex</varname>; because no communication between the two occurs, flits added to the back of the queue are not observed at the front of the queue in the same cycle (so, for example, <methodname>virtual_queue::back_is_full()</methodname> can report a full queue even if a flit was removed via <methodname>virtual_queue::front_pop()</methodname> during the same positive edge.  During the negative clock edge, the changes made during the positive edge are communicated between the two ends of the queue, and both locks are held.
+</para>
+</section>
+
+<section><title>Initialization</title>
+<para>
+At startup, DARSIM reads a binary <emphasis>image file</emphasis> which describes the components of the network, how they are configured, and how they are connected; for tiles that include a CPU, the image also describes memory contents, the initial program counter, and the initial stack pointer.  The image is generated from a text-based configuration file, and, optionally, MIPS executables, by the tool <filename>darimg</filename>, and parsed in <methodname>sys::sys()</methodname>.
+</para>
+<para>
+If the system was configured to include injectors, they are programmed using one or more text-based <emphasis>event files</emphasis>.  The event files specify packets to be sent in each cycle for each flow; they are read by <methodname>event_parser::event_parser()</methodname> and distributed to the injectors where the flows originate by calling <methodname>injector::add_event()</methodname>.
+</para>
+</section>
+
+<section id="sec:statistics"><title>Statistics</title>
+<para>
+DARSIM collects various statistics during the simulation.  To avoid synchronization in a multi-threaded simulation, each tile collects its own statistics (class <classname>tile_statistics</classname> in <filename>statistics.hpp</filename> and <filename>statistics.cpp</filename>); a <classname>system_statistics</classname> object keeps track of the <classname>tile_statistics</classname> objects and combines them to report whole-system statistics at the end of the simulation.
+</para>
+<para>
+To accurately collect per-flit statistics when the simulation threads are only loosely barrier-synchronized, some counters (for example, the elapsed flit transit time) are stored and carried together with the flit (see <filename>flit.hpp</filename>), and updated during every clock cycle.
+</para>
+</section>
+</section>
+
+<section><title>The Life of a Packet</title>
+
+<section><title>Injection from the source PE</title>
+<para>
+The packet is generated either by an injector (in <methodname>injector::tick_positive_edge()</methodname>) or by a system call executed by the MIPS CPU simulator (in <methodname>cpu::syscall()</methodname>) via a call to <methodname>bridge::send()</methodname> with the flow ID, packet length, and a pointer to the memory region to be transmitted.  If a DMA channel is available, this in turn invokes <methodname>egress_dma_channel::send()</methodname>, which stores the packet details in the <classname>egress_dma_channel</classname> object for later transmission.
+</para>
+</section>
+
+<section><title>Transport to network via DMA</title>
+<para>
+Next, the packet contents are split into flits and a head flit containing the flow ID and the number of data flits that follow is prepended.  In every clock cycle, <methodname>egress_dma_channel::tick_positive_edge()</methodname> transmits as much of the packet as possible flit by flit by repeatedly calling <methodname>virtual_queue::back_push()</methodname> until the relevant node ingress queue is full or the available port bandwidth has been exceeded.
+</para>
+</section>
+
+<section><title>Node-to-node transport</title>
+<para>
+Once in a node ingress queue, flits are transmitted when <methodname>node::tick_positive_edge()</methodname> is invoked during every cycle.
+</para>
+<para>
+For every head flit at the head of a virtual channel queue, <methodname>router::route()</methodname> determines the next-hop node ID and flow ID and calls <methodname>virtual_queue::front_set_next_hop()</methodname> to assign them to the packet. Next, <methodname>channel_alloc::allocate()</methodname> computes the next-hop virtual channel assignment and sets it using <methodname>virtual_queue::front_set_vq_id()</methodname>.
+</para>
+<para>
+Finally, each flit of the packet competes for crossbar bandwidth and transits to the next-hop node in <methodname>crossbar::tick_positive_edge()</methodname>, which in turn calls <methodname>virtual_queue::front_pop()</methodname> and <methodname>virtual_queue::back_push()</methodname> to effect the transfer.
+</para>
+</section>
+
+<section><title>Delivery to the destination PE</title>
+<para>
+At the destination node, the router and channel allocator direct the packet to a queue in the connected bridge, and the crossbar completes the transfer. The relevant bridge queue is then reported as ready when <methodname>bridge::get_waiting_queues()</methodname> is invoked and the PE can retrieve it with <methodname>bridge::receive()</methodname>.
+</para>
+</section>
+</section>
+
+<bibliography><title>References</title>
+<bibliomixed>
+<abbrev>DS</abbrev>
+<bibliomset relation="article">
+<firstname>Mieszko</firstname> <surname>Lis</surname>,
+<firstname>Keun Sup</firstname> <surname>Shim</surname>,
+<firstname>Myong Hyon</firstname> <surname>Cho</surname>,
+<firstname>Pengju</firstname> <surname>Ren</surname>,
+<firstname>Omer</firstname> <surname>Khan</surname> and
+<firstname>Srinivas</firstname> <surname>Devadas</surname>
+(<pubdate>2010</pubdate>).
+<title>DARSIM: a parallel cycle-level NoC simulator</title>.
+</bibliomset>
+<bibliomset relation="conference">
+In <title>Proceedings of MoBS 2010</title>.
+</bibliomset>
+</bibliomixed>
+
+</bibliography>
+
+</article>
