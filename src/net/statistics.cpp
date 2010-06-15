@@ -26,6 +26,8 @@ inline void combine_left(map<K,V> &lhs, const map<K,V> &rhs) {
     while (li != lhs.end() || ri != rhs.end()) {
         if (li != lhs.end() && ri != rhs.end() && li->first == ri->first) {
             combine_left(li->second, ri->second);
+            ++li;
+            ++ri;
         } else if ((ri == rhs.end())
                    || (li != lhs.end() && li->first < ri->first)) {
             ++li;
