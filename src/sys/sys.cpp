@@ -164,7 +164,9 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             uint32_t cpu_stack_pointer = read_word(img);
             p = shared_ptr<pe>(new cpu(pe_id(id), t->get_time(), m,
                                        cpu_entry_point,
-                                       cpu_stack_pointer, log));
+                                       cpu_stack_pointer,
+                                       t->get_statistics(),
+                                       log));
             break;
         }
         case PE_INJECTOR: {

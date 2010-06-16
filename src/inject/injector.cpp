@@ -49,9 +49,12 @@ void injector::tick_positive_edge() throw(err) {
         if (p > 0) {
             flows[f] = make_tuple(system_time, l, p);
         } else if (l > 0) {
-            waiting_packet pkt = { packet_id_factory->get_fresh_id(), f, l };
+            waiting_packet pkt =
+                { packet_id_factory->get_fresh_id(), f, l, stats->is_started() };
             waiting_packets[f].push(pkt);
-            stats->offer_packet(pkt.flow, pkt.id, pkt.len);
+            if (pkt.count_in_stats) {
+                stats->offer_packet(pkt.flow, pkt.id, pkt.len);
+            }
         }
         LOG(log,2) << "[injector " << get_id() << "] flow " << f;
         if (l == 0) {
@@ -94,9 +97,12 @@ void injector::tick_positive_edge() throw(err) {
          fi != flow_ids.end(); ++fi) {
         tick_t t; len_t l; period_t p; tie(t, l, p) = flows[*fi];
         if (l != 0 && t == system_time) {
-            waiting_packet pkt = { packet_id_factory->get_fresh_id(), *fi, l };
+            waiting_packet pkt = { packet_id_factory->get_fresh_id(), *fi, l,
+                                   stats->is_started() };
             waiting_packets[*fi].push(pkt);
-            stats->offer_packet(pkt.flow, pkt.id, pkt.len);
+            if (pkt.count_in_stats) {
+                stats->offer_packet(pkt.flow, pkt.id, pkt.len);
+            }
             flows[*fi].get<0>() = t + p;
         }
     }
@@ -107,7 +113,8 @@ void injector::tick_positive_edge() throw(err) {
             queue<waiting_packet> &q = waiting_packets[*fi];
             if (!q.empty()) {
                 waiting_packet &pkt = q.front();
-                if (net->send(fi->get_numeric_id(), NULL, pkt.len, pkt.id)) {
+                if (net->send(fi->get_numeric_id(), NULL, pkt.len, pkt.id,
+                              pkt.count_in_stats)) {
                     q.pop();
                 }
             }

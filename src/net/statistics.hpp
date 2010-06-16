@@ -93,7 +93,7 @@ public:
     friend ostream &operator<<(ostream &, const system_statistics &);
 private:
     const uint64_t &system_time;
-    const uint64_t &start_time;
+    const uint64_t start_time;
     shared_ptr<flow_rename_table> flow_renames;
     typedef map<flow_id, uint64_t> flit_counter_t;
     typedef tuple<egress_id, egress_id, unsigned> sub_link_id;

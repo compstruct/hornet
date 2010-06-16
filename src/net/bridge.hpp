@@ -45,9 +45,10 @@ public:
     // both() send and receive() return 0 on failure (no transfer started)
     // or transfer ID which can be used to check for completion later
     // which can be used later to check status
-    uint32_t send(uint32_t flow_id, void *src, uint32_t num_flits) throw(err);
     uint32_t send(uint32_t flow_id, void *src, uint32_t num_flits,
-                  packet_id pid) throw(err);
+                  bool count_in_stats) throw(err);
+    uint32_t send(uint32_t flow_id, void *src, uint32_t num_flits,
+                  packet_id pid, bool count_in_stats) throw(err);
     uint32_t receive(void *dst, uint32_t queue, uint32_t num_flits,
                      packet_id *pid=NULL) throw(err);
     void tick_positive_edge() throw(err);

@@ -165,12 +165,14 @@ uint32_t bridge::get_queue_length(uint32_t queue) throw(err) {
     return len;
 }
 
-uint32_t bridge::send(uint32_t flow, void *src, uint32_t len) throw(err) {
-    return send(flow, src, len, packet_id_factory->get_fresh_id());
+uint32_t bridge::send(uint32_t flow, void *src, uint32_t len,
+                      bool count_in_stats) throw(err) {
+    return send(flow, src, len, packet_id_factory->get_fresh_id(),
+                count_in_stats);
 }
 
 uint32_t bridge::send(uint32_t flow, void *src, uint32_t len,
-                      packet_id pid) throw(err) {
+                      packet_id pid, bool count_in_stats) throw(err) {
     LOG(log,3) << "[bridge " << id << "] sending " << dec << len
                << " flits on flow " << flow_id(flow);
     virtual_queue_id q = vc_alloc->request(flow);
@@ -184,7 +186,7 @@ uint32_t bridge::send(uint32_t flow, void *src, uint32_t len,
     uint32_t xmit_id = q.get_numeric_id() + 1;
     LOG(log,3) << ": started (transmission ID " << dec << xmit_id << ")"
                << endl;
-    di->second->send(flow, src, len, pid);
+    di->second->send(flow, src, len, pid, count_in_stats);
     return xmit_id;
 }
 

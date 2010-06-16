@@ -84,11 +84,12 @@ public:
                        shared_ptr<tile_statistics> stats, logger &log) throw();
     virtual ~egress_dma_channel();
     void send(flow_id flow, void *src, uint32_t num_flits,
-              const packet_id &pid) throw(err);
+              const packet_id &pid, bool count_in_stats) throw(err);
     void tick_positive_edge() throw(err);
     void tick_negative_edge() throw(err);
 private:
     packet_id pid;
+    bool count_in_stats;
     shared_ptr<bridge_channel_alloc> vc_alloc;
 private:
     egress_dma_channel(); // not defined

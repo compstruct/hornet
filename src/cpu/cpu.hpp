@@ -13,6 +13,7 @@
 #include "mem.hpp"
 #include "bridge.hpp"
 #include "pe.hpp"
+#include "statistics.hpp"
 
 using namespace std;
 using namespace boost;
@@ -20,7 +21,9 @@ using namespace boost;
 class cpu : public pe {
 public:
     explicit cpu(const pe_id &id, const uint64_t &time, shared_ptr<mem> ram,
-                 uint32_t pc, uint32_t stack_pointer, logger &log) throw(err);
+                 uint32_t pc, uint32_t stack_pointer,
+                 shared_ptr<tile_statistics> stats,
+                 logger &log) throw(err);
     virtual ~cpu() throw();
     virtual void connect(shared_ptr<bridge> net_bridge) throw();
     virtual void add_packet(uint64_t time, const flow_id &flow, uint32_t len) throw(err);
@@ -52,6 +55,7 @@ private:
     unsigned jump_time;
     uint32_t jump_target;
     ostringstream stdout_buffer;
+    shared_ptr<tile_statistics> stats;
     logger &log;
 private:
     void syscall(uint32_t syscall_no) throw(err);

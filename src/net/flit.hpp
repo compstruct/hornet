@@ -42,10 +42,12 @@ inline flit::flit(uint64_t new_data, packet_id new_pid, bool stats) throw()
 }
 
 inline flit::flit(const flit &f) throw()
-    : data(f.data), current_age(f.current_age), pid(f.pid) { }
+    : data(f.data), current_age(f.current_age), pid(f.pid),
+      count_in_stats(f.count_in_stats) { }
 
 inline flit::flit() throw()
-    : data(UINT64_MAX), current_age(UINT64_MAX), pid(UINT64_MAX) { }
+    : data(UINT64_MAX), current_age(UINT64_MAX), pid(UINT64_MAX),
+      count_in_stats(false) { }
 
 inline flit &flit::operator=(const flit &f) throw() {
     data = f.data;

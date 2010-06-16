@@ -25,6 +25,7 @@ public:
     packet_id id;
     flow_id flow;
     uint32_t len;
+    bool count_in_stats;
 };
 
 class incoming_packet {

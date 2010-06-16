@@ -15,10 +15,11 @@ using namespace std;
 
 cpu::cpu(const pe_id &new_id, const uint64_t &new_time, shared_ptr<mem> new_ram,
          uint32_t entry_point, uint32_t stack_ptr,
+         shared_ptr<tile_statistics> new_stats,
          logger &l) throw(err)
     : pe(new_id), running(true), time(new_time), pc(entry_point), ram(new_ram),
       net(), jump_active(false), interrupts_enabled(false), stdout_buffer(),
-      log(l) {
+      stats(new_stats), log(l) {
     assert(ram);
     pc = entry_point;
     gprs[29] = stack_ptr;
@@ -104,7 +105,8 @@ void cpu::syscall(uint32_t call_no) throw(err) {
         if (!net) throw exc_no_network(get_id().get_numeric_id());
         set(gpr(2), net->send(get(gpr(4)), ram->ptr(get(gpr(5))),
                               ((get(gpr(6)) >> 3) +
-                               ((get(gpr(6)) & 0x7) != 0 ? 1 : 0))));
+                               ((get(gpr(6)) & 0x7) != 0 ? 1 : 0)),
+                               stats->is_started()));
         break;
     case SYSCALL_RECEIVE:
         if (!net) throw exc_no_network(get_id().get_numeric_id());
