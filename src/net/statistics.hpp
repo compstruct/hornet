@@ -88,6 +88,9 @@ public:
               double req_frac, double bw_frac) throw();
     void cxn_xmit(node_id src, node_id dst, unsigned used,
                   double req_frac, double bw_frac) throw();
+    void add_ingress(node_id src, node_id dst, uint64_t num_vqs,
+                     uint64_t flits_per_vq) throw();
+    void add_egress(node_id src, node_id dst) throw();
     uint64_t get_received_packet_count() const throw();
 public:
     friend ostream &operator<<(ostream &, const system_statistics &);
@@ -98,10 +101,12 @@ private:
     typedef map<flow_id, uint64_t> flit_counter_t;
     typedef tuple<egress_id, egress_id, unsigned> sub_link_id;
     typedef map<sub_link_id, uint64_t> link_switch_counter_t;
+    typedef map<node_id, uint64_t> node_counter_t;
     typedef map<node_id, running_stats> node_stats_t;
     typedef map<flow_id, running_stats> flow_stats_t;
     typedef tuple<node_id, node_id> cxn_id;
     typedef map<cxn_id, running_stats> cxn_stats_t;
+    typedef map<cxn_id, uint64_t> cxn_counter_t;
     flit_counter_t offered_flits;
     uint64_t total_offered_flits;
     flit_counter_t sent_flits;
@@ -123,6 +128,11 @@ private:
     map<flow_id, reorder_buffer> reorder_buffers;
     map<flow_id, uint64_t> last_received_times;
     flow_stats_t flow_reorder_stats;
+    node_counter_t flits_per_queue;
+    node_counter_t num_ingresses;
+    node_counter_t num_egresses;
+    cxn_counter_t num_virtual_queues;
+    cxn_counter_t virtual_queue_depths;
 private:
     typedef struct {
         char v_offered;

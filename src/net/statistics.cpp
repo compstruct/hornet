@@ -289,6 +289,29 @@ void tile_statistics::cxn_xmit(node_id src, node_id dst, unsigned used,
     cxn_bw_stats[cxn].add(bw_frac, 1);
 }
 
+void tile_statistics::add_ingress(node_id src, node_id dst, uint64_t num_vqs,
+                                  uint64_t flits_per_vq) throw() {
+    if (num_ingresses.find(dst) == num_ingresses.end()) {
+        num_ingresses[dst] = 0;
+    }
+    num_ingresses[dst]++;
+    cxn_id cid = make_tuple(src,dst);
+    if (num_virtual_queues.find(cid) == num_virtual_queues.end()) {
+        num_virtual_queues[cid] = 0;
+    }
+    num_virtual_queues[cid] += num_vqs;
+    assert((virtual_queue_depths.find(cid) == virtual_queue_depths.end())
+           || (virtual_queue_depths[cid] == flits_per_vq));
+    virtual_queue_depths[cid] = flits_per_vq;
+}
+
+void tile_statistics::add_egress(node_id src, node_id dst) throw() {
+    if (num_egresses.find(src) == num_egresses.end()) {
+        num_egresses[src] = 0;
+    }
+    num_egresses[src]++;
+}
+
 system_statistics::system_statistics() throw () {
 }
 
@@ -499,6 +522,7 @@ ostream &operator<<(ostream &out, const system_statistics &s) {
             << " bw " << 100 * bw.get_mean()
             << "% +/- " << 100 * bw.get_std_dev() << "%" << endl;
     }
+
     return out;
 }
 
