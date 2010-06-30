@@ -470,9 +470,9 @@ def new_system_config(cfg, verbose=False):
                    'one_q_per_f': one_q_per_f,
                    'one_f_per_q': one_f_per_q,
                    'img': get_code(progs, id),
-                   'n2b_bw': get_bw('cpu')[0],
-                   'b2n_bw': get_bw('net')[0],
-                   'b2n_xbar_bw': get_bw('net')[1],
+                   'n2b_bw': get_bw('net')[0],
+                   'b2n_bw': get_bw('cpu')[0],
+                   'b2n_xbar_bw': get_bw('cpu')[1],
                    'qmem_size': p_nat(cfg.get('node', 'queue size')),
                    'n2b_queues': get_qs('net'),
                    'b2n_queues': get_qs('cpu') }
