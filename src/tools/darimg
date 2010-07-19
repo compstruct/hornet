@@ -216,6 +216,12 @@ def write_route(out, (route_type, route), verbose=False):
         out.write(w2bs(0xffffffff)) # indicates bridge route
         write_qs(qs)
     def write_node_route((flow, cur_n, prev_n, next_nodes)):
+        if flow > (1 << 32):
+            raise Err('flow ID exceeds 32 bits: 0x%x' % flow)
+        if cur_n > (1 << 32):
+            raise Err('node ID exceeds 32 bits: 0x%x' % cur_n)
+        if prev_n > (1 << 32):
+            raise Err('node ID exceeds 32 bits: 0x%x' % prev_n)
         out.write(w2bs(flow))
         out.write(w2bs(cur_n))
         out.write(w2bs(prev_n))
@@ -225,6 +231,10 @@ def write_route(out, (route_type, route), verbose=False):
             if verbose and qs != []:
                 print ('  next hop: node %02x>%08x@%3.2f' %
                        (next_n, next_f, prop))
+            if next_f > (1 << 32):
+                raise Err('flow ID exceeds 32 bits: 0x%x' % next_f)
+            if next_n > (1 << 32):
+                raise Err('node ID exceeds 32 bits: 0x%x' % next_n)
             out.write(w2bs(next_n))
             out.write(w2bs(next_f))
             out.write(f2bs(prop))
