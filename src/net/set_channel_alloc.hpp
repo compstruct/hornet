@@ -14,7 +14,9 @@
 class set_channel_alloc : public channel_alloc {
 public:
     set_channel_alloc(node_id src, bool one_queue_per_flow,
-                      bool one_flow_per_queue, logger &log, shared_ptr<random_gen> ran) throw();
+                      bool one_flow_per_queue,
+                      shared_ptr<tile_statistics> stats,
+                      logger &log, shared_ptr<random_gen> ran) throw();
     virtual ~set_channel_alloc() throw();
     virtual void allocate() throw(err);
     virtual void add_egress(shared_ptr<egress> egress) throw(err);
@@ -29,7 +31,9 @@ private:
     typedef vector<tuple<shared_ptr<virtual_queue>, double> > route_queues_t;
     typedef map<route_query_t, route_queues_t> routes_t;
     routes_t routes;
+    shared_ptr<tile_statistics> stats;
     shared_ptr<random_gen> ran;
+    typedef vector<uint32_t> va_req_t;
 };
 
 #endif // __SET_CHANNEL_ALLOC_HPP__

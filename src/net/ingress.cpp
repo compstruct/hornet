@@ -20,7 +20,8 @@ ingress::ingress(const ingress_id &new_id, const node_id &new_src_node_id,
             throw err_duplicate_queue(parent_id.get_numeric_id(),
                                       i->get_numeric_id());
         shared_ptr<virtual_queue>
-            q(new virtual_queue(parent_id, *i, src_node_id, flits_per_queue,
+            q(new virtual_queue(parent_id, *i, src_node_id, new_id,
+                                flits_per_queue,
                                 vca, pt, stats, vcd, log));
         vqs[q->get_id().get<1>()] = q;
     }

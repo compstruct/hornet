@@ -1,4 +1,5 @@
 AM_CPPFLAGS = $(BOOST_CPPFLAGS) \
+              -I$(top_srcdir)/src/power \
               -I$(top_srcdir)/src/net \
               -I$(top_srcdir)/src/pe \
               -I$(top_srcdir)/src/cpu \
@@ -19,4 +20,5 @@ darsim_LDADD = \
     $(top_builddir)/src/cpu/libdarmips.la \
     $(top_builddir)/src/pe/libdarpe.la \
     $(top_builddir)/src/net/libdarnet.la \
+    $(top_builddir)/src/power/libdarpower.la \
     $(top_builddir)/src/common/libdarcommon.la

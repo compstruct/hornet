@@ -196,12 +196,13 @@ for dims in [(8,8)]:
             #for ofpq in [False, True]:
             for ofpq in [False]:
                 xvc=get_xvc_name(oqpf,ofpq)
-                for nvcs in [1]:
+                for nvcs in [1,2,4,8]:#[1,2,4,8]
                     if type == 'o1turn' and nvcs == 1: continue
                     if oqpf and nvcs == 1: continue
-                    for bw in [1,2,4,8]:
+                    for bw in [1]:#[1,2,4,8]
                         #for mux in [None,1,2,4]:
-                        muxrngs = { 1: [1], 2: [1,2], 4: [2,4], 8: [2,4] }
+                        #muxrngs = { 1: [1], 2: [1,2], 4: [2,4], 8: [2,4] }
+                        muxrngs = { 1: [1], 2: [1], 4: [1], 8: [1] }
                         for mux in muxrngs[nvcs]:
                             # if mux and mux >= nvcs: continue
                             muxstr = 'mux%d' % mux if mux else 'nomux'

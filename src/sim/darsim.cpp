@@ -59,7 +59,7 @@ static uint32_t fresh_random_seed() {
 }
 
 shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
-                           uint64_t stats_start,
+                           const uint64_t &stats_start,
                            shared_ptr<vector<string> > evt_files,
                            uint32_t random_seed,
                            uint32_t test_flags) throw(err) {

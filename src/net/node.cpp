@@ -39,6 +39,7 @@ void node::add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err) {
     vc_alloc->add_ingress(ingress);
     xbar.add_ingress(src, ingress);
     stats->add_ingress(src, get_id(), ingress->get_queues().size(),
+                       ingress->get_bw_to_xbar(),
                        flits_per_queue);
 }
 
@@ -51,7 +52,7 @@ void node::add_egress(node_id dst, shared_ptr<egress> egress) throw(err) {
     rt->add_egress(egress);
     vc_alloc->add_egress(egress);
     xbar.add_egress(dst, egress);
-    stats->add_egress(get_id(), dst);
+    stats->add_egress(get_id(), dst, egress->get_bandwidth());
 }
 
 shared_ptr<ingress> node::get_ingress_from(node_id src) throw(err) {

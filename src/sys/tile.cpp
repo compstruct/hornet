@@ -10,7 +10,7 @@ tile::tile(const tile_id &new_id, const uint32_t num_tiles,
            shared_ptr<flow_rename_table> flow_renames,
            logger &new_log) throw()
     : id(new_id), time(init_time), pes(), nodes(), bridges(), arbiters(),
-      stats(new tile_statistics(time, stats_t0, flow_renames)),
+      stats(new tile_statistics(time, stats_t0, flow_renames )),
       log(new_log) {
     uint32_t num_id_bits = 0;
     for (uint32_t t = num_tiles-1; t; ++num_id_bits, t >>= 1);

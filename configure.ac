@@ -76,6 +76,7 @@ AC_OUTPUT(\
     Makefile \
     src/Makefile \
     src/common/Makefile \
+    src/power/Makefile \
     src/net/Makefile \
     src/pe/Makefile \
     src/cpu/Makefile \

@@ -8,13 +8,16 @@
 #include "channel_alloc.hpp"
 
 virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
-                             node_id new_src_node_id, uint32_t new_max_size,
+                             node_id new_src_node_id, 
+                             ingress_id new_ingress_id,
+                             uint32_t new_max_size,
                              shared_ptr<channel_alloc> new_vc_alloc,
                              shared_ptr<pressure_tracker> new_pt,
                              shared_ptr<tile_statistics> st,
                              shared_ptr<vcd_writer> new_vcd,
                              logger &l) throw()
     : id(make_tuple(new_node_id, new_vq_id)), src_node_id(new_src_node_id),
+      parent_ingress_id(new_ingress_id),
       buffer_size(new_max_size + 1), contents(new_max_size + 1),
       front_head(0), front_stale_tail(0),
       front_egress_packet_flits_remaining(0), front_old_flow(),
@@ -41,6 +44,10 @@ const virtual_queue_node_id &virtual_queue::get_id() const throw() {
 
 node_id virtual_queue::get_src_node_id() const throw() {
     return src_node_id;
+}
+
+ingress_id virtual_queue::get_ingress_id() const throw() { 
+    return parent_ingress_id;
 }
 
 bool virtual_queue::front_is_empty() const throw() {

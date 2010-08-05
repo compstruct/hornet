@@ -93,6 +93,7 @@ void ingress_dma_channel::tick_positive_edge() throw(err) {
         if (vq->front_flit().get_count_in_stats()) {
             stats->receive_flit(flow, vq->front_flit());
         }
+        stats->vq_rd(vq->get_id(),vq->get_ingress_id());
         vq->front_pop();
         started = true;
     }
@@ -137,6 +138,7 @@ void egress_dma_channel::tick_positive_edge() throw(err) {
             if (count_in_stats) {
                 stats->send_packet(flow, pid, remaining_flits);
                 stats->send_flit(flow, f);
+                stats->vq_wr(vq->get_id(), vq->get_ingress_id());
             }
         } else {
             --remaining_flits;
@@ -147,6 +149,7 @@ void egress_dma_channel::tick_positive_edge() throw(err) {
             vq->back_push(f);
             if (count_in_stats) {
                 stats->send_flit(flow, f);
+                stats->vq_wr(vq->get_id(), vq->get_ingress_id());
             }
             mem = mem ? (uint8_t *) mem + sizeof(uint64_t) : mem;
             if (remaining_flits == 0) vc_alloc->release(vq->get_id());

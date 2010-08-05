@@ -254,22 +254,24 @@ def get_xvc_name(oqpf, ofpq):
 
 for dims in [(8,8)]:
     for type in ['romm2', 'valiant']:
-        for subtype in ['xy', 'yx']:
+        #for subtype in ['xy', 'yx']:
+        for subtype in ['xy']:
             for oqpf in [False, True]:
                 #for ofpq in [False, True]:
                 for ofpq in [False]:
                     xvc=get_xvc_name(oqpf,ofpq)
-                    for nvcs in [2,4]:
-                        for bw in [2,4]:
+                    for nvcs in [2,4,8]:
+                        for bw in [1]:
                             #for mux in [None,1,2,4]:
-                            muxrngs = { 2: [1,2], 4: [2,4], 8: [2,4] }
+                            #muxrngs = {2:[1,2], 4:[2,4], 8:[2,4] }
+                            muxrngs = {2:[1], 4:[1], 8:[1] }
                             for mux in muxrngs[nvcs]:
                                 # if mux and mux >= nvcs: continue
                                 muxstr = 'mux%d' % mux if mux else 'nomux'
                                 fn = '%s-%s-%s-vc%d-%s-bw%d.cfg' % (type, subtype, xvc, nvcs, muxstr, bw)
                                 print 'writing %s...' % fn
                                 with open(fn, 'w') as out:
-                                    write_header(type, dims, bw=bw, cpubw=16, mux=mux, num_vcs=nvcs,
+                                    write_header(type, dims, bw=bw, cpubw=bw, mux=mux, num_vcs=nvcs,
                                                  oqpf=oqpf, ofpq=ofpq, out=out)
                                     write_routes(type, dims, routing=subtype, num_vcs=nvcs, out=out)
                     

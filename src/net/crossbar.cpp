@@ -103,21 +103,56 @@ void crossbar::tick_positive_edge() throw(err) {
     random_shuffle(egress_qs.begin(), egress_qs.end(), rr_fn);
     random_shuffle(ingress_qs.begin(), ingress_qs.end(), rr_fn);
     vqs_t ingress_ready_qs; // ingress VCs that are ready to transmit
+    int stage1_act_num = 0; 
+    int stage1_act_num_port = 0; 
+    int stage1_act_num_bridge = 0; 
+    int total_stage1_req_num = 0; 
+    int total_stage1_req_num_port = 0; 
+    int total_stage1_req_num_bridge = 0; 
+    map<ingress_id, uint64_t> sw_act_ingress;
+    sw_act_ingress.clear();
     for (nvqs_t::iterator iqi = ingress_qs.begin();
          iqi != ingress_qs.end(); ++iqi) {
-        node_id &in_node = iqi->get<0>();
-        shared_ptr<virtual_queue> &iq = iqi->get<1>();
-        if (ibws[in_node] > 0 && !iq->front_is_empty()
+         node_id &in_node = iqi->get<0>();
+         shared_ptr<virtual_queue> &iq = iqi->get<1>();
+         if (!iq->front_is_empty()
             && iq->front_node_id().is_valid()
             && iq->front_vq_id().is_valid()) {
+            ingress_id ig = iq->get_ingress_id();
+            total_stage1_req_num ++;
+            if(iq->get_ingress_id().get_name() == "B")
+               total_stage1_req_num_bridge ++;
+            else total_stage1_req_num_port ++;
+            if(sw_act_ingress.find(ig) == sw_act_ingress.end()) {
+               sw_act_ingress[ig] = 0;
+               stage1_act_num ++;
+               if(iq->get_ingress_id().get_name() == "B")
+                  stage1_act_num_bridge ++;
+               else
+                  stage1_act_num_port ++;
+            }
+            if(ibws[in_node] > 0) {
+            --ibws[in_node];
             egress_demands[iq->front_node_id()]++;
             ingress_ready_qs.push_back(iq);
-            --ibws[in_node];
+            }
         }
     }
     int num_reqs = ingress_ready_qs.size();
     int num_sent = 0;
     int num_eqs = 0;
+    int stage2_act_num = 0; 
+    int stage2_act_num_port = 0; 
+    int stage2_act_num_bridge = 0; 
+    int total_stage2_req_num = 0; 
+    int total_stage2_req_num_port = 0; 
+    int total_stage2_req_num_bridge = 0; 
+    map<ingress_id, uint64_t> sw_req_egress;
+    sw_req_egress.clear();
+  //  for (map<ingress_id, uint64_t>::iterator eqi = sw_req_egress.begin();
+  //       eqi != sw_req_egress.end(); ++eqi) {
+  //       if(sw_req_egress.second().get_ingress_id().get_name()== "X")
+            
     for (vqs_t::iterator eqi = egress_qs.begin();
          eqi != egress_qs.end(); ++eqi) {
         node_id out_node; virtual_queue_id out_q;
@@ -125,7 +160,7 @@ void crossbar::tick_positive_edge() throw(err) {
         tie(out_node,out_q) = eq->get_id();
         LOG(log,12) << "[xbar " << id << "]     egress queue "
             << eq->get_id() << endl;
-        if (ebws[out_node] > 0 && !eq->back_is_full()) {
+        if (!eq->back_is_full()) {
             ++num_eqs;
             for (vqs_t::iterator iqi = ingress_ready_qs.begin();
                  iqi != ingress_ready_qs.end(); ++iqi) {
@@ -133,36 +168,78 @@ void crossbar::tick_positive_edge() throw(err) {
                 bool iq_ready = (!iq->front_is_empty()
                                  && iq->front_node_id().is_valid()
                                  && iq->front_vq_id().is_valid());
-                LOG(log,12) << "[xbar " << id
-                            << "]         considering ingress queue "
-                            << iq->get_id() << ": ";
-                if (iq->front_is_empty()) {
-                    LOG(log, 12) << "empty" << endl;
-                } else {
-                    if (iq_ready) {
-                        virtual_queue_node_id vqn =
+                if(ebws[out_node] > 0) {
+                   LOG(log,12) << "[xbar " << id
+                   << "]         considering ingress queue "
+                   << iq->get_id() << ": ";
+                   if (iq->front_is_empty()) {
+                       LOG(log, 12) << "empty" << endl;
+                   } else {
+                         if (iq_ready) {
+                            virtual_queue_node_id vqn =
                             make_tuple(iq->front_node_id(), iq->front_vq_id());
-                        LOG(log, 12) << "-> " << vqn << " (ready)";
-                    } else {
-                        LOG(log, 12) << " (not ready)";
-                    }
-                    LOG(log, 12) << endl;
+                            LOG(log, 12) << "-> " << vqn << " (ready)";
+                         } else {
+                            LOG(log, 12) << " (not ready)";
+                         }
+                            LOG(log, 12) << endl;
+                      }
                 }
                 if (iq_ready && iq->front_node_id() == out_node
                     && iq->front_vq_id() == out_q) {
-                    LOG(log,12) << "[xbar " << id
-                        << "]         queue " << iq->get_id()
-                        << " wins arbitration" << endl;
-                    flit f = iq->front_flit();
-                    iq->front_pop();
-                    eq->back_push(f);
-                    --ebws[out_node];
-                    ++num_sent;
-                    break; // exit ingress_ready_qs loop
-                }
-            }
-        }
+                    ingress_id eg = eq->get_ingress_id();
+                    total_stage2_req_num ++;                   
+                    if(eg.get_name() == "X") total_stage2_req_num_bridge ++;
+                    else total_stage2_req_num_port ++;
+                    if(sw_req_egress.find(eg) == sw_req_egress.end()) {
+                       sw_req_egress[eg] = 0;
+                       stage2_act_num ++;
+                       if (eg.get_name() == "X") stage2_act_num_bridge ++;
+                       else stage2_act_num_port ++;
+                    }
+                    if(ebws[out_node] > 0) {
+                       LOG(log,12) << "[xbar " << id
+                           << "]         queue " << iq->get_id()
+                           << " wins arbitration" << endl;
+                       flit f = iq->front_flit();
+                       iq->front_pop();
+                       eq->back_push(f);
+                       stats->vq_rd(iq->get_id(),iq->get_ingress_id());
+                       stats->vq_wr(eq->get_id(),eq->get_ingress_id());
+                       ++num_sent;
+                       --ebws[out_node];
+                    }
+                 break; // exit ingress_ready_qs loop
+              }
+           }
+       }
     }
+
+    double stage1_avg_req_port, stage2_avg_req_port;
+    if(stage1_act_num_port != 0) {
+          stage1_avg_req_port = static_cast<double> (total_stage1_req_num_port) /
+                                static_cast<double> (stage1_act_num_port);
+    } else stage1_avg_req_port = 0;
+    if(stage2_act_num_port != 0) {
+          stage2_avg_req_port = static_cast<double> (total_stage2_req_num_port) /
+                                static_cast<double> (stage2_act_num_port);
+    } else stage2_avg_req_port = 0;
+
+    double stage1_avg_req_bridge, stage2_avg_req_bridge;
+    if(stage1_act_num_bridge != 0) {
+          stage1_avg_req_bridge = static_cast<double> (total_stage1_req_num_bridge) /
+                                static_cast<double> (stage1_act_num_bridge);
+    } else stage1_avg_req_bridge = 0;
+    if(stage2_act_num_bridge != 0) {
+          stage2_avg_req_bridge = static_cast<double> (total_stage2_req_num_bridge) /
+                                static_cast<double> (stage2_act_num_bridge);
+    } else stage2_avg_req_bridge = 0;
+
+    stats->sw_alloc(id, stage1_act_num_port, stage1_avg_req_port, 
+                        stage2_act_num_port, stage2_avg_req_port,
+                        stage1_act_num_bridge, stage1_avg_req_bridge, 
+                        stage2_act_num_bridge, stage2_avg_req_bridge);
+
     unsigned total_bw = 0;
     for (egresses_t::iterator i = egresses.begin(); i != egresses.end(); ++i) {
         unsigned total = i->second->get_bandwidth();

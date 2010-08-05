@@ -22,7 +22,8 @@ using namespace boost;
 
 class sys {
 public:
-    sys(const uint64_t &time, shared_ptr<ifstream> image, uint64_t stats_t0,
+    sys(const uint64_t &time, shared_ptr<ifstream> image, 
+        const uint64_t &stats_t0,
         shared_ptr<vector<string> > event_files,
         shared_ptr<vcd_writer> vcd,
         logger &log, uint32_t seed, bool use_graphite_inj,

@@ -21,6 +21,7 @@
 #include "statistics.hpp"
 #include "virtual_queue_id.hpp"
 #include "pressure_tracker.hpp"
+#include "ingress_id.hpp"
 
 using namespace std;
 using namespace boost;
@@ -41,7 +42,9 @@ class channel_alloc;
 class virtual_queue {
 public:
     explicit virtual_queue(node_id parent_id, virtual_queue_id queue_id,
-                           node_id src_node_id, uint32_t max_size,
+                           node_id src_node_id,
+                           ingress_id parent_ingress_id,
+                           uint32_t max_size,
                            shared_ptr<channel_alloc> vc_alloc,
                            shared_ptr<pressure_tracker> pressures,
                            shared_ptr<tile_statistics> stats,
@@ -51,7 +54,7 @@ public:
     // methods which do not change over the life of the queue
     const virtual_queue_node_id &get_id() const throw();
     node_id get_src_node_id() const throw();
-
+    ingress_id get_ingress_id() const throw();
     // methods reading the front ("read end") of the queue
     bool front_is_empty() const throw();
     bool front_is_head_flit() const throw();
@@ -95,6 +98,7 @@ private:
 private:
     const virtual_queue_node_id id;
     const node_id src_node_id;
+    const ingress_id parent_ingress_id;
     const uint32_t buffer_size;
 
     typedef vector<flit> buffer_t;

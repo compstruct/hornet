@@ -1,4 +1,6 @@
-AM_CPPFLAGS = $(BOOST_CPPFLAGS)
+AM_CPPFLAGS = $(BOOST_CPPFLAGS) \
+              -I$(top_srcdir)/src/power 
+
 AM_LDFLAGS = $(BOOST_LDFLAGS)
 AM_CXXFLAGS = -Wall -Wno-uninitialized -Werror
 
@@ -27,4 +29,5 @@ libdarnet_la_SOURCES = \
     set_router.hpp set_router.cpp \
     set_channel_alloc.hpp set_channel_alloc.cpp \
     set_bridge_channel_alloc.hpp set_bridge_channel_alloc.cpp \
-    statistics.hpp statistics.cpp
+    statistics.hpp statistics.cpp 
+    

@@ -65,7 +65,7 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
 }
 
 sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
-         uint64_t stats_t0, shared_ptr<vector<string> > events_files,
+         const uint64_t &stats_t0, shared_ptr<vector<string> > events_files,
          shared_ptr<vcd_writer> vcd,
          logger &new_log, uint32_t seed, bool use_graphite_inj,
          uint64_t new_test_flags) throw(err)
@@ -111,7 +111,9 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         uint32_t one_q_per_f = read_word(img);
         uint32_t one_f_per_q = read_word(img);
         shared_ptr<channel_alloc>
-            n_vca(new set_channel_alloc(id, one_q_per_f, one_f_per_q, log, ran));
+            //n_vca(new set_channel_alloc(id, one_q_per_f, one_f_per_q, log, ran));
+            n_vca(new set_channel_alloc(id, one_q_per_f, one_f_per_q, t->get_statistics(),
+                  log, ran));//pengju
         shared_ptr<bridge_channel_alloc>
             b_vca(new set_bridge_channel_alloc(id, one_q_per_f, one_f_per_q,
                                                log, ran));
