@@ -268,9 +268,9 @@ void tile_statistics::receive_flit(const flow_id &org_fid, const flit &flt) thro
     }
     total_flit_lat_stats.add(flt.get_age(), 1);
     flow_flit_lat_stats[fid].add(flt.get_age(), 1);
-//---pengju---//
-    int index = floor(flt.get_age()/100);//10 for 64 core 20 for 1000 cores
-    if (index <= 500) { //2500 for 1000 cores, 300 for 64 cores
+
+    int index = floor(flt.get_age()/10);
+    if (index <= 500) { 
         packet_flit_lat_stats[index]++;
     } else {
         packet_flit_lat_stats[501]++;
@@ -722,136 +722,6 @@ ostream &operator<<(ostream &out, const system_statistics &s) {
     }
 
    out << endl;
-
-    set<node_id> vq_node_ids;
-    for (vq_node_counter_t::const_iterator i = vqwr_bridge.begin();
-         i != vqwr_bridge.end(); ++i) {
-         vq_node_ids.insert(i->first);
-    }
-    for (vq_node_counter_t::const_iterator i = vqrd_bridge.begin();
-         i != vqrd_bridge.end(); ++i) {
-         vq_node_ids.insert(i->first);
-    }
-    for (vq_node_counter_t::const_iterator i = vqwr_port.begin();
-         i != vqwr_port.end(); ++i) {
-         vq_node_ids.insert(i->first);
-    }
-    for (vq_node_counter_t::const_iterator i = vqrd_port.begin();
-         i != vqrd_port.end(); ++i) {
-         vq_node_ids.insert(i->first);
-    }
-
-    out << "Virtual queues operation in nodes counts:" <<endl;
-    for(set<node_id>::const_iterator i = vq_node_ids.begin();
-        i != vq_node_ids.end(); ++i) {
-        const node_id &n = *i;
-        uint64_t stats_time = s.get_stats_time(i->get_numeric_id());
-        uint64_t wrote_bridge, read_bridge, wrote_port, read_port;
-        vq_node_counter_t::const_iterator ni;
-        if ((ni = vqwr_bridge.find(n))!= vqwr_bridge.end()){
-            wrote_bridge = ni -> second;
-        } else {
-            wrote_bridge = 0;
-        }
-        if ((ni = vqrd_bridge.find(n))!= vqrd_bridge.end()){
-            read_bridge = ni -> second;
-        } else {
-            read_bridge = 0;
-        }
-        if ((ni = vqwr_port.find(n))!= vqwr_port.end()){
-            wrote_port = ni -> second;
-        } else {
-            wrote_port = 0;
-        }
-        if ((ni = vqrd_port.find(n))!= vqrd_port.end()){
-            read_port = ni -> second;
-        } else {
-            read_port = 0;
-        }
-        double bridge_write_flits = static_cast<double> (wrote_bridge) 
-                                    / static_cast<double> (stats_time);
-        double bridge_read_flits  = static_cast<double> (read_bridge) 
-                                    / static_cast<double> (stats_time);
-        double port_write_flits = static_cast<double> (wrote_port) 
-                                  / static_cast<double> (stats_time);
-        double port_read_flits  = static_cast<double> (read_port) 
-                                  / static_cast<double> (stats_time);
-
-        out << "    vq in node " << n 
-            << " total write " << fixed << setprecision(2) 
-            << bridge_write_flits + port_write_flits
-            << " bridge "  << setprecision(2) << bridge_write_flits
-            << " port "  << setprecision(2) << port_write_flits
-            << ", total read " << setprecision(2) 
-            << bridge_read_flits + port_read_flits
-            << " bridge " << setprecision(2) << bridge_read_flits
-            << " port " << setprecision(2) << port_read_flits 
-            << " stats_time " << setprecision(2) << stats_time << endl;
-    }
-            
-    out << " all virtual queues operation counts: "
-        << " wrote " << dec << total_vqwr_flits
-        << ", read " << total_vqrd_flits 
-        << endl <<endl;
-  
-   out << "Virtual alloctor operation statistics (mean +/- s.d.):" << endl;
-   for (node_stats_t::const_iterator nsi = va_act_stage1_port_stats.begin();
-        nsi != va_act_stage1_port_stats.end(); ++nsi) {
-        const running_stats &va_act_port_stage1 = va_act_stage1_port_stats[nsi->first];
-        if(va_act_port_stage1.get_mean() == 0) continue;
-        const running_stats &va_req_port_stage1 = va_req_stage1_port_stats[nsi->first];
-        const running_stats &va_act_port_stage2 = va_act_stage2_port_stats[nsi->first];
-        const running_stats &va_req_port_stage2 = va_req_stage2_port_stats[nsi->first];
-        const running_stats &va_act_bridge_stage1 = va_act_stage1_bridge_stats[nsi->first];
-        const running_stats &va_req_bridge_stage1 = va_req_stage1_bridge_stats[nsi->first];
-        const running_stats &va_act_bridge_stage2 = va_act_stage2_bridge_stats[nsi->first];
-        const running_stats &va_req_bridge_stage2 = va_req_stage2_bridge_stats[nsi->first];
-        out << "    VA in node " << nsi->first << ":" << fixed << setprecision(2)
-            << " port S1 : act " << va_act_port_stage1.get_mean() << " +/- " 
-            << va_act_port_stage1.get_std_dev() << setprecision(2) << " reqs "
-            << va_req_port_stage1.get_mean() << " +/- "<< va_req_port_stage1.get_std_dev() 
-            << " port S2 : act " << va_act_port_stage2.get_mean() << " +/- " 
-            << va_act_port_stage2.get_std_dev() << setprecision(2) << " reqs " 
-            << va_req_port_stage2.get_mean() << " +/- "<< va_req_port_stage2.get_std_dev() << endl
-            << "    bridge S1 : act " << va_act_bridge_stage1.get_mean() << " +/- " 
-            << va_act_bridge_stage1.get_std_dev() << setprecision(2) << " reqs "
-            << va_req_bridge_stage1.get_mean() << " +/- "<< va_req_bridge_stage1.get_std_dev() 
-            << " bridge S2 : act " << va_act_bridge_stage2.get_mean() << " +/- " 
-            << va_act_bridge_stage2.get_std_dev() << setprecision(2) << " reqs " 
-            << va_req_bridge_stage2.get_mean() << " +/- "<< va_req_bridge_stage2.get_std_dev() 
-            << endl;
-   }
-   out << endl;      
-
-   out << "Switch alloctor operation statistics (mean +/- s.d.):" << endl;
-   for (node_stats_t::const_iterator nsi = sw_act_stage1_port_stats.begin();
-        nsi != sw_act_stage1_port_stats.end(); ++nsi) {
-        const running_stats &sw_act_port_stage1 = sw_act_stage1_port_stats[nsi->first];
-        if(sw_act_port_stage1.get_mean() == 0) continue;
-        const running_stats &sw_req_port_stage1 = sw_req_stage1_port_stats[nsi->first];
-        const running_stats &sw_act_port_stage2 = sw_act_stage2_port_stats[nsi->first];
-        const running_stats &sw_req_port_stage2 = sw_req_stage2_port_stats[nsi->first];
-        const running_stats &sw_act_bridge_stage1 = sw_act_stage1_bridge_stats[nsi->first];
-        const running_stats &sw_req_bridge_stage1 = sw_req_stage1_bridge_stats[nsi->first];
-        const running_stats &sw_act_bridge_stage2 = sw_act_stage2_bridge_stats[nsi->first];
-        const running_stats &sw_req_bridge_stage2 = sw_req_stage2_bridge_stats[nsi->first];
-        out << "    SW in node " << nsi->first << ":" << fixed << setprecision(2)
-            << " port S1 : act " << sw_act_port_stage1.get_mean() << " +/- " 
-            << sw_act_port_stage1.get_std_dev() << setprecision(2) << " reqs "
-            << sw_req_port_stage1.get_mean() << " +/- "<< sw_req_port_stage1.get_std_dev() 
-            << " port S2 : act " << sw_act_port_stage2.get_mean() << " +/- " 
-            << sw_act_port_stage2.get_std_dev() << setprecision(2) << " reqs " 
-            << sw_req_port_stage2.get_mean() << " +/- "<< sw_req_port_stage2.get_std_dev() << endl
-            << "    bridge S1 : act " << sw_act_bridge_stage1.get_mean() << " +/- " 
-            << sw_act_bridge_stage1.get_std_dev() << setprecision(2) << " reqs "
-            << sw_req_bridge_stage1.get_mean() << " +/- "<< sw_req_bridge_stage1.get_std_dev() 
-            << " bridge S2 : act " << sw_act_bridge_stage2.get_mean() << " +/- " 
-            << sw_act_bridge_stage2.get_std_dev() << setprecision(2) << " reqs " 
-            << sw_req_bridge_stage2.get_mean() << " +/- "<< sw_req_bridge_stage2.get_std_dev() 
-            << endl;
-   }
-   out << endl; 
-
    out << "Router Power using Orion2.0: " << endl;
    double total_router_power = 0;   
    for (vq_node_counter_t::const_iterator ni = vqwr_port.begin();
