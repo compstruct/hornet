@@ -1,6 +1,6 @@
-AM_CPPFLAGS = $(BOOST_CPPFLAGS) \
-              -I$(top_srcdir)/src/power \
-              -I$(top_srcdir)/src/net
+AM_CPPFLAGS = -I$(top_srcdir)/src/power \
+              -I$(top_srcdir)/src/net \
+              $(BOOST_CPPFLAGS)
 AM_LDFLAGS = $(BOOST_LDFLAGS) -static
 AM_CXXFLAGS = -Wall -Werror
 
