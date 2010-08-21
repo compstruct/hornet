@@ -160,7 +160,7 @@ void crossbar::tick_positive_edge() throw(err) {
         tie(out_node,out_q) = eq->get_id();
         LOG(log,12) << "[xbar " << id << "]     egress queue "
             << eq->get_id() << endl;
-        if (!eq->back_is_full()) {
+        if (eq->back_is_powered_on() && !eq->back_is_full()) {
             ++num_eqs;
             for (vqs_t::iterator iqi = ingress_ready_qs.begin();
                  iqi != ingress_ready_qs.end(); ++iqi) {

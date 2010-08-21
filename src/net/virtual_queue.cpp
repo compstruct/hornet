@@ -22,9 +22,11 @@ virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
       front_head(0), front_stale_tail(0),
       front_egress_packet_flits_remaining(0), front_old_flow(),
       front_next_hop_node(), front_next_hop_flow(), front_next_hop_vq(),
+      front_powered(true),
       back_stale_head(0), back_tail(0),
       back_ingress_packet_flits_remaining(0),
       back_stale_egress_packet_flits_remaining(0),
+      back_powered(true),
       vc_alloc(new_vc_alloc), pressures(new_pt),
       stats(st), vcd(new_vcd), log(l) {
     if (vcd) {
@@ -166,6 +168,16 @@ void virtual_queue::front_set_vq_id(const virtual_queue_id &vqid) throw() {
     front_next_hop_vq = vqid;
 }
 
+void virtual_queue::front_power_on() throw() {
+    unique_lock<recursive_mutex> lock(front_mutex);
+    front_powered = true;
+}
+
+void virtual_queue::front_power_off() throw() {
+    unique_lock<recursive_mutex> lock(front_mutex);
+    front_powered = false;
+}
+
 bool virtual_queue::back_is_full() const throw() {
     unique_lock<recursive_mutex> lock(back_mutex);
     return ((back_tail + 1) % buffer_size) == back_stale_head;
@@ -216,6 +228,11 @@ bool virtual_queue::back_has_old_flow(const flow_id &f) throw() {
     return false;
 }
 
+bool virtual_queue::back_is_powered_on() const throw() {
+    unique_lock<recursive_mutex> lock(back_mutex);
+    return back_powered;
+}
+
 void virtual_queue::tick_positive_edge() throw() { }
 
 // synchronize front and back views of the virtual queue
@@ -230,6 +247,7 @@ void virtual_queue::tick_negative_edge() throw() {
             reinterpret_cast<const head_flit &>(contents[front_head]);
         front_old_flow = h.get_flow_id();
     }
+    back_powered = front_powered;
     back_stale_head = front_head;
     front_stale_tail = back_tail;
     back_stale_egress_packet_flits_remaining =

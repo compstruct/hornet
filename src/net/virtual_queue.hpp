@@ -55,6 +55,7 @@ public:
     const virtual_queue_node_id &get_id() const throw();
     node_id get_src_node_id() const throw();
     ingress_id get_ingress_id() const throw();
+
     // methods reading the front ("read end") of the queue
     bool front_is_empty() const throw();
     bool front_is_head_flit() const throw();
@@ -69,9 +70,12 @@ public:
     void front_pop() throw();
     void front_set_next_hop(const node_id &nid, const flow_id &fid) throw();
     void front_set_vq_id(const virtual_queue_id &vqid) throw();
+    void front_power_on() throw();
+    void front_power_off() throw();
 
     // methods reading/modifying the back ("write end") of the queue
     void back_push(const flit &) throw();
+    bool back_is_powered_on() const throw();
     bool back_is_full() const throw();
     bool back_is_mid_packet() const throw();
 
@@ -115,12 +119,14 @@ private:
     flow_id front_next_hop_flow; // invalid iff not yet routed
     virtual_queue_id front_next_hop_vq; // invalid if not yet assigned
     vector<virtual_queue_node_id> front_vqs_to_release_at_negedge;
+    bool front_powered;
 
     // accessed by back (push) end
     buffer_t::size_type back_stale_head;
     buffer_t::size_type back_tail; // one slot past tail actually
     uint32_t back_ingress_packet_flits_remaining; // 0 iff packet complete
     uint32_t back_stale_egress_packet_flits_remaining; // 0 iff packet complete
+    bool back_powered;
 
     shared_ptr<channel_alloc> vc_alloc;
     shared_ptr<pressure_tracker> pressures;

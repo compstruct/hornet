@@ -14,7 +14,8 @@ node::node(node_id new_id, uint32_t memsz, shared_ptr<router> new_rt,
            logger &l, shared_ptr<random_gen> ran) throw()
     : id(new_id), flits_per_queue(memsz), rt(new_rt), vc_alloc(new_vca),
       pressures(new pressure_tracker(new_id, l)), ingresses(), egresses(),
-      xbar(new_id, st, v, l, ran), queue_ids(), stats(st), vcd(v), log(l)  {
+      xbar(new_id, st, v, l, ran), pwr_ctl(new_id, st, v, l),
+      queue_ids(), stats(st), vcd(v), log(l)  {
     LOG(log,3) << "node " << id << " created with " << dec << memsz
         << " flit" << (memsz == 1 ? "" : "s") << " per queue" << endl;
 }
@@ -103,6 +104,7 @@ void node::tick_positive_edge() throw(err) {
     rt->route();
     vc_alloc->allocate();
     xbar.tick_positive_edge();
+    pwr_ctl.adjust_power();
 }
 
 void node::tick_negative_edge() throw(err) {

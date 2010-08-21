@@ -20,6 +20,7 @@ libdarnet_la_SOURCES = \
     egress_id.hpp egress_id.cpp \
     egress.hpp egress.cpp \
     crossbar.hpp crossbar.cpp \
+    power_controller.hpp power_controller.cpp \
     node.hpp node.cpp \
     dma.hpp dma.cpp \
     bridge.hpp bridge.cpp \

@@ -13,6 +13,7 @@
 #include "ingress.hpp"
 #include "egress.hpp"
 #include "crossbar.hpp"
+#include "power_controller.hpp"
 
 using namespace std;
 using namespace boost;
@@ -52,6 +53,7 @@ private:
     ingresses_t ingresses;
     egresses_t egresses;
     crossbar xbar;
+    power_controller pwr_ctl;
     set<virtual_queue_id> queue_ids;
     shared_ptr<tile_statistics> stats;
     shared_ptr<vcd_writer> vcd;
