@@ -20,5 +20,6 @@ darsim_LDADD = \
     $(top_builddir)/src/cpu/libdarmips.la \
     $(top_builddir)/src/pe/libdarpe.la \
     $(top_builddir)/src/net/libdarnet.la \
+    $(top_builddir)/src/exec/libdarexec.la \
     $(top_builddir)/src/power/libdarpower.la \
     $(top_builddir)/src/common/libdarcommon.la

@@ -81,6 +81,7 @@ AC_OUTPUT(\
     src/pe/Makefile \
     src/cpu/Makefile \
     src/inject/Makefile \
+    src/exec/Makefile \
     src/sys/Makefile \
     src/sim/Makefile \
     src/tools/Makefile \
