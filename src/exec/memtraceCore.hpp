@@ -4,9 +4,6 @@
 #ifndef __MEMTRACE_CORE_HPP__
 #define __MEMTRACE_CORE_HPP__
 
-/* TODO (Phase 2) : port the em2core (working on the memory trace) */
-/*                : add ra support */
-
 #include <boost/shared_ptr.hpp>
 #include "id_factory.hpp"
 #include "logger.hpp"
@@ -38,16 +35,16 @@ public:
                  shared_ptr<tile_statistics> stats, logger &log,
                  shared_ptr<random_gen> ran,
                  shared_ptr<memtraceThreadPool> pool,
-                 /* TODO progress marker */
+                 /* TODO (Later) progress marker */
                  memtraceCore_cfg_t cfgs) throw(err);
     virtual ~memtraceCore() throw();
-
-    /* set memory */
 
     virtual void tick_positive_edge() throw(err);
     virtual void tick_negative_edge() throw(err);
     virtual uint64_t next_pkt_time() throw(err);
     virtual bool is_drained() const throw();
+
+    void spawn(memtraceThread* thread);
 
 private:
     map<uint32_t, flow_id> flow_ids;
@@ -56,28 +53,41 @@ private:
     memtraceCore_cfg_t m_cfgs;
 
     /* Execution lanes */
+    typedef enum {
+        LANE_EMPTY = 0,
+        LANE_IDLE,
+        LANE_BUSY,
+        LANE_MIG,
+        LANE_WAIT
+    } lane_status_t;
+
     typedef struct {
-        bool empty;
+        lane_status_t status;
         bool evictable;
-        bool busy; 
         memtraceThread* thread;
-        uint32_t remaining_alu_time;
-        mem_req_id_t mem_req_id;
     } lane_entry_t;
+
     typedef vector<lane_entry_t>::size_type lane_idx_t;
+
     vector<lane_entry_t> m_lanes;
+    lane_idx_t m_lane_ptr;
     uint32_t m_num_threads;
-    uint32_t m_num_native_threads;
-    uint32_t m_num_guest_threads;
+    uint32_t m_num_natives;
+    uint32_t m_num_guests;
 
     /* Thread pool */
     shared_ptr<memtraceThreadPool> m_threads;
+
+    /* Native contexts */
+    set<mth_id_t> m_native_list;
 
     /* Memory message queue */
 
     /* Running state */
 
     /* Local methods */
+    void load_thread(memtraceThread* thread);
+    void unload_thread(lane_idx_t idx);
     void release_xmit_buffer();
 };
 

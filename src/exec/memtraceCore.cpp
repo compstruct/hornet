@@ -12,7 +12,13 @@ memtraceCore::memtraceCore(const pe_id &id, const uint64_t &t,
                            memtraceCore_cfg_t cfgs) throw(err) 
     : core(id, t, pif, st, l, r),
       m_cfgs(cfgs),
-      m_threads(pool) {}
+      m_threads(pool) {
+    for (unsigned int i = 0; i < m_cfgs.max_threads; ++i) {
+        lane_entry_t entry;
+        entry.status = LANE_EMPTY;
+        m_lanes.push_back(entry);
+    }
+}
 
 memtraceCore::~memtraceCore() throw() {}
 
@@ -54,16 +60,45 @@ void memtraceCore::tick_positive_edge() throw(err) {
         /* if serve_time == 0, put request message into mesage queue : ->WAIT */
 
     /* fetch & execute */
-        /* round robin to the first one with status==idle || status==busy */
-        /* if status==idle, fetch and --alu_time, status=busy */
-        /* if status==busy && alu_time == 0 && memory && !em && !ra */
-            /* put a request to l1 memory (->INIT) and mark it in the lane */
-        /* if status==busy && alu_time == 0 && memory && !em && ra */
-            /* put a request to remote memory (->INIT) and mark it in the lane */
-        /* else if status==busy && alu_time == 0 && memory && em, status=migrate */
-        /* else if status==busy && alu_time == 0 && !memory, status=idle */
-        /* else if status==busy && alu_time > 0, --alu_time */
+    if (m_num_threads > 0) { 
 
+        /* Cycle-wise Round Robin */
+        do { 
+            m_lane_ptr = (m_lane_ptr + 1) % m_cfgs.max_threads; 
+        } while (m_lanes[m_lane_ptr].status == LANE_EMPTY);
+        lane_entry_t &cur = m_lanes[m_lane_ptr];
+       
+        /* fetch */
+        if (cur.status == LANE_IDLE) {
+            cur.thread->fetch();
+            cur.status = LANE_BUSY;
+        }
+
+        /* work on ALU */
+        if (cur.status == LANE_BUSY) {
+
+            cur.thread->execute();
+
+            if (cur.thread->remaining_alu_cycle() == 0) {
+                /* finished execution */
+                if (cur.thread->type() == memtraceThread::INST_MEMORY) {
+                    // EM case (-> LANE_MIG)
+                    // RA case (request to remote, bookkeeping, -> LANE_WAIT)
+                    // local L1 case (request to local L1, bookkeeping, -> LANE_WAIT)
+                    cur.status = LANE_IDLE; 
+                } else if (cur.thread->type() == memtraceThread::INST_OTHER) {
+                    cur.status = LANE_IDLE;
+                } else {
+                    LOG(log,2) << "[memtraceCore:" << get_id().get_numeric_id() << "] "
+                               << "finished a memtraceThread " << cur.thread->get_id()
+                               << " @ " << system_time << endl;
+                    unload_thread(m_lane_ptr);
+                }
+            }
+        }
+
+    }
+                
     /* process new incoming packets */
         /* if mig_message, selectively put into a lane */
         /* if mem_message(req), put a request into remote memory (->INIT) and mark it in memory server table */
@@ -83,5 +118,47 @@ uint64_t memtraceCore::next_pkt_time() throw(err) {
 bool memtraceCore::is_drained() const throw() { 
     /* TODO : support fast forwarding */
     return false; 
+}
+
+void memtraceCore::load_thread(memtraceThread* thread) {
+    assert(m_num_threads < m_cfgs.max_threads);
+    for (lane_idx_t i = 0; i < m_lanes.size(); ++i) {
+        if (m_lanes[i].status == LANE_EMPTY) {
+            m_lanes[i].status = LANE_IDLE;
+            m_lanes[i].evictable = false;
+            m_lanes[i].thread = thread;
+            ++m_num_threads;
+            if (m_native_list.count(thread->get_id()) > 0) {
+                ++m_num_natives;
+            } else {
+                ++m_num_guests;
+            }
+            LOG(log,2) << "[memtraceCore:" << get_id().get_numeric_id() << "] "
+                       << "loaded a memtraceThread " << thread->get_id()
+                       << " @ " << system_time << endl;
+            break;
+        }
+    }
+}
+
+void memtraceCore::unload_thread(lane_idx_t idx) {
+    assert(m_lanes[idx].status != LANE_EMPTY);
+    m_lanes[idx].status = LANE_EMPTY;
+    --m_num_threads;
+    if (m_native_list.count(m_lanes[idx].thread->get_id()) > 0) {
+        --m_num_natives;
+    } else {
+        --m_num_guests;
+    }
+    LOG(log,2) << "[memtraceCore:" << get_id().get_numeric_id() << "] "
+               << "unloaded a memtraceThread " << m_lanes[idx].thread->get_id()
+               << " @ " << system_time << endl;
+}
+
+void memtraceCore::spawn(memtraceThread* thread) {
+    /* register as a native context */
+    m_native_list.insert(thread->get_id());
+    /* load to the lane */
+    load_thread(thread);
 }
 

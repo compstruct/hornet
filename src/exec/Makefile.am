@@ -13,4 +13,5 @@ libdarexec_la_SOURCES = \
     memory.hpp memory.cpp \
     core.hpp core.cpp \
     memtraceCore.hpp memtraceCore.cpp \
-    memtraceThread.hpp memtraceThread.cpp
+    memtraceThread.hpp memtraceThread.cpp \
+    memtraceThreadPool.hpp memtraceThreadPool.cpp 

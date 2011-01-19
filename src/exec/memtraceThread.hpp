@@ -4,10 +4,51 @@
 #ifndef __MEMTRACE_THREAD_HPP__
 #define __MEMTRACE_THREAD_HPP__
 
-class memtraceThread {
-};
+#include <boost/shared_ptr.hpp>
+#include "memory.hpp"
+#include "logger.hpp"
 
-class memtraceThreadPool {
+typedef uint32_t mth_id_t;
+
+class memtraceThread {
+public:
+    typedef enum {
+        INST_NONE = 0,  /* thread is finished */
+        INST_MEMORY,
+        INST_OTHER
+    } inst_type_t;
+
+public:
+    memtraceThread(mth_id_t id, logger &l);
+    ~memtraceThread();
+
+    inline mth_id_t get_id() { return m_id; }
+
+    inline bool finished() { return type() == INST_NONE; }
+
+    /* move to the next instruction */
+    void fetch();
+
+    /* decrease alu_time */
+    void execute();
+
+    /* read from current instruction */
+    inst_type_t type();
+    uint32_t remaining_alu_cycle();
+
+    /* read from current instruction - valid for INST_MEMORY only */
+    mreq_type_t rw();
+    maddr_t addr();
+    uint32_t byte_count();
+    int home();
+
+private:
+    mth_id_t m_id;
+    logger &log;
+
+    /* Temporary members */
+    inst_type_t m_cur_type;
+    uint32_t    m_remaining;
 };
 
 #endif

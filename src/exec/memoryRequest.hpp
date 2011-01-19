@@ -8,28 +8,28 @@
 
 using namespace boost;
 
-typedef uint64_t mem_req_id_t;
+typedef uint64_t mreq_id_t;
 #define INVALID_MEM_REQ_ID UINT64_MAX
 
 typedef enum {
     MEM_READ = 0,
     MEM_WRITE
-} mem_req_type_t;
+} mreq_type_t;
 
-typedef uint64_t mem_addr_t;
+typedef uint64_t maddr_t;
 
 class memory;
 
 class memoryRequest {
 public:
-    memoryRequest(mem_req_type_t rw, mem_addr_t addr, shared_ptr<void> data, uint32_t byte_count);
+    memoryRequest(mreq_type_t rw, maddr_t addr, shared_ptr<void> data, uint32_t byte_count);
     virtual ~memoryRequest();
 
     friend class memory;
 
 protected:
-    mem_req_type_t   m_rw;
-    mem_addr_t       m_addr;
+    mreq_type_t   m_rw;
+    maddr_t       m_addr;
     shared_ptr<void> m_data;
     uint32_t         m_byte_count;
 };

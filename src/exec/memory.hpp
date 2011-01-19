@@ -27,9 +27,9 @@ public:
     virtual void tick_negative_edge() = 0;
 
     /* Memory operations */
-    virtual mem_req_id_t request(memoryRequest req) = 0;
-    virtual bool ready(mem_req_id_t id) = 0;
-    virtual bool finish(mem_req_id_t id) = 0;
+    virtual mreq_id_t request(memoryRequest req) = 0;
+    virtual bool ready(mreq_id_t id) = 0;
+    virtual bool finish(mreq_id_t id) = 0;
 
     /* Network queues */
     //virtual message* nextMessageToSend() = 0;

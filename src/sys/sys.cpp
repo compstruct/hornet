@@ -24,6 +24,8 @@
 #include "sys.hpp"
 #include "ginj.hpp"
 #include "memtraceCore.hpp"
+#include "memtraceThread.hpp"
+#include "memtraceThreadPool.hpp"
 
 typedef enum {
     PE_CPU = 0,
@@ -102,6 +104,10 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     typedef event_parser::flow_starts_t flow_starts_t;
     shared_ptr<injectors_t> injectors(new injectors_t(num_nodes));
     shared_ptr<flow_starts_t> flow_starts(new flow_starts_t());
+
+    vector<shared_ptr<memtraceCore> > memtrace_cores;
+    shared_ptr<memtraceThreadPool> memtrace_thread_pool(new memtraceThreadPool());
+
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
         if (id < 0 || id >= num_nodes) throw err_bad_mem_img();
@@ -210,9 +216,10 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         shared_ptr<memtraceCore> core(new memtraceCore(id, t->get_time(), 
                                                        t->get_packet_id_factory(), t->get_statistics(),
                                                        log, ran, 
-                                                       shared_ptr<memtraceThreadPool>(),
+                                                       memtrace_thread_pool,
                                                        cfgs));
         p = core;
+        memtrace_cores.push_back(core);
 
 #endif
 
@@ -350,6 +357,21 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         }
     }
     event_parser ep(events_files, injectors, flow_starts);
+
+    /* populate thread pool */
+#ifdef TEST_EXEC
+    for (unsigned int i = 0; i < memtrace_cores.size(); ++i) { 
+        memtraceThread *thread = new memtraceThread(i, log);
+        memtrace_thread_pool->add_thread(thread);
+    }
+#endif
+
+    /* spawn threads */
+    for (unsigned int i = 0; i < memtrace_thread_pool->size(); ++i) {
+        unsigned int idx = i % memtrace_cores.size();
+        memtrace_cores[idx]->spawn(memtrace_thread_pool->thread_at(i));
+    }
+
     LOG(log,1) << "system created" << endl;
 }
 

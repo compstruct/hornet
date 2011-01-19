@@ -3,6 +3,6 @@
 
 #include "memoryRequest.hpp"
 
-memoryRequest::memoryRequest(mem_req_type_t rw, mem_addr_t addr, shared_ptr<void> data, uint32_t byte_count)
+memoryRequest::memoryRequest(mreq_type_t rw, maddr_t addr, shared_ptr<void> data, uint32_t byte_count)
     : m_rw(rw), m_addr(addr), m_data(data), m_byte_count(byte_count) { }
 

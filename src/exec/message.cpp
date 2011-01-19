@@ -8,15 +8,15 @@ message::message(void* context_ptr) {
     m_data.mig_msg.context_ptr = context_ptr;
 }
 
-message::message(mem_msg_dir_t dir, mem_req_id_t req_id, mem_req_type_t rw, mem_addr_t addr, uint32_t num_bytes, bool cacheable, void* data) {
+message::message(mmsg_dir_t dir, mreq_id_t req_id, mreq_type_t rw, maddr_t addr, uint32_t num_bytes, bool cacheable, void* data) {
     m_type = MSG_MEM;
-    m_data.mem_msg.dir = dir;
-    m_data.mem_msg.req_id = req_id;
-    m_data.mem_msg.rw = rw;
-    m_data.mem_msg.addr = addr;
-    m_data.mem_msg.num_bytes = num_bytes;
-    m_data.mem_msg.cacheable = cacheable;
-    m_data.mem_msg.data = data;
+    m_data.mmsg.dir = dir;
+    m_data.mmsg.req_id = req_id;
+    m_data.mmsg.rw = rw;
+    m_data.mmsg.addr = addr;
+    m_data.mmsg.num_bytes = num_bytes;
+    m_data.mmsg.cacheable = cacheable;
+    m_data.mmsg.data = data;
 }
 
 message* new_message_with_context(void* context_ptr) {
@@ -24,12 +24,12 @@ message* new_message_with_context(void* context_ptr) {
     return newMessage;
 }
 
-message* new_message_with_memory_request(mem_req_id_t req_id, mem_req_type_t rw, mem_addr_t addr, uint32_t num_bytes, bool cacheable, void* data) {
+message* new_message_with_memory_request(mreq_id_t req_id, mreq_type_t rw, maddr_t addr, uint32_t num_bytes, bool cacheable, void* data) {
     message* newMessage = new message(MEM_REQ, req_id, rw, addr, num_bytes, cacheable, data);
     return newMessage;
 }
 
-message* new_message_with_memory_reply(mem_req_id_t req_id, mem_req_type_t rw, mem_addr_t addr, uint32_t num_bytes, bool cacheable, void* data) {
+message* new_message_with_memory_reply(mreq_id_t req_id, mreq_type_t rw, maddr_t addr, uint32_t num_bytes, bool cacheable, void* data) {
     message* newMessage = new message(MEM_REPLY, req_id, rw, addr, num_bytes, cacheable, data);
     return newMessage;
 }

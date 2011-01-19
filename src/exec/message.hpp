@@ -15,26 +15,26 @@ typedef enum {
 typedef enum {
     MEM_REQ = 0,
     MEM_REPLY
-} mem_msg_dir_t;
+} mmsg_dir_t;
 
 typedef struct {
     void* context_ptr;
 } mig_msg_t;
 
 typedef struct {
-    mem_msg_dir_t dir;
-    mem_req_id_t req_id;
-    mem_req_type_t rw;
-    mem_addr_t addr;
+    mmsg_dir_t dir;
+    mreq_id_t req_id;
+    mreq_type_t rw;
+    maddr_t addr;
     uint32_t num_bytes;
     bool cacheable;
     void* data;
-} mem_msg_t;
+} mmsg_t;
 
 class message {
 public:
     message(void* thread_ptr);
-    message(mem_msg_dir_t dir, mem_req_id_t req_id, mem_req_type_t rw, mem_addr_t addr, uint32_t num_bytes, bool cacheable, void* data);
+    message(mmsg_dir_t dir, mreq_id_t req_id, mreq_type_t rw, maddr_t addr, uint32_t num_bytes, bool cacheable, void* data);
     ~message();
 
     /* Introspection */
@@ -42,12 +42,12 @@ public:
 
     /* Retrieval */
     inline mig_msg_t get_mig_message() { assert(m_type == MSG_MIG); return m_data.mig_msg; }
-    inline mem_msg_t get_mem_message() { assert(m_type == MSG_MEM); return m_data.mem_msg; }
+    inline mmsg_t get_mmessage() { assert(m_type == MSG_MEM); return m_data.mmsg; }
 
 protected:
     typedef union {
         mig_msg_t mig_msg;
-        mem_msg_t mem_msg;
+        mmsg_t mmsg;
     } data_t;
 
     msg_type_t m_type;
@@ -56,8 +56,8 @@ protected:
 };
 
 message* new_message_with_context(void* context_ptr);
-message* new_message_With_memory_request(mem_req_id_t req_id, mem_req_type_t rw, mem_addr_t addr, uint32_t num_bytes, bool cacheable, void* data);
-message* new_message_with_memory_reply(mem_req_id_t req_id, mem_req_type_t rw, mem_addr_t addr, uint32_t num_bytes, bool cacheable, void* data);
+message* new_message_With_memory_request(mreq_id_t req_id, mreq_type_t rw, maddr_t addr, uint32_t num_bytes, bool cacheable, void* data);
+message* new_message_with_memory_reply(mreq_id_t req_id, mreq_type_t rw, maddr_t addr, uint32_t num_bytes, bool cacheable, void* data);
 
 /* TODO (Phase 6) : Implement message pool for performance optimization (elimiating malloc/deletes) */
 
