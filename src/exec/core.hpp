@@ -17,6 +17,8 @@
 using namespace std;
 using namespace boost;
 
+/* core class provides common constructor process and connect process */
+
 class core : public pe {
 public:
     core(const pe_id &id, const uint64_t &system_time,
@@ -31,9 +33,14 @@ public:
     /* Virtual functions */
     virtual void tick_positive_edge() throw(err) = 0;
     virtual void tick_negative_edge() throw(err) = 0;
-    virtual void set_stop_darsim() throw(err) = 0;
     virtual uint64_t next_pkt_time() throw(err) = 0;
     virtual bool is_drained() const throw() = 0;
+
+    /* Is not used */
+    virtual void add_packet(uint64_t time, const flow_id &flow, uint32_t len) throw(err);
+    virtual bool work_queued() throw(err);
+    virtual bool is_ready_to_offer() throw(err);
+    virtual void set_stop_darsim() throw(err);
 
     /* TODO (Phase 5) : Design configurator methods */
 

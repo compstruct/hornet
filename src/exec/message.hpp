@@ -38,11 +38,11 @@ public:
     ~message();
 
     /* Introspection */
-    inline msg_type_t getType() {return m_type;}
+    inline msg_type_t get_type() {return m_type;}
 
     /* Retrieval */
-    inline mig_msg_t getMigMsg() { assert(m_type == MSG_MIG); return m_data.mig_msg; }
-    inline mem_msg_t getMemMsg() { assert(m_type == MSG_MEM); return m_data.mem_msg; }
+    inline mig_msg_t get_mig_message() { assert(m_type == MSG_MIG); return m_data.mig_msg; }
+    inline mem_msg_t get_mem_message() { assert(m_type == MSG_MEM); return m_data.mem_msg; }
 
 protected:
     typedef union {
@@ -55,9 +55,9 @@ protected:
 
 };
 
-message* messageWithContext(void* context_ptr);
-message* messageWithMemoryRequest(mem_req_id_t req_id, mem_req_type_t rw, mem_addr_t addr, uint32_t num_bytes, bool cacheable, void* data);
-message* messageWithMemoryReply(mem_req_id_t req_id, mem_req_type_t rw, mem_addr_t addr, uint32_t num_bytes, bool cacheable, void* data);
+message* new_message_with_context(void* context_ptr);
+message* new_message_With_memory_request(mem_req_id_t req_id, mem_req_type_t rw, mem_addr_t addr, uint32_t num_bytes, bool cacheable, void* data);
+message* new_message_with_memory_reply(mem_req_id_t req_id, mem_req_type_t rw, mem_addr_t addr, uint32_t num_bytes, bool cacheable, void* data);
 
 /* TODO (Phase 6) : Implement message pool for performance optimization (elimiating malloc/deletes) */
 

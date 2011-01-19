@@ -9,5 +9,8 @@ noinst_LTLIBRARIES = libdarexec.la
 
 libdarexec_la_SOURCES = \
     message.hpp message.cpp \
+    memoryRequest.hpp memoryRequest.cpp \
     memory.hpp memory.cpp \
-    core.hpp core.cpp
+    core.hpp core.cpp \
+    memtraceCore.hpp memtraceCore.cpp \
+    memtraceThread.hpp memtraceThread.cpp

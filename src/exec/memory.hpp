@@ -6,26 +6,17 @@
 
 #include <boost/shared_ptr.hpp>
 #include "bridge.hpp"
-#include "id_factory.hpp"
 #include "logger.hpp"
 #include "statistics.hpp"
 #include "random.hpp"
+#include "memoryRequest.hpp"
 
 using namespace std;
 using namespace boost;
 
-typedef uint64_t mem_req_id_t;
-
-typedef enum {
-    MEM_READ = 0,
-    MEM_WRITE
-} mem_req_type_t;
-
-typedef uint64_t mem_addr_t;
-
 class memory {
 public:
-    memory(const uint32_t numeric_id, const uint32_t num_tiles,
+    memory(const uint32_t numeric_id, 
            const uint64_t &system_time,
            logger &log,
            shared_ptr<random_gen> ran);
@@ -36,7 +27,7 @@ public:
     virtual void tick_negative_edge() = 0;
 
     /* Memory operations */
-    virtual mem_req_id_t request(mem_req_type_t rw, mem_addr_t addr, void* data, uint32_t num_bytes, bool cacheable) = 0;
+    virtual mem_req_id_t request(memoryRequest req) = 0;
     virtual bool ready(mem_req_id_t id) = 0;
     virtual bool finish(mem_req_id_t id) = 0;
 
@@ -44,6 +35,9 @@ public:
     //virtual message* nextMessageToSend() = 0;
 
 protected:
+    /* numeric id */
+    uint32_t m_id;
+
     /* Global time */
     const uint64_t &system_time;
 
@@ -52,10 +46,6 @@ protected:
     logger &log;
     shared_ptr<random_gen> ran;
 
-    /* Memory */
-    shared_ptr<id_factory<mem_req_id_t> > m_req_id_factory;
-
-    /* Network */
 };
 
 /* TODO (Phase 4) : Design memory stats */

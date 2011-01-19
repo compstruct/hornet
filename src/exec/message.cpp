@@ -19,17 +19,17 @@ message::message(mem_msg_dir_t dir, mem_req_id_t req_id, mem_req_type_t rw, mem_
     m_data.mem_msg.data = data;
 }
 
-message* messageWithContext(void* context_ptr) {
+message* new_message_with_context(void* context_ptr) {
     message* newMessage = new message(context_ptr);
     return newMessage;
 }
 
-message* messageWithMemoryRequest(mem_req_id_t req_id, mem_req_type_t rw, mem_addr_t addr, uint32_t num_bytes, bool cacheable, void* data) {
+message* new_message_with_memory_request(mem_req_id_t req_id, mem_req_type_t rw, mem_addr_t addr, uint32_t num_bytes, bool cacheable, void* data) {
     message* newMessage = new message(MEM_REQ, req_id, rw, addr, num_bytes, cacheable, data);
     return newMessage;
 }
 
-message* messageWithMemoryReply(mem_req_id_t req_id, mem_req_type_t rw, mem_addr_t addr, uint32_t num_bytes, bool cacheable, void* data) {
+message* new_message_with_memory_reply(mem_req_id_t req_id, mem_req_type_t rw, mem_addr_t addr, uint32_t num_bytes, bool cacheable, void* data) {
     message* newMessage = new message(MEM_REPLY, req_id, rw, addr, num_bytes, cacheable, data);
     return newMessage;
 }

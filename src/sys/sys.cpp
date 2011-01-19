@@ -23,6 +23,7 @@
 #include "id_factory.hpp"
 #include "sys.hpp"
 #include "ginj.hpp"
+#include "memtraceCore.hpp"
 
 typedef enum {
     PE_CPU = 0,
@@ -155,6 +156,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         if (pe_type_word >= NUM_PES) throw err_bad_mem_img();
         pe_type_t pe_type = static_cast<pe_type_t>(pe_type_word);
         shared_ptr<pe> p;
+#ifndef TEST_EXEC
         switch (pe_type) {
         case PE_CPU: {
             uint32_t mem_start = read_word(img);
@@ -191,6 +193,29 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         default:
             throw err_bad_mem_img();
         }
+#else 
+        if (pe_type == PE_CPU) {
+            read_word(img);
+            read_word(img);
+            read_word(img);
+            read_word(img);
+        }
+        memtraceCore::memtraceCore_cfg_t cfgs;
+        cfgs.max_threads = 2;
+        cfgs.flits_per_mig = 2;
+        cfgs.flits_per_ra_with_data = 1;
+        cfgs.flits_per_ra_without_data = 1;
+        cfgs.em_type = memtraceCore::EM_NONE;
+        cfgs.ra_type = memtraceCore::RA_NONE;
+        shared_ptr<memtraceCore> core(new memtraceCore(id, t->get_time(), 
+                                                       t->get_packet_id_factory(), t->get_statistics(),
+                                                       log, ran, 
+                                                       shared_ptr<memtraceThreadPool>(),
+                                                       cfgs));
+        p = core;
+
+#endif
+
         pes[id] = p;
         t->add(p);
         p->connect(b);

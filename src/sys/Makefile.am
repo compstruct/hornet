@@ -3,6 +3,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/src/power \
               -I$(top_srcdir)/src/pe \
               -I$(top_srcdir)/src/cpu \
               -I$(top_srcdir)/src/inject \
+              -I$(top_srcdir)/src/exec \
 	      $(BOOST_CPPFLAGS)
 AM_LDFLAGS = $(BOOST_LDFLAGS)
 AM_CXXFLAGS = -Wall -Werror
