@@ -22,8 +22,11 @@ void memtraceThreadPool::add_thread(memtraceThread* p) {
 memtraceThread* memtraceThreadPool::find(mth_id_t id) {
     /* if a thread may be added or removed during simulation, */
     /* it must be protected by a lock (which means slow) */
-    assert(m_threads.count(id) > 0);
-    return m_threads[id];
+    if (m_threads.count(id) > 0) {
+        return m_threads[id];
+    } else {
+        return NULL;
+    }
 }
 
 memtraceThread* memtraceThreadPool::thread_at(uint32_t n) {

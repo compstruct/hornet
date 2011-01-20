@@ -67,8 +67,41 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
     if (in->bad()) throw err_bad_mem_img();
 }
 
+static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_ptr<memtraceThreadPool> pool, logger &log) {
+    for (vector<string>::const_iterator fi = files->begin(); fi != files->end(); ++fi) {
+        ifstream input(fi->c_str());
+        if (input.fail()) throw err_parse(*fi, "cannot open file");
+        while (input.good()) {
+            memtraceThread *thread;
+            string line, word; 
+            getline(input, line);
+            istringstream l(line);
+            l >> skipws;
+            l >> word;
+            if (strcmp(word.c_str(), "Thread") == 0) {
+                uint32_t th_id, interval;
+                int home;
+                maddr_t addr, pc;
+                char rw;
+                try {
+                    l >> hex >> th_id >> addr >> rw >> pc >> home >> interval;
+                } catch (const err &e) {
+                    assert(false);
+                }
+                thread = pool->find(th_id);
+                if (thread == NULL) {
+                    thread = new memtraceThread(th_id, log);
+                    pool->add_thread(thread);
+                }
+                thread->add_non_mem_inst(interval);
+                thread->add_mem_inst(1, (rw == 'W')? true : false, addr, home, 4); /* 4byte word is assumed */
+            }
+        }
+    }
+}
+
 sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
-         const uint64_t &stats_t0, shared_ptr<vector<string> > events_files,
+         const uint64_t &stats_t0, shared_ptr<vector<string> > events_files, shared_ptr<vector<string> > memtrace_files,
          shared_ptr<vcd_writer> vcd,
          logger &new_log, uint32_t seed, bool use_graphite_inj,
          uint64_t new_test_flags) throw(err)
@@ -358,13 +391,8 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     }
     event_parser ep(events_files, injectors, flow_starts);
 
-    /* populate thread pool */
-#ifdef TEST_EXEC
-    for (unsigned int i = 0; i < memtrace_cores.size(); ++i) { 
-        memtraceThread *thread = new memtraceThread(i, log);
-        memtrace_thread_pool->add_thread(thread);
-    }
-#endif
+    /* populate memtrace thread pool from traces */
+    create_memtrace_threads(memtrace_files, memtrace_thread_pool, log);
 
     /* spawn threads */
     for (unsigned int i = 0; i < memtrace_thread_pool->size(); ++i) {

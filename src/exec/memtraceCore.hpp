@@ -12,9 +12,7 @@
 #include "core.hpp"
 #include "memory.hpp"
 #include "memtraceThread.hpp"
-
-class memtraceThread;
-class memtraceThreadPool;
+#include "memtraceThreadPool.hpp"
 
 class memtraceCore : public core {
 public:

@@ -71,7 +71,14 @@ void memtraceCore::tick_positive_edge() throw(err) {
         /* fetch */
         if (cur.status == LANE_IDLE) {
             cur.thread->fetch();
-            cur.status = LANE_BUSY;
+            if (cur.thread->type() == memtraceThread::INST_NONE) {
+                LOG(log,2) << "[memtraceCore:" << get_id().get_numeric_id() << "] "
+                           << "finished a memtraceThread " << cur.thread->get_id()
+                           << " @ " << system_time << endl;
+                unload_thread(m_lane_ptr);
+            } else {
+                cur.status = LANE_BUSY;
+            }
         }
 
         /* work on ALU */
@@ -88,11 +95,6 @@ void memtraceCore::tick_positive_edge() throw(err) {
                     cur.status = LANE_IDLE; 
                 } else if (cur.thread->type() == memtraceThread::INST_OTHER) {
                     cur.status = LANE_IDLE;
-                } else {
-                    LOG(log,2) << "[memtraceCore:" << get_id().get_numeric_id() << "] "
-                               << "finished a memtraceThread " << cur.thread->get_id()
-                               << " @ " << system_time << endl;
-                    unload_thread(m_lane_ptr);
                 }
             }
         }
@@ -117,7 +119,7 @@ uint64_t memtraceCore::next_pkt_time() throw(err) {
 
 bool memtraceCore::is_drained() const throw() { 
     /* TODO : support fast forwarding */
-    return false; 
+    return m_threads->empty();
 }
 
 void memtraceCore::load_thread(memtraceThread* thread) {

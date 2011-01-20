@@ -24,7 +24,7 @@ public:
 
     inline mth_id_t get_id() { return m_id; }
 
-    inline bool finished() { return type() == INST_NONE; }
+    bool finished();
 
     /* move to the next instruction */
     void fetch();
@@ -42,13 +42,26 @@ public:
     uint32_t byte_count();
     int home();
 
+    /* add instructions */
+    void add_mem_inst(uint32_t alu_cost, bool write, maddr_t addr, int home, uint32_t byte_count);
+    void add_non_mem_inst(uint32_t alu_cost);
+
 private:
+    typedef struct {
+        uint32_t remaining_alu_cost;
+        inst_type_t type;
+        mreq_type_t rw;
+        maddr_t addr;
+        int home;
+        uint32_t byte_count;
+    } inst_t;
+
     mth_id_t m_id;
     logger &log;
 
-    /* Temporary members */
-    inst_type_t m_cur_type;
-    uint32_t    m_remaining;
+    inst_t m_cur;
+    vector<inst_t> m_insts;
+
 };
 
 #endif

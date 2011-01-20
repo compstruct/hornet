@@ -61,6 +61,7 @@ static uint32_t fresh_random_seed() {
 shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
                            const uint64_t &stats_start,
                            shared_ptr<vector<string> > evt_files,
+                           shared_ptr<vector<string> > memtrace_files,
                            uint32_t random_seed,
                            uint32_t test_flags) throw(err) {
     shared_ptr<ifstream> img(new ifstream(file.c_str(), ios::in | ios::binary));
@@ -78,7 +79,7 @@ shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
         throw err_parse(file, msg.str());
     }
     shared_ptr<sys> s(new sys(sys_time, img, stats_start,
-                              evt_files, vcd, syslog, random_seed, false,
+                              evt_files, memtrace_files, vcd, syslog, random_seed, false,
                               test_flags));
     img->close();
     return s;
@@ -106,6 +107,8 @@ int main(int argc, char **argv) {
          "do not fast-forward when system is drained")
         ("events", po::value<vector<string> >()->composing(),
          "read event schedule from file arg")
+        ("memory-traces", po::value<vector<string> >()->composing(),
+         "read memory traces from file arg")
         ("log-file", po::value<vector<string> >()->composing(),
          "write a log to file arg")
         ("vcd-file", po::value<string>(),
@@ -247,6 +250,13 @@ int main(int argc, char **argv) {
         copy(fns.begin(), fns.end(),
              back_insert_iterator<vector<string> >(*events_files));
     }
+    shared_ptr<vector<string> > memtraces_files;
+    if (opts.count("memory-traces")) {
+        memtraces_files = shared_ptr<vector<string> >(new vector<string>());
+        vector<string> fns = opts["memory-traces"].as<vector<string> >();
+        copy(fns.begin(), fns.end(),
+             back_insert_iterator<vector<string> >(*memtraces_files));
+    }
     if (opts.count("no-stats")) {
         report_stats = false;
     }
@@ -301,7 +311,7 @@ int main(int argc, char **argv) {
         test_flags = opts["test-flags"].as<uint64_t>();
     }
     try {
-        s = new_system(0, mem_image, stats_start, events_files,
+        s = new_system(0, mem_image, stats_start, events_files, memtraces_files,
                        random_seed, test_flags);
         stats = s->get_statistics();
     } catch (const err_parse &e) {
