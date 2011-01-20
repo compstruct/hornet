@@ -6,10 +6,11 @@
 
 #include <boost/shared_ptr.hpp>
 
+using namespace std;
 using namespace boost;
 
 typedef uint64_t mreq_id_t;
-#define INVALID_MEM_REQ_ID UINT64_MAX
+#define MAX_INVALID_MREQ_ID 0
 
 typedef enum {
     MEM_READ = 0,
@@ -18,19 +19,17 @@ typedef enum {
 
 typedef uint64_t maddr_t;
 
-class memory;
-
 class memoryRequest {
 public:
-    memoryRequest(mreq_type_t rw, maddr_t addr, shared_ptr<void> data, uint32_t byte_count);
+    memoryRequest(mreq_type_t rw, maddr_t addr, shared_ptr<uint32_t> data, uint32_t byte_count);
     virtual ~memoryRequest();
 
-    friend class memory;
+    inline maddr_t get_addr() { return m_addr; }
 
 protected:
     mreq_type_t   m_rw;
     maddr_t       m_addr;
-    shared_ptr<void> m_data;
+    shared_ptr<uint32_t> m_data;
     uint32_t         m_byte_count;
 };
 

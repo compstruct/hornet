@@ -22,6 +22,10 @@ void core::connect(shared_ptr<bridge> net_bridge) throw(err) {
     copy(qs->begin(), qs->end(), back_insert_iterator<vector<uint32_t> >(m_queue_ids));
 }
 
+void core::add_first_level_memory(shared_ptr<memory> mem) {
+    m_first_memories.push_back(mem);
+}
+
 void core::release_xmit_buffer() {
     /* release xmit buffer for injection if transmission is done */
     for (map<uint32_t, uint64_t*>::iterator i = m_xmit_buffer.begin(); i != m_xmit_buffer.end(); ++i) {

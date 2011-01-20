@@ -11,6 +11,9 @@ libdarexec_la_SOURCES = \
     message.hpp message.cpp \
     memoryRequest.hpp memoryRequest.cpp \
     memory.hpp memory.cpp \
+    cache.hpp cache.cpp \
+    remoteMemory.hpp remoteMemory.cpp \
+    dramController.hpp dramController.cpp \
     core.hpp core.cpp \
     memtraceCore.hpp memtraceCore.cpp \
     memtraceThread.hpp memtraceThread.cpp \

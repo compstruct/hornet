@@ -7,7 +7,6 @@
 #include <boost/shared_ptr.hpp>
 #include "bridge.hpp"
 #include "logger.hpp"
-#include "statistics.hpp"
 #include "random.hpp"
 #include "memoryRequest.hpp"
 
@@ -23,7 +22,7 @@ public:
     virtual ~memory();
 
     /* Memory operations - users only use these functions */
-    virtual mreq_id_t request(memoryRequest req) = 0;
+    virtual mreq_id_t request(shared_ptr<memoryRequest> req) = 0;
     virtual bool ready(mreq_id_t id) = 0;
     virtual bool finish(mreq_id_t id) = 0;
 
@@ -32,6 +31,10 @@ public:
     virtual void initiate() = 0;
     virtual void update() = 0;
     virtual void process() = 0;
+
+protected:
+    mreq_id_t take_new_mreq_id();
+    void return_mreq_id(mreq_id_t old_id);
 
 protected:
     /* numeric id */
@@ -44,6 +47,9 @@ protected:
     logger &log;
     shared_ptr<random_gen> ran;
 
+    /* mreq_id */
+    mreq_id_t m_max_mreq_id;
+    vector<mreq_id_t> m_mreq_id_pool;
 };
 
 /* TODO (Phase 4) : Design memory stats */

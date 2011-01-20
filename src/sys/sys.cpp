@@ -26,6 +26,9 @@
 #include "memtraceCore.hpp"
 #include "memtraceThread.hpp"
 #include "memtraceThreadPool.hpp"
+#include "cache.hpp"
+#include "remoteMemory.hpp"
+#include "dramController.hpp"
 
 typedef enum {
     PE_CPU = 0,
@@ -140,6 +143,56 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
     vector<shared_ptr<memtraceCore> > memtrace_cores;
     shared_ptr<memtraceThreadPool> memtrace_thread_pool(new memtraceThreadPool());
+    vector<vector<int> > mem_hierarchy;
+
+#ifdef TEST_EXEC
+
+    /* a memory system example */
+
+    /* assumes a square */
+    uint32_t width = sqrt(num_nodes);
+    assert(width*width == num_nodes);
+
+    /* each core has its own L1 */
+    vector<int> l1s;
+    for (uint32_t i = 0; i < num_nodes; ++i) {
+        l1s.push_back(i);
+    }
+    mem_hierarchy.push_back(l1s);
+
+    /* shard l2 per each l2w x l2h window */
+    vector<int> l2s;
+    uint32_t l2w = 2;
+    uint32_t l2h = 2;
+    for (uint32_t i = 0; i < num_nodes; ++i) {
+        uint32_t px = i%width;
+        uint32_t py = i/width;
+        uint32_t l2x = px - px%l2w;
+        uint32_t l2y = py - py%l2h;
+        uint32_t l2 = l2y*width + l2x;
+        l2s.push_back(l2);
+    }
+    mem_hierarchy.push_back(l2s);
+
+    /* all nodes at the top and the bottom have a DRAM controller */
+    vector<int> dcs;
+    for (uint32_t i = 0; i < num_nodes; ++i) {
+        uint32_t px = i%width;
+        uint32_t py = i/width;
+        if (px%l2w == 0 && py%l2h == 0) {
+            if (py/(width/2) == 0) {
+                dcs.push_back(px);
+            } else {
+                dcs.push_back(px + width*(width-1));
+            }
+        } else {
+            dcs.push_back(-1);
+        }
+    }
+    mem_hierarchy.push_back(dcs);
+
+#endif
+
 
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
@@ -195,7 +248,74 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         if (pe_type_word >= NUM_PES) throw err_bad_mem_img();
         pe_type_t pe_type = static_cast<pe_type_t>(pe_type_word);
         shared_ptr<pe> p;
-#ifndef TEST_EXEC
+
+#ifdef TEST_EXEC
+        /* override setups and create default memtraceCores */
+        if (pe_type == PE_CPU) {
+            read_word(img);
+            read_word(img);
+            read_word(img);
+            read_word(img);
+        }
+        memtraceCore::memtraceCore_cfg_t cfgs;
+        cfgs.max_threads = 2;
+        cfgs.flits_per_mig = 2;
+        cfgs.flits_per_ra_with_data = 1;
+        cfgs.flits_per_ra_without_data = 1;
+        cfgs.em_type = memtraceCore::EM_NONE;
+        cfgs.ra_type = memtraceCore::RA_NONE;
+        shared_ptr<memtraceCore> core(new memtraceCore(id, t->get_time(), 
+                                                       t->get_packet_id_factory(), t->get_statistics(),
+                                                       log, ran, 
+                                                       memtrace_thread_pool,
+                                                       cfgs));
+        p = core;
+        memtrace_cores.push_back(core);
+
+        /* build memory system according to mem_hierarchy */
+        uint32_t num_level = mem_hierarchy.size();
+        assert(num_level > 0);
+
+        /* all cores have one remoteMemory (first) */
+        shared_ptr<remoteMemory> rm(new remoteMemory(id, t->get_time(), log, ran));
+        core->add_remote_memory(rm);
+        if (mem_hierarchy[0][id] != (int)id) {
+            /* if this node has a remote L1, the L1 location is set in remoteMemory */
+            rm->set_home(mem_hierarchy[0][id], 1);
+        } else {
+            cache::cache_cfg_t l1_cfgs;
+            l1_cfgs.associativity = 1;
+            l1_cfgs.block_size = 128;
+            l1_cfgs.total_block = 64;
+            l1_cfgs.process_time = 1;
+            l1_cfgs.policy = cache::CACHE_RANDOM;
+            shared_ptr<cache> l1 (new cache (id, t->get_time(), log, ran, l1_cfgs));
+            shared_ptr<cache> last = l1;
+            for (uint32_t i = 1; i < num_level; ++i) {
+                if (mem_hierarchy[i][id] != (int)id) {
+                    rm->set_home(mem_hierarchy[i][id], i+1); 
+                    last->set_home(rm);
+                    break;
+                } else if (i == num_level - 1) {
+                    cache::cache_cfg_t next_cfgs;
+                    next_cfgs.associativity = 1;
+                    next_cfgs.block_size = 128;
+                    next_cfgs.total_block = 64;
+                    next_cfgs.process_time = 1;
+                    next_cfgs.policy = cache::CACHE_RANDOM;
+                    shared_ptr<cache> next_cache (new cache (id, t->get_time(), log, ran, next_cfgs));
+                    last->set_home(next_cache);
+                    last = next_cache;
+                } else {
+                    shared_ptr<dramController> dc (new dramController (id, t->get_time(), log, ran,
+                                                                       false /* lock-protected */ ));
+                    break;
+                }
+            }
+            core->add_cache_chain(l1);
+        }
+
+#else
         switch (pe_type) {
         case PE_CPU: {
             uint32_t mem_start = read_word(img);
@@ -232,28 +352,6 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         default:
             throw err_bad_mem_img();
         }
-#else 
-        if (pe_type == PE_CPU) {
-            read_word(img);
-            read_word(img);
-            read_word(img);
-            read_word(img);
-        }
-        memtraceCore::memtraceCore_cfg_t cfgs;
-        cfgs.max_threads = 2;
-        cfgs.flits_per_mig = 2;
-        cfgs.flits_per_ra_with_data = 1;
-        cfgs.flits_per_ra_without_data = 1;
-        cfgs.em_type = memtraceCore::EM_NONE;
-        cfgs.ra_type = memtraceCore::RA_NONE;
-        shared_ptr<memtraceCore> core(new memtraceCore(id, t->get_time(), 
-                                                       t->get_packet_id_factory(), t->get_statistics(),
-                                                       log, ran, 
-                                                       memtrace_thread_pool,
-                                                       cfgs));
-        p = core;
-        memtrace_cores.push_back(core);
-
 #endif
 
         pes[id] = p;

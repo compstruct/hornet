@@ -47,7 +47,11 @@ public:
     /* TODO (Phase 5) : Design configurator methods */
 
 protected:
+    /* execute */
     virtual void exec_core() = 0;
+
+    /* Subclasses are responsible to 'register' any first-level memories using this method */
+    void add_first_level_memory(shared_ptr<memory> mem);
 
 private:
     void release_xmit_buffer();

@@ -43,6 +43,8 @@ public:
     virtual bool is_drained() const throw();
 
     void spawn(memtraceThread* thread);
+    void add_remote_memory(shared_ptr<memory> mem);
+    void add_cache_chain(shared_ptr<memory> l1_cache);
 
 private:
     map<uint32_t, flow_id> flow_ids;
@@ -63,10 +65,19 @@ private:
         lane_status_t status;
         bool evictable;
         memtraceThread* thread;
+        mreq_id_t mreq_id;
+        shared_ptr<memoryRequest> req;
+        shared_ptr<memory> mem_to_serve;
     } lane_entry_t;
 
     typedef vector<lane_entry_t>::size_type lane_idx_t;
 
+private:
+    /* Local methods */
+    void load_thread(memtraceThread* thread);
+    void unload_thread(lane_idx_t idx);
+
+private:
     vector<lane_entry_t> m_lanes;
     lane_idx_t m_lane_ptr;
     uint32_t m_num_threads;
@@ -76,6 +87,10 @@ private:
     /* Thread pool */
     shared_ptr<memtraceThreadPool> m_threads;
 
+    /* memories */
+    shared_ptr<memory> m_remote_memory;
+    shared_ptr<memory> m_local_l1;
+
     /* Native contexts */
     set<mth_id_t> m_native_list;
 
@@ -83,9 +98,6 @@ private:
 
     /* Running state */
 
-    /* Local methods */
-    void load_thread(memtraceThread* thread);
-    void unload_thread(lane_idx_t idx);
 };
 
 /* TODO (Phase 4) : design memtraceCore stats */
