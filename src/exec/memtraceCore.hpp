@@ -37,8 +37,8 @@ public:
                  memtraceCore_cfg_t cfgs) throw(err);
     virtual ~memtraceCore() throw();
 
-    virtual void tick_positive_edge() throw(err);
-    virtual void tick_negative_edge() throw(err);
+    virtual void exec_core();
+
     virtual uint64_t next_pkt_time() throw(err);
     virtual bool is_drained() const throw();
 
@@ -86,7 +86,6 @@ private:
     /* Local methods */
     void load_thread(memtraceThread* thread);
     void unload_thread(lane_idx_t idx);
-    void release_xmit_buffer();
 };
 
 /* TODO (Phase 4) : design memtraceCore stats */

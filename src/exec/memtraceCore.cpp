@@ -22,46 +22,15 @@ memtraceCore::memtraceCore(const pe_id &id, const uint64_t &t,
 
 memtraceCore::~memtraceCore() throw() {}
 
-void memtraceCore::release_xmit_buffer() {
-    /* release xmit buffer for injection if transmission is done */
-    for (map<uint32_t, uint64_t*>::iterator i = m_xmit_buffer.begin(); i != m_xmit_buffer.end(); ++i) {
-        if (m_net->get_transmission_done(i->first)) {
-            delete i->second;
-            m_xmit_buffer.erase(i->first);
-            break;
-        }
-    }
-}
-
-void memtraceCore::tick_positive_edge() throw(err) {
-
-    release_xmit_buffer();
+void memtraceCore::exec_core() {
 
     /* pick a thread to evict and send */
         /* candidates: status==idle || status==migrate */
     /* pick a thread to migrate and send */
         /* candidates: status==migrate */
 
-    /* send messages(s) from message queue */
-
-    /* iterate all marked requests in core -> check target, if DONE, status=idle, release request id   */
-    /* iterate all marked requests in memory server -> check target, if DONE, put reply message in message queue */
-    /* iterate all marked requests in each memory level (from the top level to the bottom) -> check target, if DONE, status=DONE */
-
-    /* iterate all requests of all memories but remote in INIT */
-        /* ->BUSY, --serve_time */
-    /* iterate all requests of all memories but remote in BUSY */
-        /* if serve_time == 0 and HIT : ->DONE */
-        /* else if serve_time == 0 and MISS : put a request into the next level (->INIT) and mark it in internal table : ->WAIT */
-   
-    /* iterate all requests of remote in INIT */
-        /* ->BUSY, --serve_time */
-    /* iterate all request of remote in BUSY */
-        /* if serve_time == 0, put request message into mesage queue : ->WAIT */
-
     /* fetch & execute */
     if (m_num_threads > 0) { 
-
         /* Cycle-wise Round Robin */
         do { 
             m_lane_ptr = (m_lane_ptr + 1) % m_cfgs.max_threads; 
@@ -101,13 +70,8 @@ void memtraceCore::tick_positive_edge() throw(err) {
 
     }
                 
-    /* process new incoming packets */
-        /* if mig_message, selectively put into a lane */
-        /* if mem_message(req), put a request into remote memory (->INIT) and mark it in memory server table */
-        /* if mem_message(rep), update remote memory req table (->DONE) */
+    /* update waiting requests */
 }
-
-void memtraceCore::tick_negative_edge() throw(err) {}
 
 uint64_t memtraceCore::next_pkt_time() throw(err) { 
     if (is_drained()) {

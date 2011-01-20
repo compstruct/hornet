@@ -13,6 +13,8 @@
 #include "pe.hpp"
 #include "random.hpp"
 #include "bridge.hpp"
+#include "message.hpp"
+#include "memory.hpp"
 
 using namespace std;
 using namespace boost;
@@ -29,10 +31,10 @@ public:
 
     /* Common core methods */
     virtual void connect(shared_ptr<bridge> net_bridge) throw(err);
+    virtual void tick_positive_edge() throw(err);
+    virtual void tick_negative_edge() throw(err);
 
-    /* Virtual functions */
-    virtual void tick_positive_edge() throw(err) = 0;
-    virtual void tick_negative_edge() throw(err) = 0;
+    /* Fast forwarding */
     virtual uint64_t next_pkt_time() throw(err) = 0;
     virtual bool is_drained() const throw() = 0;
 
@@ -43,6 +45,13 @@ public:
     virtual void set_stop_darsim() throw(err);
 
     /* TODO (Phase 5) : Design configurator methods */
+
+protected:
+    virtual void exec_core() = 0;
+
+private:
+    void release_xmit_buffer();
+    virtual void exec_mem_server(); /* memory server */
 
 protected:
     typedef struct {
@@ -63,11 +72,21 @@ protected:
     incoming_packets_t m_incoming_packets;
     shared_ptr<id_factory<packet_id> > m_packet_id_factory;
     map<uint32_t, uint64_t*> m_xmit_buffer;
+    
+    /* message queues */
+    vector<message*> m_in_mig_msg_queue;
+    vector<message*> m_in_mem_msg_queue;
+    vector<message*> m_out_mig_msg_queue;
+    vector<message*> m_out_mem_msg_queue;
+
+    /* Memories */
+    vector<shared_ptr<memory> > m_first_memories;
 
     /* Aux */
     shared_ptr<tile_statistics> stats;
     logger &log;
     shared_ptr<random_gen> ran;
+
 };
 
 /* TODO (Phase 4) : Design core stats */

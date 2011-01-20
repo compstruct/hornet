@@ -15,26 +15,26 @@ typedef enum {
 typedef enum {
     MEM_REQ = 0,
     MEM_REPLY
-} mmsg_dir_t;
+} mem_msg_dir_t;
 
 typedef struct {
     void* context_ptr;
 } mig_msg_t;
 
 typedef struct {
-    mmsg_dir_t dir;
+    mem_msg_dir_t dir;
     mreq_id_t req_id;
     mreq_type_t rw;
     maddr_t addr;
     uint32_t num_bytes;
     bool cacheable;
     void* data;
-} mmsg_t;
+} mem_msg_t;
 
 class message {
 public:
     message(void* thread_ptr);
-    message(mmsg_dir_t dir, mreq_id_t req_id, mreq_type_t rw, maddr_t addr, uint32_t num_bytes, bool cacheable, void* data);
+    message(mem_msg_dir_t dir, mreq_id_t req_id, mreq_type_t rw, maddr_t addr, uint32_t num_bytes, bool cacheable, void* data);
     ~message();
 
     /* Introspection */
@@ -42,12 +42,12 @@ public:
 
     /* Retrieval */
     inline mig_msg_t get_mig_message() { assert(m_type == MSG_MIG); return m_data.mig_msg; }
-    inline mmsg_t get_mmessage() { assert(m_type == MSG_MEM); return m_data.mmsg; }
+    inline mem_msg_t get_mmessage() { assert(m_type == MSG_MEM); return m_data.mem_msg; }
 
 protected:
     typedef union {
         mig_msg_t mig_msg;
-        mmsg_t mmsg;
+        mem_msg_t mem_msg;
     } data_t;
 
     msg_type_t m_type;

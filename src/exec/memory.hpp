@@ -22,17 +22,16 @@ public:
            shared_ptr<random_gen> ran);
     virtual ~memory();
 
-    /* Ticking - core is responsible to tick memory */
-    virtual void tick_positive_edge() = 0;
-    virtual void tick_negative_edge() = 0;
-
-    /* Memory operations */
+    /* Memory operations - users only use these functions */
     virtual mreq_id_t request(memoryRequest req) = 0;
     virtual bool ready(mreq_id_t id) = 0;
     virtual bool finish(mreq_id_t id) = 0;
 
-    /* Network queues */
-    //virtual message* nextMessageToSend() = 0;
+    /* Ticking - base class (core) sends ticks first-level memory components */
+    /* if a memory component has sub-level components, it is responsible to tick them */
+    virtual void initiate() = 0;
+    virtual void update() = 0;
+    virtual void process() = 0;
 
 protected:
     /* numeric id */
@@ -42,7 +41,6 @@ protected:
     const uint64_t &system_time;
 
     /* Aux */
-    shared_ptr<tile_statistics> stats;
     logger &log;
     shared_ptr<random_gen> ran;
 
