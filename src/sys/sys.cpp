@@ -296,9 +296,10 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     /* it's a new level of cache */
                     cache::cache_cfg_t cache_cfgs;
                     cache_cfgs.associativity = 1;
-                    cache_cfgs.block_size = 128;
+                    cache_cfgs.block_size_bytes = 16;
                     cache_cfgs.total_block = (i == 0)? 64 : 256;
                     cache_cfgs.process_time = 1;
+                    cache_cfgs.block_per_cycle = 1;
                     cache_cfgs.policy = cache::CACHE_RANDOM;
                     shared_ptr<cache> new_cache ( new cache (id<<8|(i+1), t->get_time(), log, ran, cache_cfgs));
                     new_memory = new_cache;

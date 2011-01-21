@@ -5,6 +5,14 @@
 #include <iostream>
 
 memoryRequest::memoryRequest(mreq_type_t rw, maddr_t addr, shared_ptr<uint32_t> data, uint32_t byte_count)
-    : m_rw(rw), m_addr(addr), m_data(data), m_byte_count(byte_count) { }
+    : m_rw(rw), m_addr(addr), m_data(data), m_byte_count(byte_count) { 
+
+    /* address should be aligned in 32bit (4bytes) */
+    assert(m_addr%4 == 0);
+    
+    /* byte_count should be aligned in 32bit (4bytes) */
+    assert(m_byte_count%4 == 0);
+    
+}
 
 memoryRequest::~memoryRequest() { }

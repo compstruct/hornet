@@ -98,7 +98,7 @@ void memtraceCore::exec_core() {
         if ((*i).status == LANE_WAIT) {
             if((*i).mem_to_serve->ready((*i).mreq_id)) {
                 LOG(log,3) << "[core " << get_id().get_numeric_id() << "] finished memory operations on addr " 
-                           << hex << (*i).req->get_addr() << dec << " @ " << system_time << endl;
+                           << hex << (*i).req->addr() << dec << " @ " << system_time << endl;
                 (*i).status = LANE_IDLE;
                 (*i).mem_to_serve->finish((*i).mreq_id);
             }

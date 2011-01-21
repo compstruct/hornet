@@ -22,9 +22,10 @@ public:
 
     typedef struct {
         uint32_t associativity;
-        uint32_t block_size;
+        uint32_t block_size_bytes;
         uint32_t total_block;
         uint32_t process_time;
+        uint32_t block_per_cycle;
         cache_policy_t policy;
     } cache_cfg_t;
 
@@ -55,14 +56,39 @@ private:
     typedef struct {
         req_status_t status;
         uint32_t     remaining_process_time;
-        mreq_id_t    home_req_id;
         shared_ptr<memoryRequest> req;
-    } req_entry_t;
+    } in_req_entry_t;
 
+    typedef struct {
+        uint64_t tag;
+        shared_ptr<uint32_t> data;
+        uint64_t last_access;
+    } cache_line_t;
+
+private:
+    inline uint64_t get_tag(maddr_t addr) { return (addr&m_tag_mask)>>m_tag_pos; }
+    inline uint64_t get_index(maddr_t addr) { return (addr&m_index_mask)>>m_index_pos; }
+    inline uint64_t get_offset(maddr_t addr) { return (addr&m_offset_mask); }
+
+    bool hit(maddr_t addr);
+    cache_line_t cache_line(maddr_t addr);
+
+private:
     cache_cfg_t m_cfgs;
     shared_ptr<memory> m_home;
 
-    map<mreq_id_t, req_entry_t> m_table;
+    map<mreq_id_t, in_req_entry_t> m_in_req_table;
+    map<mreq_id_t, shared_ptr<memoryRequest> > m_out_req_table;
+    map<uint32_t, shared_ptr<vector<cache_line_t> > > m_cache;
+
+    uint64_t m_offset_mask;
+    uint64_t m_index_mask;
+    uint32_t m_index_pos;
+    uint64_t m_tag_mask;
+    uint32_t m_tag_pos;
+
+    /* running stats */
+    uint32_t m_transferred_this_cycle;
 };
 
 #endif

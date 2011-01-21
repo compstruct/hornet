@@ -5,6 +5,7 @@
 #define __MEMORY_REQUEST_HPP__
 
 #include <boost/shared_ptr.hpp>
+#include "cstdint.hpp"
 
 using namespace std;
 using namespace boost;
@@ -24,7 +25,9 @@ public:
     memoryRequest(mreq_type_t rw, maddr_t addr, shared_ptr<uint32_t> data, uint32_t byte_count);
     virtual ~memoryRequest();
 
-    inline maddr_t get_addr() { return m_addr; }
+    inline maddr_t addr() { return m_addr; }
+    inline uint32_t byte_count() { return m_byte_count; }
+    inline shared_ptr<uint32_t> data() { return m_data; }
 
 protected:
     mreq_type_t   m_rw;
