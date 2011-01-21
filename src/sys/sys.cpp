@@ -71,6 +71,9 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
 }
 
 static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_ptr<memtraceThreadPool> pool, logger &log) {
+    if (!files) {
+        return;
+    }
     for (vector<string>::const_iterator fi = files->begin(); fi != files->end(); ++fi) {
         ifstream input(fi->c_str());
         if (input.fail()) throw err_parse(*fi, "cannot open file");

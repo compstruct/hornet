@@ -47,9 +47,9 @@ public:
 
 private:
     typedef enum {
-        REQ_INIT,
-        REQ_BUSY,
-        REQ_WAIT,
+        REQ_INIT,    /* just requested */
+        REQ_BUSY,    /* working on cache logic */
+        REQ_WAIT, 
         REQ_DONE
     } req_status_t;
 
@@ -60,9 +60,14 @@ private:
     } in_req_entry_t;
 
     typedef struct {
+        bool valid;         /* entry is being used */
+        bool ready;         /* data has come */
+        bool doomed;        /* will be evicted (write_back issued) */
+        bool on_the_fly;    /* data is coming (a request sent) */
         uint64_t tag;
         shared_ptr<uint32_t> data;
         uint64_t last_access;
+        bool dirty;
     } cache_line_t;
 
 private:
@@ -70,8 +75,9 @@ private:
     inline uint64_t get_index(maddr_t addr) { return (addr&m_index_mask)>>m_index_pos; }
     inline uint64_t get_offset(maddr_t addr) { return (addr&m_offset_mask); }
 
-    bool hit(maddr_t addr);
-    cache_line_t cache_line(maddr_t addr);
+    //bool hit(maddr_t addr);
+    //bool has_line(maddr_t addr);
+    shared_ptr<cache_line_t> cache_line(maddr_t addr);
 
 private:
     cache_cfg_t m_cfgs;
@@ -79,7 +85,7 @@ private:
 
     map<mreq_id_t, in_req_entry_t> m_in_req_table;
     map<mreq_id_t, shared_ptr<memoryRequest> > m_out_req_table;
-    map<uint32_t, shared_ptr<vector<cache_line_t> > > m_cache;
+    map<uint64_t, shared_ptr<vector<shared_ptr<cache_line_t> > > > m_cache;
 
     uint64_t m_offset_mask;
     uint64_t m_index_mask;
@@ -87,8 +93,6 @@ private:
     uint64_t m_tag_mask;
     uint32_t m_tag_pos;
 
-    /* running stats */
-    uint32_t m_transferred_this_cycle;
 };
 
 #endif

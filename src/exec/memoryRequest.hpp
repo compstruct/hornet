@@ -25,6 +25,7 @@ public:
     memoryRequest(mreq_type_t rw, maddr_t addr, shared_ptr<uint32_t> data, uint32_t byte_count);
     virtual ~memoryRequest();
 
+    inline mreq_type_t rw() { return m_rw; }
     inline maddr_t addr() { return m_addr; }
     inline uint32_t byte_count() { return m_byte_count; }
     inline shared_ptr<uint32_t> data() { return m_data; }
