@@ -2,17 +2,18 @@
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
 #include "cache.hpp"
+#include "error.hpp"
 
 cache::cache(const uint32_t id, const uint64_t &t, 
              logger &log, shared_ptr<random_gen> ran,
              cache_cfg_t cfgs)
 : memory(id, t, log, ran), m_cfgs(cfgs), m_home(shared_ptr<cache>()) {
     int log2 = 0;
-    for (uint32_t i = m_cfgs.block_size_bytes*8; i > 1; i = i/2) {
+    for (uint32_t i = m_cfgs.block_size_bytes; i > 1; i = i/2) {
         assert(i%2 == 0); /* must be a power of 2 */
         ++log2;
     }
-    m_offset_mask = m_cfgs.block_size_bytes * 8 - 1;
+    m_offset_mask = m_cfgs.block_size_bytes - 1;
     m_index_pos = log2;
 
     log2 = 0;
@@ -28,10 +29,22 @@ cache::cache(const uint32_t id, const uint64_t &t,
 
 }
 
-cache::~cache() {}
+cache::~cache() {
+    map<uint64_t, cache_line_t*>::iterator i_idx;
+    for (i_idx = m_cache.begin(); i_idx != m_cache.end(); ++i_idx) {
+        for (uint32_t i_way = 0; i_way < m_cfgs.associativity; ++i_way) {
+            delete[] (i_idx->second)[i_way].data;
+        }
+        delete[] i_idx->second;
+    }
+}
 
 void cache::set_home(shared_ptr<memory> home) {
     m_home = home;
+}
+
+shared_ptr<memory> cache::next_memory() {
+    return m_home;
 }
 
 mreq_id_t cache::request(shared_ptr<memoryRequest> req) {
@@ -49,14 +62,18 @@ mreq_id_t cache::request(shared_ptr<memoryRequest> req) {
     /* initialize cache space if not allocated */
     uint64_t index = get_index(req->addr());
     if (m_cache.count(index) == 0) {
-        shared_ptr<vector<shared_ptr<cache_line_t> > > new_index(new vector<shared_ptr<cache_line_t> >);
-        m_cache[index] = new_index;
-        for (uint32_t j = 0; j < m_cfgs.associativity; ++j) {
-            shared_ptr<cache_line_t> new_line (new cache_line_t());
-            new_line->valid = false;
-            shared_ptr<uint32_t> data (new uint32_t(m_cfgs.block_size_bytes/4));
-            new_line->data = data;
-            m_cache[index]->push_back(new_line);
+        m_cache[index] = new cache_line_t[m_cfgs.associativity];
+        for (uint32_t i = 0; i < m_cfgs.associativity; ++i) {
+            m_cache[index][i].valid = false;
+            uint32_t* data = new uint32_t[m_cfgs.block_size_bytes/4];
+            if (!data) {
+                throw err_out_of_mem();
+            }
+            for (uint32_t j = 0; j < m_cfgs.block_size_bytes/4; ++j) {
+                /* for now, initialize to zero */
+                data[j] = 0;
+            }
+            m_cache[index][i].data = data;
         }
     }
 
@@ -85,53 +102,49 @@ void cache::initiate() {
             i->second.status = REQ_BUSY;
         }
     }
+    m_home->initiate();
 }
 
-#if 0
-bool cache::has_line(maddr_t addr) {
-    shared_ptr<cache_line_t> line = cache_line(addr);
-    return (line != shared_ptr<cache_line_t>() && line->valid && !line->doomed);
-}
-
-bool cache::hit(maddr_t addr) {
-    shared_ptr<cache_line_t> line = cache_line(addr);
-    return (has_line(addr) && line->ready);
-}
-#endif
-
-shared_ptr<cache::cache_line_t> cache::cache_line(maddr_t addr) {
+cache::cache_line_t* cache::cache_line(maddr_t addr) {
     uint64_t index = get_index(addr);
     uint64_t tag = get_tag(addr);
     assert(m_cache.count(index) > 0);
-    for (vector<shared_ptr<cache_line_t> >::iterator l = m_cache[index]->begin(); l != m_cache[index]->end(); ++l) {
-        if ((*l)->valid && (*l)->tag == tag) {
-            return *l;
+    for (uint32_t i = 0; i < m_cfgs.associativity; ++i) {
+        if (m_cache[index][i].valid && m_cache[index][i].tag == tag) {
+            return m_cache[index] + i;
         }
     }
-    return shared_ptr<cache_line_t>();
+    return NULL;
 }
 
 void cache::update() {
     /* update cache from home */
+    vector<mreq_id_t> to_be_deleted;
     for (map<mreq_id_t, shared_ptr<memoryRequest> >::iterator i = m_out_req_table.begin(); i != m_out_req_table.end(); ++i) {
         mreq_id_t req_id = i->first;
         shared_ptr<memoryRequest> req = i->second;
         if (m_home->ready(req_id)) {
-            shared_ptr<cache_line_t> line = cache_line(req->addr());   
+            cache_line_t* line = cache_line(req->addr());   
             if (req->rw() == MEM_READ) {   
                 /* a read copy arrived - line must be in invaid, on_the_fly status */
                 line->ready = true;
                 line->on_the_fly = false;
                 line->last_access = system_time;
                 for (uint32_t j = 0; j < m_cfgs.block_size_bytes/4; ++j) {
-                    (line->data.get())[j] = (req->data().get())[j];
+                    (line->data)[j] = (req->data())[j];
                 }
             } else {
                 /* write back is acknowledged  - line must be in doomed status */
                 line->valid = false;
             }
+            m_home->finish(req_id);
+            to_be_deleted.push_back(req_id);
         }
     }
+    for (vector<mreq_id_t>::iterator i = to_be_deleted.begin(); i != to_be_deleted.end(); ++i) {
+        m_out_req_table.erase(*i);
+    }
+    m_home->update();
 }
 
 void cache::process() {
@@ -148,62 +161,72 @@ void cache::process() {
         /* actions in cache hierarchy */
         if (i->second.status == REQ_WAIT) {
             shared_ptr<memoryRequest> req = i->second.req;
-            shared_ptr<cache_line_t> line = cache_line(req->addr());
-            if (line == shared_ptr<cache_line_t>()) {
+            cache_line_t* line = cache_line(req->addr());
+            if (!line) {
                 /* no entry - miss */
                 bool has_space = false;
-                vector<shared_ptr<cache_line_t> > evict_cand;
+                vector<cache_line_t*> evict_cand;
                 uint64_t index = get_index(req->addr());
-                for (vector<shared_ptr<cache_line_t> >::iterator j = m_cache[index]->begin(); j != m_cache[index]->end(); ++j) {
-                    if ((*j)->valid == false) {
+                for (uint32_t i_way = 0; i_way < m_cfgs.associativity; ++i_way) {
+                    if (m_cache[index][i_way].valid == false) {
                         /* empty space */
-                        (*j)->valid = true;
-                        (*j)->ready = false;
-                        (*j)->doomed = false;
-                        (*j)->tag = get_tag(req->addr());
-                        (*j)->dirty = false;
-                        (*j)->last_access = system_time;
-                        shared_ptr<memoryRequest> home_req (new memoryRequest(MEM_READ,
-                                    req->addr()/m_cfgs.block_size_bytes,
-                                    (*j)->data,
+                        m_cache[index][i_way].valid = true;
+                        m_cache[index][i_way].ready = false;
+                        m_cache[index][i_way].doomed = false;
+                        m_cache[index][i_way].tag = get_tag(req->addr());
+                        m_cache[index][i_way].dirty = false;
+                        m_cache[index][i_way].last_access = system_time;
+                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                     m_cfgs.block_size_bytes));
                         mreq_id_t new_id = m_home->request(home_req);
                         m_out_req_table[new_id] = home_req;
-                        (*j)->on_the_fly = true;
+                        m_cache[index][i_way].on_the_fly = true;
                         has_space = true;
                         break;
-                    } else if ((*j)->doomed) {
+                    } else if (m_cache[index][i_way].doomed) {
+                        /* will be waiting for this space (allow some race conditions) */
                         has_space = true;
-                    } else if ((*j)->ready) {
-                        evict_cand.push_back(*j);
+                    } else if (m_cache[index][i_way].ready) {
+                        evict_cand.push_back(m_cache[index] + i_way);
                     }
                 }
                 if (!has_space && !evict_cand.empty()) {
-                    shared_ptr<cache_line_t> tgt = shared_ptr<cache_line_t>();
+                    cache_line_t* tgt = NULL;
                     if (m_cfgs.policy == CACHE_RANDOM) {
                         tgt = evict_cand[ran->random_range(evict_cand.size())];
                     } else {
                         /* LRU */
-                        for (vector<shared_ptr<cache_line_t> >::iterator j = evict_cand.begin(); j != evict_cand.end(); ++j) {
-                            if (tgt == shared_ptr<cache_line_t>() || (*j)->last_access < tgt->last_access) {
-                                tgt = *j;
+                        for (vector<cache_line_t*>::iterator i_cand = evict_cand.begin(); i_cand != evict_cand.end(); ++i_cand) {
+                            if (!tgt || (*i_cand)->last_access < tgt->last_access) {
+                                tgt = *i_cand;
                             }
                         }
+                    }
+                    if (tgt->dirty) {
+                        tgt->doomed = true;
+                        shared_ptr<memoryRequest> home_req (new memoryRequest( (tgt->tag << m_tag_pos) | (index << m_index_pos),
+                                    m_cfgs.block_size_bytes, tgt->data));
+                        mreq_id_t new_id = m_home->request(home_req);
+                        m_out_req_table[new_id] = home_req;
+                    } else {
+                        /* if not written, just drop */
+                        tgt->valid = false;
                     }
                 }
             } else if (!line->doomed) {  /* if doomed, just wait until it gets an ack */
                 /* valid entry */
                 if (line->ready) {
                     /* hit */
+                    line->last_access = system_time;
                     if (transferred < m_cfgs.block_per_cycle) {
                         /* allowed bandwidth */
                         uint32_t *src, *tgt;
                         if (req->rw() == MEM_READ) {
-                            src = line->data.get() + get_offset(req->addr());;
-                            tgt = req->data().get();
+                            src = line->data + get_offset(req->addr())/4;
+                            tgt = req->data();
                         } else {
-                            src = req->data().get();
-                            tgt = line->data.get() + get_offset(req->addr());;
+                            src = req->data();
+                            tgt = line->data + get_offset(req->addr())/4;
                             line->dirty = true;
                         }
                         for (uint32_t j = 0; j < req->byte_count()/4; ++j) {
@@ -216,9 +239,7 @@ void cache::process() {
                     /* data is not here yet */
                     if (!line->on_the_fly) {
                         /* initiate read request - in case the line is evicted while waiting for the bandwidth */
-                        shared_ptr<memoryRequest> home_req (new memoryRequest(MEM_READ,
-                                    req->addr()/m_cfgs.block_size_bytes,
-                                    line->data,
+                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                     m_cfgs.block_size_bytes));
                         mreq_id_t new_id = m_home->request(home_req);
                         m_out_req_table[new_id] = home_req;
@@ -227,71 +248,8 @@ void cache::process() {
                 }
             }
         }
-#if 0
-
-        if (i->second.status == REQ_WAIT || i->second.status == REQ_FLY ) {
-            shared_ptr<memoryRequest> req = i->second.req;
-            if (hit(req->addr()) && transferred < m_cfgs.block_per_cycle) {
-                cache_line_t line = cache_line(req->addr());
-                uint32_t *src, *tgt;
-                if (req->rw() == MEM_READ) {
-                    src = line.data.get() + get_offset(req->addr());;
-                    tgt = req->data().get();
-                } else {
-                    src = req->data().get();
-                    tgt = line.data.get() + get_offset(req->addr());;
-                    line.dirty = true;
-                }
-                for (uint32_t j = 0; j < req->byte_count()/4; ++j) {
-                    tgt[j] = src[j];
-                }
-                ++transferred;
-                i->second.status = REQ_DONE;
-            }
-        }
-        /* if it misses and the corresponding line is not yet requested to home, */
-        if (i->second.status == REQ_WAIT && 
-        if (i->second.status == REQ_WAIT || i->second.status == REQ_FLY) {
-            shared_ptr<memoryRequest> req = i->second.req;
-            if (hit(req->addr()) && transferred < m_cfgs.block_per_cycle) {
-                cache_line_t line = cache_line(req->addr());
-                uint32_t *src, *tgt;
-                if (req->rw() == MEM_READ) {
-                    src = line.data.get() + get_offset(req->addr());;
-                    tgt = req->data().get();
-                } else {
-                    src = req->data().get();
-                    tgt = line.data.get() + get_offset(req->addr());;
-                    line.dirty = true;
-                }
-                for (uint32_t j = 0; j < req->byte_count()/4; ++j) {
-                    tgt[j] = src[j];
-                }
-                ++transferred;
-                i->second.status = REQ_DONE;
-            } else if (i->second.status == REQ_WAIT) {
-                uint64_t index = get_index(req->addr());
-                if (m_cache[index]->size() < m_associativity - 1) {
-                    shared_ptr<uint32_t> buffer (new uint32_t (m_cfgs.block_size_bytes/4));
-                    shared_ptr<memoryRequest> home_req (new memoryRequest(MEM_READ,
-                                req->addr()/m_cfgs.block_size_bytes,
-                                buffer,
-                                m_cfgs.block_size_bytes));
-                    mreq_id_t new_id = m_home->request(home_req);
-                    m_out_req_table[new_id] = home_req;
-                    req->status = REQ_FLY;
-                } else {
-                    if (m_cfgs.policy == CACHE_RANDOM) {
-
-                    } else {
-                        /* LRU */
-                    }
-                }
-            }
-        }
-#endif
     }
-    cerr << "process end" << endl;
+    m_home->process();
 }
 
 

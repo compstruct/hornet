@@ -22,8 +22,45 @@ void core::connect(shared_ptr<bridge> net_bridge) throw(err) {
     copy(qs->begin(), qs->end(), back_insert_iterator<vector<uint32_t> >(m_queue_ids));
 }
 
+void core::add_remote_memory(shared_ptr<memory> mem) {
+    m_remote_memory = mem;
+    add_first_level_memory(mem);
+}
+
+void core::add_cache_chain(shared_ptr<memory> mem) {
+    m_nearest_memory = mem;
+    add_first_level_memory(mem);
+}
+
 void core::add_first_level_memory(shared_ptr<memory> mem) {
+
+    /* creates a chain of ticking memories - all memories must be on the chain only once */
+    /* the order of chain must be outward (from the core) */
+
+    /* if mem is submemory of the current chain, do not add */
+    for (vector<shared_ptr<memory> >::iterator i = m_first_memories.begin(); i != m_first_memories.end(); ++i) {
+        shared_ptr<memory> level = *i;
+        while (level) {
+            if (level == mem) {
+                return;
+            }
+            level = level->next_memory();
+        }
+    }
     m_first_memories.push_back(mem);
+
+    /* if any of current first memories are submemory of mem, erase it */
+    for (vector<shared_ptr<memory> >::iterator i = m_first_memories.begin(); i != m_first_memories.end(); ++i) {
+        shared_ptr<memory> level = mem->next_memory();
+        while (level) {
+            if (level == *i) {
+                m_first_memories.erase(i);
+                /* there can be only one case */
+                return;
+            }
+            level = level->next_memory();
+        }
+    }
 }
 
 void core::release_xmit_buffer() {
@@ -44,6 +81,7 @@ void core::tick_positive_edge() throw(err) {
     /* Send message(s) in out_msg_queues */
 
     /* accept all new requests in memory components (they will begin working in this cycle) */
+    //cerr << "initiate" << endl;
     for (vector<shared_ptr<memory> >::iterator i = m_first_memories.begin(); i != m_first_memories.end(); ++i) {
         (*i)->initiate();
     }
@@ -51,19 +89,24 @@ void core::tick_positive_edge() throw(err) {
     /* execute core / memory server. */
     /* they will check if the requests they issued are done */
     /* they may also make new requests (which will be accepted in the next cycle, and will not begin working in this cycle) */
+    
+    //cerr << "exec_core" << endl;
     exec_core();
     exec_mem_server();
 
+    //cerr << "update" << endl;
     /* check if requests issued by middle-level memory components are done */
     for (vector<shared_ptr<memory> >::iterator i = m_first_memories.begin(); i != m_first_memories.end(); ++i) {
         (*i)->update();
     }
 
+    //cerr << "process" << endl;
     /* serve accepted memory requests (the results will be updated to parents in the next cycle) */ 
     for (vector<shared_ptr<memory> >::iterator i = m_first_memories.begin(); i != m_first_memories.end(); ++i) {
         (*i)->process();
     }
 
+    //cerr << "done" << endl;
     /* receive message(s) and put into correpsonding in_msg_queues */
 }
 

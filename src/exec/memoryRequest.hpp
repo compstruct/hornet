@@ -4,11 +4,10 @@
 #ifndef __MEMORY_REQUEST_HPP__
 #define __MEMORY_REQUEST_HPP__
 
-#include <boost/shared_ptr.hpp>
+#include "stdio.h"
 #include "cstdint.hpp"
 
 using namespace std;
-using namespace boost;
 
 typedef uint64_t mreq_id_t;
 #define MAX_INVALID_MREQ_ID 0
@@ -22,19 +21,20 @@ typedef uint64_t maddr_t;
 
 class memoryRequest {
 public:
-    memoryRequest(mreq_type_t rw, maddr_t addr, shared_ptr<uint32_t> data, uint32_t byte_count);
+    memoryRequest(maddr_t addr, uint32_t byte_count, uint32_t* wdata = NULL);
     virtual ~memoryRequest();
 
     inline mreq_type_t rw() { return m_rw; }
     inline maddr_t addr() { return m_addr; }
     inline uint32_t byte_count() { return m_byte_count; }
-    inline shared_ptr<uint32_t> data() { return m_data; }
+
+    inline uint32_t* data() { return m_data; }
 
 protected:
     mreq_type_t   m_rw;
     maddr_t       m_addr;
-    shared_ptr<uint32_t> m_data;
-    uint32_t         m_byte_count;
+    uint32_t*     m_data;
+    uint32_t      m_byte_count;
 };
 
 #endif

@@ -13,9 +13,8 @@ memtraceCore::memtraceCore(const pe_id &id, const uint64_t &t,
                            memtraceCore_cfg_t cfgs) throw(err) 
     : core(id, t, pif, st, l, r),
       m_cfgs(cfgs),
-      m_threads(pool), 
-      m_remote_memory(shared_ptr<memory>()),
-      m_local_l1(shared_ptr<memory>()) {
+      m_lane_ptr(0), m_num_threads(0), m_num_natives(0), m_num_guests(0), 
+      m_threads(pool) { 
     for (unsigned int i = 0; i < m_cfgs.max_threads; ++i) {
         lane_entry_t entry;
         entry.status = LANE_EMPTY;
@@ -24,16 +23,6 @@ memtraceCore::memtraceCore(const pe_id &id, const uint64_t &t,
 }
 
 memtraceCore::~memtraceCore() throw() {}
-
-void memtraceCore::add_remote_memory(shared_ptr<memory> mem) {
-    m_remote_memory = mem;
-    add_first_level_memory(mem);
-}
-
-void memtraceCore::add_cache_chain(shared_ptr<memory> l1_cache) {
-    m_local_l1 = l1_cache;
-    add_first_level_memory(l1_cache);
-}
 
 void memtraceCore::exec_core() {
 
@@ -76,13 +65,24 @@ void memtraceCore::exec_core() {
                     // RA case (request to remote, bookkeeping, -> LANE_WAIT)
 
                     /* Request to local L1 */
-                    assert(m_local_l1 != shared_ptr<memory>());
-                    shared_ptr<uint32_t> data (new uint32_t ((cur.thread->byte_count()-1)/4));
-                    shared_ptr<memoryRequest> req (new memoryRequest (cur.thread->rw(), cur.thread->addr(), 
-                                                                      data, cur.thread->byte_count()));
-                    cur.mreq_id = m_local_l1->request(req);
+                    assert(m_nearest_memory != shared_ptr<memory>());
+                    assert(cur.thread->byte_count() > 0);
+
+                    uint64_t addr = ran->random_range(3)*16*64;
+                    addr = addr - addr%4;
+                    uint32_t byte_count = 4;
+                    shared_ptr<memoryRequest> req;
+
+                    if (ran->random_range(3) < 2) {
+                        req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count));
+                    } else {
+                        uint32_t wdata = get_id().get_numeric_id();
+                        req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count, &wdata));
+                    }
+
+                    cur.mreq_id = m_nearest_memory->request(req);
                     cur.req = req;
-                    cur.mem_to_serve = m_local_l1;
+                    cur.mem_to_serve = m_nearest_memory;
                     cur.status = LANE_WAIT;
 
                 } else if (cur.thread->type() == memtraceThread::INST_OTHER) {
@@ -97,8 +97,16 @@ void memtraceCore::exec_core() {
     for (vector<lane_entry_t>::iterator i = m_lanes.begin(); i != m_lanes.end(); ++i) {
         if ((*i).status == LANE_WAIT) {
             if((*i).mem_to_serve->ready((*i).mreq_id)) {
-                LOG(log,3) << "[core " << get_id().get_numeric_id() << "] finished memory operations on addr " 
-                           << hex << (*i).req->addr() << dec << " @ " << system_time << endl;
+                LOG(log,3) << "[core " << get_id().get_numeric_id() << " @ " << system_time << " ] finished memory operation : "; 
+                if ((*i).req->rw() == MEM_READ)  {
+                    LOG(log,3) << " read ";
+                } else {
+                    LOG(log,3) << " written ";
+                }
+                for (uint32_t j = 0; j < (*i).req->byte_count()/4; ++j) {
+                    LOG(log,3) << hex << (*i).req->data()[j] << dec;
+                }
+                LOG(log,3) <<  " on addr " << hex << (*i).req->addr() << dec; 
                 (*i).status = LANE_IDLE;
                 (*i).mem_to_serve->finish((*i).mreq_id);
             }

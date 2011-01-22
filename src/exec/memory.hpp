@@ -32,6 +32,9 @@ public:
     virtual void update() = 0;
     virtual void process() = 0;
 
+    /* hierarchy */
+    virtual shared_ptr<memory> next_memory() = 0;
+
 protected:
     mreq_id_t take_new_mreq_id();
     void return_mreq_id(mreq_id_t old_id);

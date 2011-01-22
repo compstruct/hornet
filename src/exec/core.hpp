@@ -44,6 +44,9 @@ public:
     virtual bool is_ready_to_offer() throw(err);
     virtual void set_stop_darsim() throw(err);
 
+    void add_remote_memory(shared_ptr<memory> mem);
+    void add_cache_chain(shared_ptr<memory> mem);
+
     /* TODO (Phase 5) : Design configurator methods */
 
 protected:
@@ -85,6 +88,8 @@ protected:
 
     /* Memories */
     vector<shared_ptr<memory> > m_first_memories;
+    shared_ptr<memory> m_remote_memory;
+    shared_ptr<memory> m_nearest_memory;
 
     /* Aux */
     shared_ptr<tile_statistics> stats;

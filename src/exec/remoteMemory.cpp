@@ -15,6 +15,10 @@ void remoteMemory::set_home(int location, uint32_t level) {
     m_default_level = level;
 }
 
+shared_ptr<memory> remoteMemory::next_memory() {
+    return shared_ptr<memory>();
+}
+
 mreq_id_t remoteMemory::request(shared_ptr<memoryRequest> req) {
     return 0;
 }

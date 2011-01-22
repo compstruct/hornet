@@ -21,6 +21,8 @@ public:
     virtual void update();
     virtual void process();
 
+    virtual shared_ptr<memory> next_memory();
+
     void set_home(int location, uint32_t level);
 
 private:

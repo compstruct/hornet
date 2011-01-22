@@ -147,6 +147,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     vector<shared_ptr<memtraceCore> > memtrace_cores;
     shared_ptr<memtraceThreadPool> memtrace_thread_pool(new memtraceThreadPool());
     vector<vector<int> > mem_hierarchy;
+    shared_ptr<dram> new_dram = shared_ptr<dram>();
 
 #ifdef TEST_EXEC
 
@@ -163,6 +164,15 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     }
     mem_hierarchy.push_back(l1s);
 
+#if 1
+    /* each has dram controller */
+    vector<int> dcs;
+    for (uint32_t i = 0; i < num_nodes; ++i) {
+        dcs.push_back(i);
+    }
+    mem_hierarchy.push_back(dcs);
+
+#else
     /* shard l2 per each l2w x l2h window */
     vector<int> l2s;
     uint32_t l2w = 2;
@@ -193,6 +203,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         }
     }
     mem_hierarchy.push_back(dcs);
+#endif
 
 #endif
 
@@ -289,7 +300,17 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                 /* if thie level is in local */
                 if (i == num_level - 1) {
                     /* if it's the last level, it's a DRAM controller */
-                    shared_ptr<dramController> dc (new dramController (id<<8|(i+1), t->get_time(), log, ran, false ));
+                    if (!new_dram) {
+                        new_dram = shared_ptr<dram> (new dram ());
+                    }
+                    dramController::dramController_cfg_t cfgs;
+                    cfgs.use_lock = true;
+                    cfgs.off_chip_latency = 50;
+                    cfgs.bytes_per_cycle = 8; 
+                    cfgs.dram_process_time = 10;
+                    cfgs.dc_process_time = 1;
+                    cfgs.header_size_bytes = 4;
+                    shared_ptr<dramController> dc (new dramController (id<<8|(i+1), t->get_time(), log, ran, new_dram, cfgs));
                     new_memory = dc;
                     if (last != shared_ptr<cache>()) {
                         /* it's the home of previous cache, if exists */
@@ -311,7 +332,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     }
                     last = new_cache;
                 }
-                if (first == shared_ptr<memory>()) {
+                if (!first) {
                     /* mark the first memory in the chain */
                     first = new_memory;
                 }
@@ -331,8 +352,12 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         core->add_remote_memory(rm);
         if (first != shared_ptr<memory>()) {
             core->add_cache_chain(first);
+        } else {
+            core->add_cache_chain(rm);
         }
 
+        if (false)
+            read_mem(NULL, 0, shared_ptr<ifstream>());
 #else
         switch (pe_type) {
         case PE_CPU: {
@@ -511,7 +536,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     create_memtrace_threads(memtrace_files, memtrace_thread_pool, log);
 
     /* spawn threads */
-    for (unsigned int i = 0; i < memtrace_thread_pool->size(); ++i) {
+    for (unsigned int i = 0; i < memtrace_thread_pool->size() && memtrace_cores.size() > 0; ++i) {
         unsigned int idx = i % memtrace_cores.size();
         memtrace_cores[idx]->spawn(memtrace_thread_pool->thread_at(i));
     }

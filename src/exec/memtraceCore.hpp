@@ -43,8 +43,6 @@ public:
     virtual bool is_drained() const throw();
 
     void spawn(memtraceThread* thread);
-    void add_remote_memory(shared_ptr<memory> mem);
-    void add_cache_chain(shared_ptr<memory> l1_cache);
 
 private:
     map<uint32_t, flow_id> flow_ids;
@@ -86,10 +84,6 @@ private:
 
     /* Thread pool */
     shared_ptr<memtraceThreadPool> m_threads;
-
-    /* memories */
-    shared_ptr<memory> m_remote_memory;
-    shared_ptr<memory> m_local_l1;
 
     /* Native contexts */
     set<mth_id_t> m_native_list;

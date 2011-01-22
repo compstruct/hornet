@@ -2,34 +2,160 @@
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
 #include "dramController.hpp"
+#include "error.hpp"
+
+dram::dram() {}
+dram::~dram() {
+    for (map<uint64_t, uint32_t*>::iterator i = space.begin(); i != space.end(); ++i) {
+        delete[] i->second;
+    }
+}
 
 dramController::dramController(const uint32_t id, const uint64_t &t, 
                                logger &log, shared_ptr<random_gen> ran,
-                               bool use_lock )
-: memory(id, t, log, ran), m_protected(use_lock) {
+                               shared_ptr<dram> dram,
+                               dramController_cfg_t cfgs)
+: memory(id, t, log, ran), m_dram(dram), m_cfgs(cfgs), m_to_dram_in_transit(0), m_from_dram_in_transit(0) {
+    m_channel_width = m_cfgs.bytes_per_cycle * m_cfgs.off_chip_latency;
 }
 
 dramController::~dramController() {}
 
 mreq_id_t dramController::request(shared_ptr<memoryRequest> req) {
-    return 0;
+    mreq_id_t new_id = take_new_mreq_id();
+    in_req_entry_t new_entry;
+    new_entry.status = REQ_INIT;
+    new_entry.req = req;
+    m_in_req_table[new_id] = new_entry;
+    return new_id;
 }
 
 bool dramController::ready(mreq_id_t id) {
-    return true;
+    return (m_in_req_table.count(id) > 0 && m_in_req_table[id].status == REQ_DONE);
 }
 
 bool dramController::finish(mreq_id_t id) {
+    if (m_in_req_table.count(id) == 0) {
+        return true;
+    } else if (m_in_req_table[id].status != REQ_DONE) {
+        return false;
+    } else {
+        m_in_req_table.erase(id);
+        return_mreq_id(id);
+    }
     return true;
 }
 
+shared_ptr<memory> dramController::next_memory() {
+    return shared_ptr<memory>();
+}
+
 void dramController::initiate() {
+    for (map<mreq_id_t, in_req_entry_t>::iterator i = m_in_req_table.begin(); i != m_in_req_table.end(); ++i) {
+        if (i->second.status == REQ_INIT) {
+            i->second.status = REQ_DC_PROCESS;
+            i->second.remaining_process_time = m_cfgs.dc_process_time;
+        }
+    }
 }
 
 void dramController::update() {
+    for (map<mreq_id_t, in_req_entry_t>::iterator i = m_in_req_table.begin(); i != m_in_req_table.end(); ++i) {
+
+        in_req_entry_t &entry = i->second;
+
+        if (entry.status == REQ_TO_DRAM || entry.status == REQ_FROM_DRAM) {
+            int done = 0;
+            for (vector<on_the_fly_t>::iterator j = entry.packets.begin(); j != entry.packets.end(); ++j) {
+                /* if data arrived on dram, release bandwidth */
+                if ((*j).time_to_arrive <= system_time) {
+                    if (entry.status == REQ_TO_DRAM) {
+                        m_to_dram_in_transit -= (*j).byte_count;
+                    } else {
+                        m_from_dram_in_transit -= (*j).byte_count;
+                    }
+                    ++done;
+                } else {
+                    break;
+                }
+            }
+            for (; done > 0; --done) {
+                entry.packets.erase(entry.packets.begin());
+            }
+        }
+    }
 }
 
 void dramController::process() {
+    for (map<mreq_id_t, in_req_entry_t>::iterator i = m_in_req_table.begin(); i != m_in_req_table.end(); ++i) {
+
+        in_req_entry_t &entry = i->second;
+
+        /* process time */
+        if (entry.status == REQ_DC_PROCESS || entry.status == REQ_DRAM_PROCESS) {
+            --(entry.remaining_process_time);
+            if (entry.remaining_process_time == 0) {
+                if (entry.status == REQ_DRAM_PROCESS) {
+                    (m_cfgs.use_lock) ? mem_access_safe(entry.req) : mem_access(entry.req);
+                }
+                entry.status = (entry.status == REQ_DC_PROCESS) ? REQ_TO_DRAM : REQ_FROM_DRAM;
+                entry.bytes_to_send = m_cfgs.header_size_bytes;
+                if ( (entry.req->rw() == MEM_WRITE && entry.status == REQ_TO_DRAM) ||
+                     (entry.req->rw() == MEM_READ && entry.status == REQ_FROM_DRAM) ) {
+                    entry.bytes_to_send += entry.req->byte_count();
+                }
+            }
+        }
+
+        /* send/receive from dram */
+        if (entry.status == REQ_TO_DRAM || entry.status == REQ_FROM_DRAM) {
+            uint32_t &in_transit = (entry.status == REQ_TO_DRAM) ? m_to_dram_in_transit : m_from_dram_in_transit;
+            if (entry.bytes_to_send == 0 && entry.packets.empty()) {
+                entry.status = (entry.status == REQ_TO_DRAM) ? REQ_DRAM_PROCESS : REQ_DONE;
+                if (entry.status == REQ_DRAM_PROCESS) {
+                    entry.remaining_process_time = m_cfgs.dram_process_time;
+                }
+            } else if (entry.bytes_to_send > 0 && m_channel_width > in_transit) {
+                /* fairness is not guaranteed */
+                uint32_t send_this_time;
+                if (m_channel_width - in_transit < entry.bytes_to_send) {
+                    send_this_time = m_channel_width - in_transit;
+                } else {
+                    send_this_time = entry.bytes_to_send;
+                }
+                entry.bytes_to_send -= send_this_time;
+                in_transit += send_this_time;
+                on_the_fly_t new_fly;
+                new_fly.byte_count = send_this_time;
+                new_fly.time_to_arrive = system_time + m_cfgs.off_chip_latency;
+                entry.packets.push_back(new_fly);
+            }
+        }
+    }
 }
 
+void dramController::mem_access(shared_ptr<memoryRequest> req) {
+    for (uint32_t i = 0; i < req->byte_count(); i += 4) {
+        uint64_t offset = (req->addr() + i) % DRAM_BLOCK_SIZE;
+        uint64_t index = (req->addr() + i) - offset;
+        if (m_dram->space.count(index) == 0) {
+            uint32_t *line = new uint32_t[DRAM_BLOCK_SIZE/4];
+            if (!line) {
+                throw err_out_of_mem();
+            }
+            /* initialize to 0 for now */
+            for (uint32_t j = 0; j < DRAM_BLOCK_SIZE/4; ++j) {
+                *(line+j) = 0;
+            }
+            m_dram->space[index] = line; 
+        }
+        uint32_t *src = (req->rw() == MEM_READ)? (m_dram->space[index]) + offset/4 : req->data() + i/4;
+        uint32_t *tgt = (req->rw() == MEM_READ)? req->data() + i/4: (m_dram->space[index]) + offset/4;
+        (*tgt) = (*src);
+    }
+}
 
+void dramController::mem_access_safe(shared_ptr<memoryRequest> req) {
+    unique_lock<recursive_mutex> lock(m_dram->dram_mutex);
+    mem_access(req);
+}

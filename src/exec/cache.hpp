@@ -42,6 +42,8 @@ public:
     virtual void update();
     virtual void process();
 
+    virtual shared_ptr<memory> next_memory();
+
     void set_home(shared_ptr<memory> home);
     void set_home(uint32_t location, uint32_t level);
 
@@ -65,7 +67,7 @@ private:
         bool doomed;        /* will be evicted (write_back issued) */
         bool on_the_fly;    /* data is coming (a request sent) */
         uint64_t tag;
-        shared_ptr<uint32_t> data;
+        uint32_t *data;
         uint64_t last_access;
         bool dirty;
     } cache_line_t;
@@ -77,7 +79,7 @@ private:
 
     //bool hit(maddr_t addr);
     //bool has_line(maddr_t addr);
-    shared_ptr<cache_line_t> cache_line(maddr_t addr);
+    cache_line_t* cache_line(maddr_t addr);
 
 private:
     cache_cfg_t m_cfgs;
@@ -85,7 +87,7 @@ private:
 
     map<mreq_id_t, in_req_entry_t> m_in_req_table;
     map<mreq_id_t, shared_ptr<memoryRequest> > m_out_req_table;
-    map<uint64_t, shared_ptr<vector<shared_ptr<cache_line_t> > > > m_cache;
+    map<uint64_t, cache_line_t*>  m_cache;
 
     uint64_t m_offset_mask;
     uint64_t m_index_mask;
