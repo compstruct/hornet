@@ -4,7 +4,9 @@
 #include "memtraceThread.hpp"
 
 memtraceThread::memtraceThread(mth_id_t id, logger &l) 
-    :m_id(id), log(l) {
+    :m_id(id), log(l) 
+{
+    m_cur.type = INST_NONE;
 }
 
 memtraceThread::~memtraceThread() { }
