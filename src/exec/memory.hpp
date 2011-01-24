@@ -35,6 +35,8 @@ public:
     /* hierarchy */
     virtual shared_ptr<memory> next_memory() = 0;
 
+    inline uint32_t get_id() {return m_id;}
+
 protected:
     mreq_id_t take_new_mreq_id();
     void return_mreq_id(mreq_id_t old_id);

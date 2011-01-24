@@ -23,6 +23,7 @@
 #include "id_factory.hpp"
 #include "sys.hpp"
 #include "ginj.hpp"
+#include "core.hpp"
 #include "memtraceCore.hpp"
 #include "memtraceThread.hpp"
 #include "memtraceThreadPool.hpp"
@@ -31,10 +32,12 @@
 #include "dramController.hpp"
 
 typedef enum {
-    PE_CPU = 0,
-    PE_INJECTOR = 1,
+    CORE_MIPS_MPI = 0,
+    CORE_INJECTOR= 1,
+    CORE_MEMTRACE= 2,
+    CORE_CUSTOM = 3,
     NUM_PES
-} pe_type_t;
+} core_type_t;
 
 static uint32_t read_word(shared_ptr<ifstream> in) throw(err) {
     uint32_t word = 0xdeadbeef;
@@ -71,6 +74,9 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
 }
 
 static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_ptr<memtraceThreadPool> pool, logger &log) {
+#if 1 // for test only
+    random_gen ran(100, 7);
+#endif
     if (!files) {
         return;
     }
@@ -89,18 +95,30 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
                 int home;
                 maddr_t addr, pc;
                 char rw;
+                uint32_t byte_count = 4; /* 4byte word is assumed */
                 try {
                     l >> hex >> th_id >> addr >> rw >> pc >> home >> interval;
                 } catch (const err &e) {
                     assert(false);
                 }
+#if 1 // for test only
+                uint32_t r = ran.random_range(3);
+                addr = r * 16 * 64;
+                home = r * 16 + 3;
+                addr = addr - addr%4;
+                if (ran.random_range(3)<2) {
+                    rw = 'R';
+                } else {
+                    rw = 'W';
+                }
+#endif
                 thread = pool->find(th_id);
                 if (thread == NULL) {
                     thread = new memtraceThread(th_id, log);
                     pool->add_thread(thread);
                 }
                 thread->add_non_mem_inst(interval);
-                thread->add_mem_inst(1, (rw == 'W')? true : false, addr, home, 4); /* 4byte word is assumed */
+                thread->add_mem_inst(1, (rw == 'W')? true : false, addr, home, byte_count); /* 4byte word is assumed */
             }
         }
     }
@@ -146,67 +164,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
     vector<shared_ptr<memtraceCore> > memtrace_cores;
     shared_ptr<memtraceThreadPool> memtrace_thread_pool(new memtraceThreadPool());
-    vector<vector<int> > mem_hierarchy;
     shared_ptr<dram> new_dram = shared_ptr<dram>();
-
-#ifdef TEST_EXEC
-
-    /* a memory system example */
-
-    /* assumes a square */
-    uint32_t width = sqrt(num_nodes);
-    assert(width*width == num_nodes);
-
-    /* each core has its own L1 */
-    vector<int> l1s;
-    for (uint32_t i = 0; i < num_nodes; ++i) {
-        l1s.push_back(i);
-    }
-    mem_hierarchy.push_back(l1s);
-
-#if 1
-    /* each has dram controller */
-    vector<int> dcs;
-    for (uint32_t i = 0; i < num_nodes; ++i) {
-        dcs.push_back(i);
-    }
-    mem_hierarchy.push_back(dcs);
-
-#else
-    /* shard l2 per each l2w x l2h window */
-    vector<int> l2s;
-    uint32_t l2w = 2;
-    uint32_t l2h = 2;
-    for (uint32_t i = 0; i < num_nodes; ++i) {
-        uint32_t px = i%width;
-        uint32_t py = i/width;
-        uint32_t l2x = px - px%l2w;
-        uint32_t l2y = py - py%l2h;
-        uint32_t l2 = l2y*width + l2x;
-        l2s.push_back(l2);
-    }
-    mem_hierarchy.push_back(l2s);
-
-    /* all nodes at the top and the bottom have a DRAM controller */
-    vector<int> dcs;
-    for (uint32_t i = 0; i < num_nodes; ++i) {
-        uint32_t px = i%width;
-        uint32_t py = i/width;
-        if (px%l2w == 0 && py%l2h == 0) {
-            if (py/(width/2) == 0) {
-                dcs.push_back(px);
-            } else {
-                dcs.push_back(px + width*(width-1));
-            }
-        } else {
-            dcs.push_back(-1);
-        }
-    }
-    mem_hierarchy.push_back(dcs);
-#endif
-
-#endif
-
 
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
@@ -258,109 +216,12 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                  qi != b_n_i_qs.end(); ++qi) {
                 vca->add_queue(qi->second);
         }
-        uint32_t pe_type_word = read_word(img);
-        if (pe_type_word >= NUM_PES) throw err_bad_mem_img();
-        pe_type_t pe_type = static_cast<pe_type_t>(pe_type_word);
+        uint32_t core_type_word = read_word(img);
+        core_type_t core_type = static_cast<core_type_t>(core_type_word);
         shared_ptr<pe> p;
 
-#ifdef TEST_EXEC
-        /* override setups and create default memtraceCores */
-        if (pe_type == PE_CPU) {
-            read_word(img);
-            read_word(img);
-            read_word(img);
-            read_word(img);
-        }
-        memtraceCore::memtraceCore_cfg_t cfgs;
-        cfgs.max_threads = 2;
-        cfgs.flits_per_mig = 2;
-        cfgs.flits_per_ra_with_data = 1;
-        cfgs.flits_per_ra_without_data = 1;
-        cfgs.em_type = memtraceCore::EM_NONE;
-        cfgs.ra_type = memtraceCore::RA_NONE;
-        shared_ptr<memtraceCore> core(new memtraceCore(id, t->get_time(), 
-                                                       t->get_packet_id_factory(), t->get_statistics(),
-                                                       log, ran, 
-                                                       memtrace_thread_pool,
-                                                       cfgs));
-        p = core;
-        memtrace_cores.push_back(core);
-
-        /* build memory system according to mem_hierarchy */
-        uint32_t num_level = mem_hierarchy.size();
-        assert(num_level > 0);
-
-        /* all cores have one remoteMemory (first) */
-        shared_ptr<remoteMemory> rm(new remoteMemory(id<<8, t->get_time(), log, ran));
-        shared_ptr<memory> first = shared_ptr<memory>();
-        shared_ptr<cache> last = shared_ptr<cache>();
-        for (uint32_t i = 0; i < num_level; ++i) {
-            shared_ptr<memory> new_memory = shared_ptr<memory>();
-            if (mem_hierarchy[i][id] == (int)id) {
-                /* if thie level is in local */
-                if (i == num_level - 1) {
-                    /* if it's the last level, it's a DRAM controller */
-                    if (!new_dram) {
-                        new_dram = shared_ptr<dram> (new dram ());
-                    }
-                    dramController::dramController_cfg_t cfgs;
-                    cfgs.use_lock = true;
-                    cfgs.off_chip_latency = 50;
-                    cfgs.bytes_per_cycle = 8; 
-                    cfgs.dram_process_time = 10;
-                    cfgs.dc_process_time = 1;
-                    cfgs.header_size_bytes = 4;
-                    shared_ptr<dramController> dc (new dramController (id<<8|(i+1), t->get_time(), log, ran, new_dram, cfgs));
-                    new_memory = dc;
-                    if (last != shared_ptr<cache>()) {
-                        /* it's the home of previous cache, if exists */
-                        last->set_home(dc);
-                    }
-                } else {
-                    /* it's a new level of cache */
-                    cache::cache_cfg_t cache_cfgs;
-                    cache_cfgs.associativity = 1;
-                    cache_cfgs.block_size_bytes = 16;
-                    cache_cfgs.total_block = (i == 0)? 64 : 256;
-                    cache_cfgs.process_time = 1;
-                    cache_cfgs.block_per_cycle = 1;
-                    cache_cfgs.policy = cache::CACHE_RANDOM;
-                    shared_ptr<cache> new_cache ( new cache (id<<8|(i+1), t->get_time(), log, ran, cache_cfgs));
-                    new_memory = new_cache;
-                    if (last != shared_ptr<cache>()) {
-                        last->set_home(new_cache);
-                    }
-                    last = new_cache;
-                }
-                if (!first) {
-                    /* mark the first memory in the chain */
-                    first = new_memory;
-                }
-            } else {
-                /* if it's remote, set remote memory to go there by default */
-                rm->set_home(mem_hierarchy[i][id], i+1);
-                if (last != shared_ptr<cache>()) {
-                    /* if there is a previous cache, let it use remote memory */
-                    last->set_home(rm);
-                }
-                /* the chain ends here */
-                break;
-            }
-        }
-
-        /* attach memory subsystems to the core */
-        core->add_remote_memory(rm);
-        if (first != shared_ptr<memory>()) {
-            core->add_cache_chain(first);
-        } else {
-            core->add_cache_chain(rm);
-        }
-
-        if (false)
-            read_mem(NULL, 0, shared_ptr<ifstream>());
-#else
-        switch (pe_type) {
-        case PE_CPU: {
+        switch (core_type) {
+        case CORE_MIPS_MPI: {
             uint32_t mem_start = read_word(img);
             uint32_t mem_size = read_word(img);
             shared_ptr<mem> m(new mem(id, mem_start, mem_size, log));
@@ -375,7 +236,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                                        log));
             break;
         }
-        case PE_INJECTOR: {
+        case CORE_INJECTOR: {
             shared_ptr<injector> inj(new injector(id, t->get_time(),
                                                   t->get_packet_id_factory(),
                                                   t->get_statistics(),
@@ -392,10 +253,182 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             (*injectors)[id] = inj;
             break;
         }
+        case CORE_MEMTRACE: {
+            memtraceCore::memtraceCore_cfg_t mc_cfgs;
+            mc_cfgs.max_threads = 2;
+            mc_cfgs.flits_per_mig = 2;
+            mc_cfgs.em_type = memtraceCore::EM_ENC;
+            mc_cfgs.ra_type = memtraceCore::RA_NONE;
+
+            core::core_cfg_t core_cfgs;
+            core_cfgs.flits_per_mem_msg_header = 1;
+            core_cfgs.bytes_per_flit = 1;
+            core_cfgs.msg_queue_size = 4;
+            core_cfgs.memory_server_process_time = 1;
+
+            shared_ptr<memtraceCore> new_core(new memtraceCore(id, t->get_time(), 
+                                                           t->get_packet_id_factory(), t->get_statistics(),
+                                                           log, ran, 
+                                                           memtrace_thread_pool,
+                                                           mc_cfgs, core_cfgs));
+            p = new_core;
+            memtrace_cores.push_back(new_core);
+
+            uint32_t num_levels = read_word(img);
+            assert(num_levels > 0);
+
+            /* all cores have one remoteMemory (first) */
+            remoteMemory::remoteMemory_cfg_t rm_cfgs;
+            rm_cfgs.process_time = 1;
+            shared_ptr<remoteMemory> rm(new remoteMemory(id<<8, t->get_time(), log, ran, rm_cfgs));
+            shared_ptr<memory> first = shared_ptr<memory>();
+            shared_ptr<cache> last = shared_ptr<cache>();
+            for (uint32_t i = 0; i < num_levels; ++i) {
+                shared_ptr<memory> new_memory = shared_ptr<memory>();
+                uint32_t loc = read_word(img);
+                if (loc == (uint32_t)id) {
+                    /* if thie level is in local */
+                    if (i == num_levels - 1) {
+                        /* if it's the last level, it's a DRAM controller */
+                        if (!new_dram) {
+                            new_dram = shared_ptr<dram> (new dram ());
+                        }
+                        dramController::dramController_cfg_t dc_cfgs;
+                        dc_cfgs.use_lock = true;
+                        dc_cfgs.off_chip_latency = 50;
+                        dc_cfgs.bytes_per_cycle = 8; 
+                        dc_cfgs.dram_process_time = 10;
+                        dc_cfgs.dc_process_time = 1;
+                        dc_cfgs.header_size_bytes = 4;
+                        shared_ptr<dramController> dc (new dramController (id<<8|(i+1), t->get_time(), log, ran, new_dram, dc_cfgs));
+                        new_memory = dc;
+                        if (last != shared_ptr<cache>()) {
+                            /* it's the home of previous cache, if exists */
+                            last->set_home(dc);
+                        }
+                    } else {
+                        /* it's a new level of cache */
+                        cache::cache_cfg_t cache_cfgs;
+                        cache_cfgs.associativity = 1;
+                        cache_cfgs.block_size_bytes = 16;
+                        cache_cfgs.total_block = (i == 0)? 64 : 256;
+                        cache_cfgs.process_time = 1;
+                        cache_cfgs.block_per_cycle = 1;
+                        cache_cfgs.policy = cache::CACHE_RANDOM;
+                        shared_ptr<cache> new_cache ( new cache (id<<8|(i+1), t->get_time(), log, ran, cache_cfgs));
+                        new_memory = new_cache;
+                        if (last != shared_ptr<cache>()) {
+                            last->set_home(new_cache);
+                        }
+                        last = new_cache;
+                    }
+                    if (!first) {
+                        /* mark the first memory in the chain */
+                        first = new_memory;
+                    }
+                } else {
+                    /* if it's remote, set remote memory to go there by default */
+                    rm->set_home(loc, i+1);
+                    if (last != shared_ptr<cache>()) {
+                        /* if there is a previous cache, let it use remote memory */
+                        last->set_home(rm);
+                    }
+                    /* the chain ends here */
+                    break;
+                }
+            }
+
+            /* attach memory subsystems to the core */
+            new_core->add_remote_memory(rm);
+            if (first != shared_ptr<memory>()) {
+                new_core->add_cache_chain(first);
+            } else {
+                new_core->add_cache_chain(rm);
+            }
+            break;
+        }
+        case CORE_CUSTOM: {
+            /* set your core configuration */
+            /* create core object */
+            shared_ptr<core> new_core;
+
+            p = new_core;
+
+            /* adjust your memory subsystem here (feeling lazy and copy and paste) */
+            uint32_t num_levels = read_word(img);
+            assert(num_levels > 0);
+
+            /* all cores have one remoteMemory (first) */
+            remoteMemory::remoteMemory_cfg_t rm_cfgs;
+            rm_cfgs.process_time = 1;
+            shared_ptr<remoteMemory> rm(new remoteMemory(id<<8, t->get_time(), log, ran, rm_cfgs));
+            shared_ptr<memory> first = shared_ptr<memory>();
+            shared_ptr<cache> last = shared_ptr<cache>();
+            for (uint32_t i = 0; i < num_levels; ++i) {
+                shared_ptr<memory> new_memory = shared_ptr<memory>();
+                uint32_t loc = read_word(img);
+                if (loc == (uint32_t)id) {
+                    /* if thie level is in local */
+                    if (i == num_levels - 1) {
+                        /* if it's the last level, it's a DRAM controller */
+                        if (!new_dram) {
+                            new_dram = shared_ptr<dram> (new dram ());
+                        }
+                        dramController::dramController_cfg_t cfgs;
+                        cfgs.use_lock = true;
+                        cfgs.off_chip_latency = 50;
+                        cfgs.bytes_per_cycle = 8; 
+                        cfgs.dram_process_time = 10;
+                        cfgs.dc_process_time = 1;
+                        cfgs.header_size_bytes = 4;
+                        shared_ptr<dramController> dc (new dramController (id<<8|(i+1), t->get_time(), log, ran, new_dram, cfgs));
+                        new_memory = dc;
+                        if (last != shared_ptr<cache>()) {
+                            /* it's the home of previous cache, if exists */
+                            last->set_home(dc);
+                        }
+                    } else {
+                        /* it's a new level of cache */
+                        cache::cache_cfg_t cache_cfgs;
+                        cache_cfgs.associativity = 1;
+                        cache_cfgs.block_size_bytes = 16;
+                        cache_cfgs.total_block = (i == 0)? 64 : 256;
+                        cache_cfgs.process_time = 1;
+                        cache_cfgs.block_per_cycle = 1;
+                        cache_cfgs.policy = cache::CACHE_RANDOM;
+                        shared_ptr<cache> new_cache ( new cache (id<<8|(i+1), t->get_time(), log, ran, cache_cfgs));
+                        new_memory = new_cache;
+                        if (last != shared_ptr<cache>()) {
+                            last->set_home(new_cache);
+                        }
+                        last = new_cache;
+                    }
+                    if (!first) {
+                        /* mark the first memory in the chain */
+                        first = new_memory;
+                    }
+                } else {
+                    /* if it's remote, set remote memory to go there by default */
+                    rm->set_home(loc, i+1);
+                    if (last != shared_ptr<cache>()) {
+                        /* if there is a previous cache, let it use remote memory */
+                        last->set_home(rm);
+                    }
+                    /* the chain ends here */
+                    break;
+                }
+            }
+            /* attach memory subsystems to the core */
+            new_core->add_remote_memory(rm);
+            if (first != shared_ptr<memory>()) {
+                new_core->add_cache_chain(first);
+            } else {
+                new_core->add_cache_chain(rm);
+            }
+        }
         default:
             throw err_bad_mem_img();
         }
-#endif
 
         pes[id] = p;
         t->add(p);

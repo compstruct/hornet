@@ -8,13 +8,14 @@ AM_CXXFLAGS = -Wall -Werror
 noinst_LTLIBRARIES = libdarexec.la
 
 libdarexec_la_SOURCES = \
-    message.hpp message.cpp \
+    message.hpp \
     memoryRequest.hpp memoryRequest.cpp \
     memory.hpp memory.cpp \
     cache.hpp cache.cpp \
     remoteMemory.hpp remoteMemory.cpp \
     dramController.hpp dramController.cpp \
     core.hpp core.cpp \
+    coreMessageQueue.hpp coreMessageQueue.cpp \
     memtraceCore.hpp memtraceCore.cpp \
     memtraceThread.hpp memtraceThread.cpp \
     memtraceThreadPool.hpp memtraceThreadPool.cpp 

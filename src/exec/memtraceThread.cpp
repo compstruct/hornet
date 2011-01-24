@@ -11,6 +11,7 @@ memtraceThread::~memtraceThread() { }
 
 void memtraceThread::add_non_mem_inst(uint32_t alu_cost) {
     inst_t new_inst;
+    new_inst.alu_cost = alu_cost;
     new_inst.remaining_alu_cost = alu_cost;
     new_inst.type = INST_OTHER;
     m_insts.push_back(new_inst);
@@ -18,6 +19,7 @@ void memtraceThread::add_non_mem_inst(uint32_t alu_cost) {
 
 void memtraceThread::add_mem_inst(uint32_t alu_cost, bool write, maddr_t addr, int home, uint32_t byte_count) {
     inst_t new_inst;
+    new_inst.alu_cost = alu_cost;
     new_inst.remaining_alu_cost = alu_cost;
     new_inst.type = INST_MEMORY;
     new_inst.rw = (write)? MEM_WRITE : MEM_READ;
@@ -32,6 +34,7 @@ void memtraceThread::fetch() {
         m_cur = m_insts.front();
         m_insts.erase(m_insts.begin());
     } else {
+        LOG(log,2) << "[thread " << get_id() << " ] finished " << endl;
         m_cur.type = INST_NONE;
     }
 }
@@ -41,13 +44,16 @@ void memtraceThread::execute() {
     --(m_cur.remaining_alu_cost);
 }
 
+void memtraceThread::reset_current_instruction() {
+    m_cur.remaining_alu_cost = m_cur.alu_cost;
+}
+
 memtraceThread::inst_type_t memtraceThread::type() { 
     return m_cur.type;
 }
 
 uint32_t memtraceThread::remaining_alu_cycle() { 
-    assert(m_cur.type != INST_NONE);
-    return m_cur.remaining_alu_cost; 
+    return (m_cur.type == INST_NONE)? 0 : m_cur.remaining_alu_cost; 
 }
 
 mreq_type_t memtraceThread::rw() { 

@@ -151,8 +151,14 @@ def write_header(out, verbose=False):
     out.write(file_magic)
     out.write(w2bs(file_version))
 
-def write_pe(out, id, img, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_size,
+def write_pe(out, id, core, img, mem_locs, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_size,
              n2b_queues, b2n_queues, one_q_per_f, one_f_per_q, verbose=False):
+    core_id = {
+        'mips_mpi':0,
+        'injector':1,
+        'memtraceCore':2,
+        'customCore':3
+    }
     if verbose:
         print 'writing PE %d' % id
     # node
@@ -169,8 +175,14 @@ def write_pe(out, id, img, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_size,
     for q in b2n_queues: out.write(w2bs(q))
     out.write(w2bs(len(n2b_queues)))
     for q in n2b_queues: out.write(w2bs(q))
-    if img is not None: # memory and CPU
-        out.write(w2bs(0))
+    if core_id.has_key(core) == False:
+        raise Err('bad core name : %s (must be one of %s)' % (core, str(core_id.keys())))
+    out.write(w2bs(core_id[core]))
+    # core-specific cfgs
+    # image      
+    if core in ['mips_mpi']:
+        assert(img is not None)
+        out.write(w2bs(1)) # code
         file, format, entry, all_sections = \
                 read_section_headers(img, verbose=verbose)
         sections = sort_sections(all_sections, verbose=verbose)
@@ -178,8 +190,15 @@ def write_pe(out, id, img, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_size,
         addr_past_end = sections[-1]['lma'] + sections[-1]['size']
         size = ((addr_past_end - start) & 0xfffff000) + 0x1000 + 0x4000
         write_mem_image(out, file, start, size, entry, sections, verbose=verbose)
-    else: # injector
-        out.write(w2bs(1))
+    # memory hierarchy
+    if core in ['memtraceCore', 'customCore']:
+        out.write(w2bs(len(mem_locs)))
+        for loc in mem_locs:
+            out.write(w2bs(loc))
+    # customCore-specific cfgs
+    if core in ['customCore']:
+        # add your customCore-specific configurations
+        None
 
 def write_cxn(out, src, src_port, dst, dst_port, bw, xbar_bw, queues,
               verbose=False):
@@ -278,11 +297,11 @@ def new_system_config(cfg, verbose=False):
                 ([('east', 'E', n + 1, 'W')] if n % w != w - 1 else []) +
                 ([('south', 'S', n + w, 'N')] if n / w != h - 1 else []) +
                 ([('west', 'W', n - 1, 'E')] if n % w != 0 else []))
+    def get_core((cores,dflt), id):
+        core = cores[id] if id in cores else dflt
+        return core
     def get_code((progs,dflt), id):
-        if id not in progs and dflt is None:
-            raise Err('no code for CPU %d and no default' % id)
         code = progs[id] if id in progs else dflt
-        if code == 'injector': code = None
         if code is not None and not os.path.exists(code):
             raise Err('missing code image file: %s' % code)
         return code
@@ -468,10 +487,23 @@ def new_system_config(cfg, verbose=False):
         w = p_nat(cfg.get('geometry', 'width'))
         h = p_nat(cfg.get('geometry', 'height'))
         check_qs(cfg.options('queues'))
-        progs = (dict([(p_nat(n), v) for n, v in cfg.items('code')
+        cores = (dict([(p_nat(n), v) for n, v in cfg.items('core')
                        if n != 'default']),
-                 cfg.get('code','default') if cfg.has_option('code','default')
+                 cfg.get('core','default') if cfg.has_option('core','default')
                                            else None)
+        if cfg.has_section('code') :
+            progs = (dict([(p_nat(n), v) for n, v in cfg.items('code')
+                           if n != 'default']),
+                     cfg.get('code','default') if cfg.has_option('code','default')
+                                               else None)
+        else :
+            progs = ({}, None)
+        if cfg.has_section('memory hierarchy') :
+            mem_locs = dict([(p_nat(n), map(int, v.split())) for n, v in cfg.items('memory hierarchy')])
+        else :
+            mem_locs = {}
+        mem_levels = mem_locs.keys()
+        mem_levels.sort()
         node_ids = range(0, w * h)
         cpu_qs = get_qs('cpu')
         if get_bw('net')[1] is not None:
@@ -479,7 +511,9 @@ def new_system_config(cfg, verbose=False):
         nodes = [{ 'id': id,
                    'one_q_per_f': one_q_per_f,
                    'one_f_per_q': one_f_per_q,
+                   'core': get_core(cores, id),
                    'img': get_code(progs, id),
+                   'mem_locs' : [mem_locs[level][id] for level in mem_levels],
                    'n2b_bw': get_bw('net')[0],
                    'b2n_bw': get_bw('cpu')[0],
                    'b2n_xbar_bw': get_bw('cpu')[1],

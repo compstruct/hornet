@@ -32,6 +32,11 @@ public:
     /* decrease alu_time */
     void execute();
 
+    /* restart current instruction */
+    void reset_current_instruction();
+
+    inline bool current_instruction_done() { return remaining_alu_cycle() == 0; }
+
     /* read from current instruction */
     inst_type_t type();
     uint32_t remaining_alu_cycle();
@@ -42,12 +47,17 @@ public:
     uint32_t byte_count();
     int home();
 
+    /* for now, one native core per thread */
+    inline int native_core() { return m_native_core; }
+    inline void set_native_core(int core) { m_native_core = core; }
+
     /* add instructions */
     void add_mem_inst(uint32_t alu_cost, bool write, maddr_t addr, int home, uint32_t byte_count);
     void add_non_mem_inst(uint32_t alu_cost);
 
 private:
     typedef struct {
+        uint32_t alu_cost;
         uint32_t remaining_alu_cost;
         inst_type_t type;
         mreq_type_t rw;
@@ -62,6 +72,7 @@ private:
     inst_t m_cur;
     vector<inst_t> m_insts;
 
+    int m_native_core;
 };
 
 #endif

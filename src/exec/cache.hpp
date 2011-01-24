@@ -77,8 +77,6 @@ private:
     inline uint64_t get_index(maddr_t addr) { return (addr&m_index_mask)>>m_index_pos; }
     inline uint64_t get_offset(maddr_t addr) { return (addr&m_offset_mask); }
 
-    //bool hit(maddr_t addr);
-    //bool has_line(maddr_t addr);
     cache_line_t* cache_line(maddr_t addr);
 
 private:

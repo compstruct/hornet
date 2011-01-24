@@ -52,6 +52,7 @@ mreq_id_t cache::request(shared_ptr<memoryRequest> req) {
     assert( req->addr()/m_cfgs.block_size_bytes == (req->addr() + req->byte_count() - 1)/m_cfgs.block_size_bytes);
 
     /* put an entry */
+    /* assumes an infinite request table - if it's finite, deadlock must be considered */
     mreq_id_t new_id = take_new_mreq_id();
     in_req_entry_t new_entry;
     new_entry.status = REQ_INIT;

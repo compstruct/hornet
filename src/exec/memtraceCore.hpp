@@ -17,12 +17,10 @@
 class memtraceCore : public core {
 public:
     typedef enum { EM_NONE, EM_ENC }  em_type_t; /* TODO (Later) : more em schemes (swapInf, seapHS) */
-    typedef enum { RA_NONE, RA_ONLY } ra_type_t; /* TODO (Later) : EM/RA hybrid */
+    typedef enum { RA_NONE, RA_ONLY, RA_RANDOM } ra_type_t; /* TODO (Later) : EM/RA hybrid */
     typedef struct {
         uint32_t    max_threads;
         uint32_t    flits_per_mig;
-        uint32_t    flits_per_ra_with_data;      /* read reply, write request */
-        uint32_t    flits_per_ra_without_data;   /* read request, write reply */
         em_type_t   em_type;
         ra_type_t   ra_type;
     } memtraceCore_cfg_t;
@@ -34,7 +32,7 @@ public:
                  shared_ptr<random_gen> ran,
                  shared_ptr<memtraceThreadPool> pool,
                  /* TODO (Later) progress marker */
-                 memtraceCore_cfg_t cfgs) throw(err);
+                 memtraceCore_cfg_t cfgs, core_cfg_t core_cfgs) throw(err);
     virtual ~memtraceCore() throw();
 
     virtual void exec_core();
@@ -70,6 +68,12 @@ private:
 
     typedef vector<lane_entry_t>::size_type lane_idx_t;
 
+    typedef struct {
+        bool valid;
+        lane_idx_t idx;
+        int dst; /* for logs */
+    } pending_mig_t;
+
 private:
     /* Local methods */
     void load_thread(memtraceThread* thread);
@@ -91,7 +95,8 @@ private:
     /* Memory message queue */
 
     /* Running state */
-
+    bool m_do_evict;
+    pending_mig_t m_pending_mig;
 };
 
 /* TODO (Phase 4) : design memtraceCore stats */
