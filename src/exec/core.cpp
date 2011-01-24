@@ -128,7 +128,6 @@ void core::tick_positive_edge() throw(err) {
         } else {
             LOG(log,3) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
                        << " ] has failed sending a message type " << (uint32_t) *i_msg_type << endl;
-            m_out_msg_queues[*i_msg_type]->pop();
             delete[] p_env;
         }
     }
@@ -274,8 +273,8 @@ void core::exec_mem_server() {
         }
     }
 
-        /* accepts request */
-    msg_type_t mem_reqs[] = {MSG_MEM_REQ, MSG_MEM_REQ};
+    /* accepts request */
+    msg_type_t mem_reqs[] = {MSG_RA_REQ, MSG_MEM_REQ};
     vector<msg_type_t> mem_req_vec (mem_reqs, mem_reqs + sizeof(mem_reqs)/sizeof(msg_type_t));
     for (vector<msg_type_t>::iterator i_queue = mem_req_vec.begin(); i_queue != mem_req_vec.end(); ++i_queue) {
         uint32_t num_msgs = m_in_msg_queues[*i_queue]->size();

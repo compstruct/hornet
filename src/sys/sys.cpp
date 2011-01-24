@@ -258,7 +258,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             mc_cfgs.max_threads = 2;
             mc_cfgs.flits_per_mig = 2;
             mc_cfgs.em_type = memtraceCore::EM_ENC;
-            mc_cfgs.ra_type = memtraceCore::RA_NONE;
+            mc_cfgs.ra_type = memtraceCore::RA_RANDOM;
 
             core::core_cfg_t core_cfgs;
             core_cfgs.flits_per_mem_msg_header = 1;
@@ -274,8 +274,21 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             p = new_core;
             memtrace_cores.push_back(new_core);
 
-            uint32_t num_levels = read_word(img);
-            assert(num_levels > 0);
+            /* get local memories and an immediate remote home */
+            uint32_t total_levels = read_word(img);
+            assert(total_levels > 0);
+            vector<uint32_t> locs;
+            bool ignore_others = false;
+            for (uint32_t i = 0; i < total_levels; ++i) {
+                uint32_t loc = read_word(img);
+                if (!ignore_others) {
+                    locs.push_back(loc);
+                    if (loc != (uint32_t)id) {
+                        ignore_others = true;
+                    }
+                }
+            }
+            uint32_t local_levels = locs.size();
 
             /* all cores have one remoteMemory (first) */
             remoteMemory::remoteMemory_cfg_t rm_cfgs;
@@ -283,12 +296,12 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             shared_ptr<remoteMemory> rm(new remoteMemory(id<<8, t->get_time(), log, ran, rm_cfgs));
             shared_ptr<memory> first = shared_ptr<memory>();
             shared_ptr<cache> last = shared_ptr<cache>();
-            for (uint32_t i = 0; i < num_levels; ++i) {
+            for (uint32_t i = 0; i < local_levels; ++i) {
                 shared_ptr<memory> new_memory = shared_ptr<memory>();
-                uint32_t loc = read_word(img);
+                uint32_t loc = locs[i];
                 if (loc == (uint32_t)id) {
                     /* if thie level is in local */
-                    if (i == num_levels - 1) {
+                    if (i == total_levels - 1) {
                         /* if it's the last level, it's a DRAM controller */
                         if (!new_dram) {
                             new_dram = shared_ptr<dram> (new dram ());
@@ -355,8 +368,22 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             p = new_core;
 
             /* adjust your memory subsystem here (feeling lazy and copy and paste) */
+
+            /* get local memories and an immediate remote home */
             uint32_t num_levels = read_word(img);
             assert(num_levels > 0);
+            vector<uint32_t> locs;
+            bool ignore_others = false;
+            for (uint32_t i = 0; i < num_levels; ++i) {
+                uint32_t loc = read_word(img);
+                if (ignore_others) {
+                    locs.push_back(loc);
+                    if (loc != (uint32_t)id) {
+                        ignore_others = true;
+                    }
+                }
+            }
+            num_levels = locs.size();
 
             /* all cores have one remoteMemory (first) */
             remoteMemory::remoteMemory_cfg_t rm_cfgs;
@@ -366,7 +393,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             shared_ptr<cache> last = shared_ptr<cache>();
             for (uint32_t i = 0; i < num_levels; ++i) {
                 shared_ptr<memory> new_memory = shared_ptr<memory>();
-                uint32_t loc = read_word(img);
+                uint32_t loc = locs[i];
                 if (loc == (uint32_t)id) {
                     /* if thie level is in local */
                     if (i == num_levels - 1) {

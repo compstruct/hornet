@@ -37,7 +37,6 @@ mreq_id_t remoteMemory::request(shared_ptr<memoryRequest> req, int location, uin
     new_entry.level = level;
     new_entry.ra = ra;
     m_in_req_table[new_id] = new_entry;
-
     return new_id;
 }
 

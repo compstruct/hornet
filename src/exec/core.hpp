@@ -87,7 +87,7 @@ protected:
     map<msg_type_t, shared_ptr<coreMessageQueue> > m_in_msg_queues;
 
     /* Memories */
-    shared_ptr<memory> m_remote_memory;
+    shared_ptr<remoteMemory> m_remote_memory;
     shared_ptr<memory> m_nearest_memory;
 
 private:
