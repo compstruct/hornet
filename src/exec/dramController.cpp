@@ -30,6 +30,13 @@ mreq_id_t dramController::request(shared_ptr<memoryRequest> req, uint32_t locati
     return new_id;
 }
 
+shared_ptr<memoryRequest> dramController::get_req(mreq_id_t id) {
+    if (m_in_req_table.count(id) > 0) {
+        return m_in_req_table[id].req;
+    }
+    return shared_ptr<memoryRequest>();
+}
+
 bool dramController::ready(mreq_id_t id) {
     return (m_in_req_table.count(id) > 0 && m_in_req_table[id].status == REQ_DONE);
 }

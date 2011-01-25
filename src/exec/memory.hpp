@@ -25,6 +25,7 @@ public:
     virtual mreq_id_t request(shared_ptr<memoryRequest> req);
     virtual mreq_id_t request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t target_level) = 0;
     virtual bool ready(mreq_id_t id) = 0;
+    virtual shared_ptr<memoryRequest> get_req(mreq_id_t id) = 0;
     virtual bool finish(mreq_id_t id) = 0;
 
     /* Ticking - base class (core) sends ticks first-level memory components */

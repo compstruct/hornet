@@ -154,9 +154,9 @@ void memtraceCore::exec_core() {
                                 uint32_t wdata = get_id().get_numeric_id();
                                 req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count, &wdata));
                             }
-                            cur.mreq_id = m_remote_memory->ra_request(req, home, 1);
+                            cur.mreq_id = remote_memory()->ra_request(req, home);
                             cur.req = req;
-                            cur.mem_to_serve = m_remote_memory;
+                            cur.mem_to_serve = remote_memory();
                             cur.status = LANE_WAIT;
                             LOG(log,3) << "[thread " << cur.thread->get_id() << " @ " << system_time 
                                        << " ] is making a remote access request on core " 

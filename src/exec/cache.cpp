@@ -46,6 +46,13 @@ void cache::set_home_memory(shared_ptr<memory> home) {
     m_home = home;
 }
 
+shared_ptr<memoryRequest> cache::get_req(mreq_id_t id) {
+    if (m_in_req_table.count(id)) {
+        return m_in_req_table[id].req;
+    }
+    return shared_ptr<memoryRequest>();
+}
+
 mreq_id_t cache::request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t target_level) {
     /* one cache line for one request */
     assert( req->addr()/m_cfgs.block_size_bytes == (req->addr() + req->byte_count() - 1)/m_cfgs.block_size_bytes);

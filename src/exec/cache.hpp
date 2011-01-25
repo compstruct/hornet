@@ -36,6 +36,7 @@ public:
 
     virtual mreq_id_t request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t target_level);
     virtual bool ready(mreq_id_t id);
+    virtual shared_ptr<memoryRequest> get_req(mreq_id_t id);
     virtual bool finish(mreq_id_t id);
 
     virtual void initiate();

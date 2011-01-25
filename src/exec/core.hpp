@@ -71,7 +71,8 @@ protected:
     inline shared_ptr<coreMessageQueue> mig_send_queue_low_priority() { return m_out_msg_queues[MSG_MIG]; }
     inline shared_ptr<coreMessageQueue> mig_send_queue_high_priority() { return m_out_msg_queues[MSG_MIG_PRIORITY]; }
 
-    shared_ptr<memory> nearest_memory() { return m_memory_hierarchy[m_min_memory_level]; }
+    inline shared_ptr<memory> nearest_memory() { return m_memory_hierarchy[m_min_memory_level]; }
+    inline shared_ptr<memory> remote_memory() { return m_remote_memory; }
 
 protected:
     /* Global time */

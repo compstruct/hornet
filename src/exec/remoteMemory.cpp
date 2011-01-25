@@ -62,6 +62,13 @@ bool remoteMemory::ready(mreq_id_t id) {
     return (m_in_req_table.count(id) > 0 && m_in_req_table[id].status == REQ_DONE);
 }
 
+shared_ptr<memoryRequest> remoteMemory::get_req(mreq_id_t id) {
+    if (m_in_req_table.count(id) > 0) {
+        return m_in_req_table[id].req;
+    }
+    return shared_ptr<memoryRequest>();
+}
+
 bool remoteMemory::finish(mreq_id_t id) {
     if (m_in_req_table.count(id) == 0) {
         return true;
