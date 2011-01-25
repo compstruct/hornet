@@ -204,7 +204,7 @@ def main(argv):
     core_name = 'memtraceCore'
 
     try:
-        opts, args = getopt.getopt(argv,"x:y:v:q:ero:c:") 
+        opts, args = getopt.getopt(argv,"x:y:v:q:c:o:er") 
     except getopt.GetoptError:
         print 'Options'
         print '  -x <arg> network width(8)'
@@ -228,7 +228,7 @@ def main(argv):
             num_flits_per_vc = int(a)
         elif o == '-e':
             do_em = True;
-        elif 0 == '-c':
+        elif o == '-c':
             core_name = a
         elif o == '-r':
             do_ra = True;

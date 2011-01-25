@@ -13,16 +13,17 @@ using namespace std;
 
 class coreMessageQueue {
 public:
-    coreMessageQueue(uint32_t capacity);
+    coreMessageQueue(msg_type_t type, uint32_t capacity);
     ~coreMessageQueue();
 
     inline uint32_t size() { return m_queue.size(); }
-    bool push_back(const msg_t &msg);
+    bool push_back(msg_t &msg);
     inline msg_t front() { assert(size()>0); return m_queue.front(); }
     bool pop();
     msg_t at(uint32_t idx);
     
 private:
+    msg_type_t m_type;
     uint32_t m_capacity;
     vector<msg_t> m_queue;
 };

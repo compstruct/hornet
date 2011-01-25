@@ -3,11 +3,12 @@
 
 #include "coreMessageQueue.hpp"
 
-coreMessageQueue::coreMessageQueue(uint32_t capacity) : m_capacity(capacity) {}
+coreMessageQueue::coreMessageQueue(msg_type_t type, uint32_t capacity) : m_type(type), m_capacity(capacity) {}
 
 coreMessageQueue::~coreMessageQueue() {}
 
-bool coreMessageQueue::push_back(const msg_t &msg) {
+bool coreMessageQueue::push_back(msg_t &msg) {
+    msg.type = m_type;
     if (size() < m_capacity) {
         m_queue.push_back(msg);
         return true;

@@ -24,18 +24,21 @@ memtraceCore::memtraceCore(const pe_id &id, const uint64_t &t,
 
 memtraceCore::~memtraceCore() throw() {}
 
+#define HIGH_PRIORITY_CHANNEL 0
+#define LOW_PRIORITY_CHANNEL 1
+
 void memtraceCore::exec_core() {
 
     /* update em */
     if (m_pending_mig.valid) {
-        if (mig_send_queue_high_priority()->size() == 0 && mig_send_queue_low_priority()->size() == 0) {
+        if (core_send_queue(HIGH_PRIORITY_CHANNEL)->size() == 0 && core_send_queue(LOW_PRIORITY_CHANNEL)->size() == 0) {
             LOG(log,3) << "[thread " << m_lanes[m_pending_mig.idx].thread->get_id() << " @ " << system_time
                        << " ] has sent from " << get_id().get_numeric_id() << " to " << m_pending_mig.dst << endl;
             unload_thread(m_pending_mig.idx);
         }
         /* cancel if not sent */
-        mig_send_queue_high_priority()->pop();
-        mig_send_queue_low_priority()->pop();
+        core_send_queue(HIGH_PRIORITY_CHANNEL)->pop();
+        core_send_queue(LOW_PRIORITY_CHANNEL)->pop();
         m_pending_mig.valid = false;
     }
 
@@ -48,11 +51,10 @@ void memtraceCore::exec_core() {
             if ((m_lanes[cand].status == LANE_IDLE || m_lanes[cand].status == LANE_MIG)
                     && m_lanes[cand].evictable) { 
                 msg_t new_msg;
-                new_msg.type = MSG_MIG_PRIORITY;
                 new_msg.dst = m_lanes[cand].thread->native_core();
                 new_msg.flit_count = m_cfgs.flits_per_mig;
-                new_msg.mig_msg.context = (void*)(m_lanes[cand].thread);
-                mig_send_queue_high_priority()->push_back(new_msg);
+                new_msg.core_msg.context = (void*)(m_lanes[cand].thread);
+                core_send_queue(HIGH_PRIORITY_CHANNEL)->push_back(new_msg);
                 m_pending_mig.valid = true;
                 m_pending_mig.idx = cand;
                 m_pending_mig.dst = new_msg.dst; 
@@ -70,16 +72,14 @@ void memtraceCore::exec_core() {
                 msg_t new_msg;
                 new_msg.dst = m_lanes[cand].thread->home();
                 new_msg.flit_count = m_cfgs.flits_per_mig;
-                new_msg.mig_msg.context = (void*)(m_lanes[cand].thread);
+                new_msg.core_msg.context = (void*)(m_lanes[cand].thread);
                 m_pending_mig.valid = true;
                 m_pending_mig.idx = cand;
                 m_pending_mig.dst = new_msg.dst; //TODO erase
                 if (new_msg.dst == (uint32_t)(m_lanes[cand].thread->native_core())) {
-                    new_msg.type = MSG_MIG_PRIORITY;
-                    mig_send_queue_high_priority()->push_back(new_msg);
+                    core_send_queue(HIGH_PRIORITY_CHANNEL)->push_back(new_msg);
                 } else {
-                    new_msg.type = MSG_MIG;
-                    mig_send_queue_low_priority()->push_back(new_msg);
+                    core_send_queue(LOW_PRIORITY_CHANNEL)->push_back(new_msg);
                 }
                 LOG(log,3) << "[thread " << m_lanes[cand].thread->get_id() << " @ " << system_time
                            << " ] is a migrate candidate on " << get_id().get_numeric_id() << endl;
@@ -151,8 +151,9 @@ void memtraceCore::exec_core() {
                             if (read) {
                                 req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count));
                             } else {
-                                uint32_t wdata = get_id().get_numeric_id();
-                                req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count, &wdata));
+                                uint32_t wdata[byte_count];
+                                wdata[0] = get_id().get_numeric_id();
+                                req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count, wdata));
                             }
                             cur.mreq_id = remote_memory()->ra_request(req, home);
                             cur.req = req;
@@ -224,25 +225,25 @@ void memtraceCore::exec_core() {
     }
 
     /* load incoming threads */
-    uint32_t num_arrived_natives = mig_receive_queue_high_priority()->size();
-    uint32_t num_arrived_guests = mig_receive_queue_low_priority()->size();
+    uint32_t num_arrived_natives = core_receive_queue(HIGH_PRIORITY_CHANNEL)->size();
+    uint32_t num_arrived_guests = core_receive_queue(LOW_PRIORITY_CHANNEL)->size();
 
     /* emulate one queue per each lane - can take all native contexts */
     for (uint32_t i = 0; i < num_arrived_natives; ++i) {
         memtraceThread *new_thread;
-        new_thread = (memtraceThread*)mig_receive_queue_high_priority()->front().mig_msg.context;
+        new_thread = (memtraceThread*)core_receive_queue(HIGH_PRIORITY_CHANNEL)->front().core_msg.context;
         load_thread(new_thread);
-        mig_receive_queue_high_priority()->pop();
+        core_receive_queue(HIGH_PRIORITY_CHANNEL)->pop();
     } 
     /* may take up to num_lanes - num_native_lanes */
     uint32_t max_guests = m_cfgs.max_threads - m_native_list.size();
     for (uint32_t i = 0; i < num_arrived_guests && m_num_guests < max_guests; ++i) {
         memtraceThread *new_thread;
-        new_thread = (memtraceThread*)mig_receive_queue_low_priority()->front().mig_msg.context;
+        new_thread = (memtraceThread*)core_receive_queue(LOW_PRIORITY_CHANNEL)->front().core_msg.context;
         load_thread(new_thread);
-        mig_receive_queue_low_priority()->pop();
+        core_receive_queue(LOW_PRIORITY_CHANNEL)->pop();
     }
-    m_do_evict = (mig_receive_queue_low_priority()->size() > 0)? true: false;
+    m_do_evict = (core_receive_queue(LOW_PRIORITY_CHANNEL)->size() > 0)? true: false;
 }
 
 uint64_t memtraceCore::next_pkt_time() throw(err) { 

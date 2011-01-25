@@ -46,7 +46,7 @@ public:
     virtual void tick_negative_edge() throw(err);
 
     /* Fast forwarding */
-    virtual uint64_t next_pkt_time() throw(err) = 0;
+    virtual uint64_t next_pkt_time() throw(err);
     virtual bool is_drained() const throw() = 0;
 
     /* Is not used */
@@ -63,16 +63,11 @@ protected:
     virtual void exec_core() = 0;
 
     /* migration message queues */
-    inline shared_ptr<coreMessageQueue> mig_receive_queue_low_priority() { return m_in_msg_queues[MSG_MIG]; }
-    inline shared_ptr<coreMessageQueue> mig_receive_queue_high_priority() { 
-        return m_in_msg_queues[MSG_MIG_PRIORITY]; 
-    }
-
-    inline shared_ptr<coreMessageQueue> mig_send_queue_low_priority() { return m_out_msg_queues[MSG_MIG]; }
-    inline shared_ptr<coreMessageQueue> mig_send_queue_high_priority() { return m_out_msg_queues[MSG_MIG_PRIORITY]; }
+    shared_ptr<coreMessageQueue> core_receive_queue(int channel);
+    shared_ptr<coreMessageQueue> core_send_queue(int channel);
 
     inline shared_ptr<memory> nearest_memory() { return m_memory_hierarchy[m_min_memory_level]; }
-    inline shared_ptr<memory> remote_memory() { return m_remote_memory; }
+    inline shared_ptr<remoteMemory> remote_memory() { return m_remote_memory; }
 
 protected:
     /* Global time */

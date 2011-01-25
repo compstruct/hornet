@@ -13,8 +13,8 @@ core::core(const pe_id &id, const uint64_t &t,
     m_packet_id_factory(pif), m_max_memory_level(0), m_current_receive_channel() 
 { 
     for (int i = 0; i < NUM_MSG_TYPES; ++i) {
-        m_in_msg_queues[(msg_type_t)i] = shared_ptr<coreMessageQueue> (new coreMessageQueue(m_cfgs.msg_queue_size));
-        m_out_msg_queues[(msg_type_t)i] = shared_ptr<coreMessageQueue> (new coreMessageQueue(m_cfgs.msg_queue_size));
+        m_in_msg_queues[(msg_type_t)i] = shared_ptr<coreMessageQueue> (new coreMessageQueue((msg_type_t)i, m_cfgs.msg_queue_size));
+        m_out_msg_queues[(msg_type_t)i] = shared_ptr<coreMessageQueue> (new coreMessageQueue((msg_type_t)i, m_cfgs.msg_queue_size));
     }
 }
 
@@ -53,6 +53,16 @@ void core::add_to_memory_hierarchy(int level, shared_ptr<memory> mem) {
     m_memory_hierarchy[level] = mem;
 }
 
+shared_ptr<coreMessageQueue> core::core_receive_queue(int channel) {
+    assert(channel < NUM_MSG_CORE);
+    return m_in_msg_queues[(msg_type_t)((int)MSG_CORE_0 + channel)];
+}
+
+shared_ptr<coreMessageQueue> core::core_send_queue(int channel) {
+    assert(channel < NUM_MSG_CORE);
+    return m_out_msg_queues[(msg_type_t)((int)MSG_CORE_0 + channel)];
+}
+
 void core::release_xmit_buffer() {
     /* release xmit buffer for injection if transmission is done */
     for (map<uint32_t, uint64_t*>::iterator i = m_xmit_buffer.begin(); i != m_xmit_buffer.end(); ++i) {
@@ -69,7 +79,7 @@ void core::tick_positive_edge() throw(err) {
     release_xmit_buffer();
 
     /* set priority of sending/receiving messages */
-    msg_type_t priority[] = {MSG_MIG_PRIORITY, MSG_RA_REP, MSG_MEM_REP, MSG_MIG, MSG_RA_REQ, MSG_MEM_REQ};
+    msg_type_t priority[] = {MSG_CORE_0, MSG_RA_REP, MSG_MEM_REP, MSG_CORE_1, MSG_RA_REQ, MSG_MEM_REQ};
     vector<msg_type_t> priority_vector (priority, priority + sizeof(priority) / sizeof(msg_type_t));
 
     /* Send message(s) in out_msg_queues */
@@ -287,3 +297,7 @@ void core::add_packet(uint64_t time, const flow_id &flow, uint32_t len) throw(er
 bool core::work_queued() throw(err) { assert(false); return false; }
 bool core::is_ready_to_offer() throw(err) { assert(false); return false; }
 void core::set_stop_darsim() throw(err) { assert(false); }
+
+uint64_t core::next_pkt_time() throw(err) {
+    return system_time;
+}

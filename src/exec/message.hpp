@@ -6,20 +6,23 @@
 
 #include "memory.hpp"
 
+#define NUM_MSG_CORE 2
+
 typedef enum {
+    /* must maintain the order */
     MSG_MEM_REQ = 0,
     MSG_MEM_REP,
     MSG_RA_REQ,
     MSG_RA_REP,
-    MSG_MIG,
-    MSG_MIG_PRIORITY,
-    NUM_MSG_TYPES
     /* TODO (Later) : Cache coherence protocol message */
+    MSG_CORE_0,
+    MSG_CORE_1,
+    NUM_MSG_TYPES
 } msg_type_t;
 
 typedef struct {
     void* context;
-} msg_mig_t;
+} msg_core_t;
 
 typedef struct {
     mreq_id_t req_id;
@@ -31,7 +34,7 @@ typedef struct {
     msg_type_t type;
     uint32_t dst;
     uint32_t flit_count;
-    msg_mig_t mig_msg;
+    msg_core_t core_msg;
     msg_mem_t mem_msg;
     uint32_t src; /* no need to specify */
 } msg_t;
