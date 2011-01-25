@@ -31,12 +31,13 @@ typedef struct {
 } msg_mem_t;
 
 typedef struct {
-    msg_type_t type;
     uint32_t dst;
     uint32_t flit_count;
     msg_core_t core_msg;
     msg_mem_t mem_msg;
-    uint32_t src; /* no need to specify */
+    /* you don't need to specify the following fields */
+    msg_type_t type;
+    uint32_t src; 
 } msg_t;
 
 /* TODO (Later) : message pool (no need to malloc every time (for the performance) ) */
