@@ -15,14 +15,15 @@ using namespace boost;
 
 class memory {
 public:
-    memory(const uint32_t numeric_id, 
+    memory(const uint32_t numeric_id, uint32_t level,
            const uint64_t &system_time,
            logger &log,
            shared_ptr<random_gen> ran);
     virtual ~memory();
 
     /* Memory operations - users only use these functions */
-    virtual mreq_id_t request(shared_ptr<memoryRequest> req) = 0;
+    virtual mreq_id_t request(shared_ptr<memoryRequest> req);
+    virtual mreq_id_t request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t target_level) = 0;
     virtual bool ready(mreq_id_t id) = 0;
     virtual bool finish(mreq_id_t id) = 0;
 
@@ -32,9 +33,6 @@ public:
     virtual void update() = 0;
     virtual void process() = 0;
 
-    /* hierarchy */
-    virtual shared_ptr<memory> next_memory() = 0;
-
     inline uint32_t get_id() {return m_id;}
 
 protected:
@@ -42,8 +40,11 @@ protected:
     void return_mreq_id(mreq_id_t old_id);
 
 protected:
-    /* numeric id */
+    /* location id */
     uint32_t m_id;
+
+    /* level id */
+    uint32_t m_level;
 
     /* Global time */
     const uint64_t &system_time;

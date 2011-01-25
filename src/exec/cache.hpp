@@ -29,12 +29,12 @@ public:
         cache_policy_t policy;
     } cache_cfg_t;
 
-    cache(const uint32_t numeric_id, const uint64_t &system_time,
+    cache(const uint32_t numeric_id, const uint32_t level, const uint64_t &system_time,
           logger &log, shared_ptr<random_gen> ran,
           cache_cfg_t cfgs);
     virtual ~cache();
 
-    virtual mreq_id_t request(shared_ptr<memoryRequest> req);
+    virtual mreq_id_t request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t target_level);
     virtual bool ready(mreq_id_t id);
     virtual bool finish(mreq_id_t id);
 
@@ -42,10 +42,8 @@ public:
     virtual void update();
     virtual void process();
 
-    virtual shared_ptr<memory> next_memory();
-
-    void set_home(shared_ptr<memory> home);
-    void set_home(uint32_t location, uint32_t level);
+    void set_home_memory(shared_ptr<memory> home);
+    inline void set_home_location(uint32_t location, uint32_t level) { m_home_location = location; m_home_level = level; }
 
 private:
     typedef enum {
@@ -82,6 +80,8 @@ private:
 private:
     cache_cfg_t m_cfgs;
     shared_ptr<memory> m_home;
+    uint32_t m_home_location;
+    uint32_t m_home_level;
 
     map<mreq_id_t, in_req_entry_t> m_in_req_table;
     map<mreq_id_t, shared_ptr<memoryRequest> > m_out_req_table;

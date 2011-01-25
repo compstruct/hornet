@@ -56,14 +56,11 @@ public:
     virtual void set_stop_darsim() throw(err);
 
     void add_remote_memory(shared_ptr<remoteMemory> mem);
-    void add_cache_chain(shared_ptr<memory> mem);
+    void add_to_memory_hierarchy(int level, shared_ptr<memory> mem);
 
 protected:
     /* execute */
     virtual void exec_core() = 0;
-
-    /* connect L1/remote memory */
-    void add_first_level_memory(shared_ptr<memory> mem);
 
     /* migration message queues */
     inline shared_ptr<coreMessageQueue> mig_receive_queue_low_priority() { return m_in_msg_queues[MSG_MIG]; }
@@ -74,6 +71,9 @@ protected:
     inline shared_ptr<coreMessageQueue> mig_send_queue_low_priority() { return m_out_msg_queues[MSG_MIG]; }
     inline shared_ptr<coreMessageQueue> mig_send_queue_high_priority() { return m_out_msg_queues[MSG_MIG_PRIORITY]; }
 
+    shared_ptr<memory> nearest_memory() { return m_memory_hierarchy[m_min_memory_level]; }
+
+protected:
     /* Global time */
     const uint64_t &system_time;
 
@@ -88,7 +88,6 @@ protected:
 
     /* Memories */
     shared_ptr<remoteMemory> m_remote_memory;
-    shared_ptr<memory> m_nearest_memory;
 
 private:
     void release_xmit_buffer();
@@ -127,7 +126,7 @@ private:
 
     /* for now table per sender... in hardware only needs unique in_req_ids for each sender */
     map<int, shared_ptr<map<mreq_id_t, server_in_req_entry_t> > > m_server_in_req_table;
-    map<mreq_id_t, server_local_req_entry_t> m_server_local_req_table;
+    map<int, shared_ptr<map<mreq_id_t, server_local_req_entry_t> > > m_server_local_req_table;
 
     core_cfg_t m_cfgs;
 
@@ -139,7 +138,9 @@ private:
     map<uint32_t, uint64_t*> m_xmit_buffer;
     
     /* Memories */
-    vector<shared_ptr<memory> > m_first_memories;
+    map<int, shared_ptr<memory> > m_memory_hierarchy;
+    int m_max_memory_level;
+    int m_min_memory_level;
 
     /* Aux */
     uint32_t m_current_receive_channel;

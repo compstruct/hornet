@@ -37,21 +37,19 @@ public:
         uint32_t header_size_bytes;
     } dramController_cfg_t;
 
-    dramController(const uint32_t numeric_id, const uint64_t &system_time,
+    dramController(const uint32_t numeric_id, const uint32_t level, const uint64_t &system_time,
           logger &log, shared_ptr<random_gen> ran,
           shared_ptr<dram> dram,
           dramController_cfg_t cfgs);
     virtual ~dramController();
 
-    virtual mreq_id_t request(shared_ptr<memoryRequest> req);
+    virtual mreq_id_t request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t target_level);
     virtual bool ready(mreq_id_t id);
     virtual bool finish(mreq_id_t id);
 
     virtual void initiate();
     virtual void update();
     virtual void process();
-
-    virtual shared_ptr<memory> next_memory();
 
 private:
     typedef enum {

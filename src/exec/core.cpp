@@ -10,7 +10,7 @@ core::core(const pe_id &id, const uint64_t &t,
         shared_ptr<tile_statistics> st, logger &l,
         shared_ptr<random_gen> r, core_cfg_t cfgs
         ) throw(err) : pe(id), system_time(t), stats(st), log(l), ran(r), m_cfgs(cfgs),
-    m_packet_id_factory(pif), m_current_receive_channel() 
+    m_packet_id_factory(pif), m_max_memory_level(0), m_current_receive_channel() 
 { 
     for (int i = 0; i < NUM_MSG_TYPES; ++i) {
         m_in_msg_queues[(msg_type_t)i] = shared_ptr<coreMessageQueue> (new coreMessageQueue(m_cfgs.msg_queue_size));
@@ -30,9 +30,6 @@ void core::connect(shared_ptr<bridge> net_bridge) throw(err) {
 void core::add_remote_memory(shared_ptr<remoteMemory> mem) {
     m_remote_memory = mem;
 
-    /* is one of the first level memory (when there is no local L1, or for RA) */
-    add_first_level_memory(mem);
-
     /* give memory message queues so it can send/receive messages */
     msg_type_t mem_msgs[] = {MSG_RA_REQ, MSG_RA_REP, MSG_MEM_REQ, MSG_MEM_REP};
     vector<msg_type_t> mem_msg_vec (mem_msgs, mem_msgs + sizeof(mem_msgs) / sizeof(msg_type_t));
@@ -44,40 +41,16 @@ void core::add_remote_memory(shared_ptr<remoteMemory> mem) {
     }
 }
 
-void core::add_cache_chain(shared_ptr<memory> mem) {
-    m_nearest_memory = mem;
-    add_first_level_memory(mem);
-}
-
-void core::add_first_level_memory(shared_ptr<memory> mem) {
-
-    /* creates a chain of ticking memories - all memories must be on the chain only once */
-    /* the order of chain must be outward (from the core) */
-
-    /* if mem is submemory of the current chain, do not add */
-    for (vector<shared_ptr<memory> >::iterator i = m_first_memories.begin(); i != m_first_memories.end(); ++i) {
-        shared_ptr<memory> level = *i;
-        while (level) {
-            if (level == mem) {
-                return;
-            }
-            level = level->next_memory();
-        }
+void core::add_to_memory_hierarchy(int level, shared_ptr<memory> mem) {
+    /* assume only one meory per level */
+    assert(m_memory_hierarchy.count(level) == 0);
+    if (m_memory_hierarchy.size() == 0 || level < m_min_memory_level) {
+        m_min_memory_level = level;
     }
-    m_first_memories.push_back(mem);
-
-    /* if any of current first memories are submemory of mem, erase it */
-    for (vector<shared_ptr<memory> >::iterator i = m_first_memories.begin(); i != m_first_memories.end(); ++i) {
-        shared_ptr<memory> level = mem->next_memory();
-        while (level) {
-            if (level == *i) {
-                m_first_memories.erase(i);
-                /* there can be only one case */
-                return;
-            }
-            level = level->next_memory();
-        }
+    if (level > m_max_memory_level) {
+        m_max_memory_level = level;
     }
+    m_memory_hierarchy[level] = mem;
 }
 
 void core::release_xmit_buffer() {
@@ -133,8 +106,11 @@ void core::tick_positive_edge() throw(err) {
     }
 
     /* accept all new requests in memory components (they will begin working in this cycle) */
-    for (vector<shared_ptr<memory> >::iterator i = m_first_memories.begin(); i != m_first_memories.end(); ++i) {
-        (*i)->initiate();
+    m_remote_memory->initiate();
+    for (int level = 0; level <= m_max_memory_level; ++level) {
+        if (m_memory_hierarchy.count(level)) {
+            m_memory_hierarchy[level]->initiate();
+        }
     }
     
     /* execute core / memory server. */
@@ -145,13 +121,19 @@ void core::tick_positive_edge() throw(err) {
     exec_mem_server();
 
     /* check if requests issued by middle-level memory components are done */
-    for (vector<shared_ptr<memory> >::iterator i = m_first_memories.begin(); i != m_first_memories.end(); ++i) {
-        (*i)->update();
+    m_remote_memory->update();
+    for (int level = 0; level <= m_max_memory_level; ++level) {
+        if (m_memory_hierarchy.count(level)) {
+            m_memory_hierarchy[level]->update();
+        }
     }
 
     /* serve accepted memory requests (the results will be updated to parents in the next cycle) */ 
-    for (vector<shared_ptr<memory> >::iterator i = m_first_memories.begin(); i != m_first_memories.end(); ++i) {
-        (*i)->process();
+    m_remote_memory->process();
+    for (int level = 0; level <= m_max_memory_level; ++level) {
+        if (m_memory_hierarchy.count(level)) {
+            m_memory_hierarchy[level]->process();
+        }
     }
 
     /* receive message(s) and put into correpsonding in_msg_queues */
@@ -207,34 +189,39 @@ void core::exec_mem_server() {
     }
 
     /* update from local memories */
-    vector<mreq_id_t> server_local_req_obsolete;
-    for (map<mreq_id_t, server_local_req_entry_t>::iterator i = m_server_local_req_table.begin();
-            i != m_server_local_req_table.end(); ++i)
+    for (map<int, shared_ptr<map<mreq_id_t, server_local_req_entry_t> > >::iterator i_level = m_server_local_req_table.begin();
+            i_level != m_server_local_req_table.end(); ++i_level)
     {
-        if (i->second.mem_to_serve->ready(i->first)) {
-            server_in_req_entry_t in_entry = (*m_server_in_req_table[i->second.sender])[i->second.in_req_id];
-            msg_t new_msg;
-            new_msg.type = (in_entry.msg_type == MSG_RA_REQ)? MSG_RA_REP : MSG_MEM_REP;
-            new_msg.flit_count = m_cfgs.flits_per_mem_msg_header;
-            if (in_entry.req->rw() == MEM_READ) {
-                new_msg.flit_count += (in_entry.req->byte_count() + m_cfgs.bytes_per_flit - 1) 
-                    / m_cfgs.bytes_per_flit;
-            }
-            new_msg.dst = in_entry.sender;
-            new_msg.mem_msg.req_id = i->second.in_req_id;
-            new_msg.mem_msg.req = in_entry.req;
-            if (m_out_msg_queues[new_msg.type]->push_back(new_msg)) {
-                LOG(log,3) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
-                           << " ] is ready to send a memory reply to " << new_msg.dst << endl;
-                (*m_server_in_req_table[i->second.sender]).erase(i->second.in_req_id);
-                server_local_req_obsolete.push_back(i->first);
+        vector<mreq_id_t> server_local_req_obsolete;
+        for (map<mreq_id_t, server_local_req_entry_t>::iterator i_req = i_level->second->begin(); 
+                i_req != i_level->second->end(); ++i_req)
+        {
+            if (i_req->second.mem_to_serve->ready(i_req->first)) {
+                server_in_req_entry_t in_entry = (*m_server_in_req_table[i_req->second.sender])[i_req->second.in_req_id];
+                msg_t new_msg;
+                new_msg.type = (in_entry.msg_type == MSG_RA_REQ)? MSG_RA_REP : MSG_MEM_REP;
+                new_msg.flit_count = m_cfgs.flits_per_mem_msg_header;
+                if (in_entry.req->rw() == MEM_READ) {
+                    new_msg.flit_count += (in_entry.req->byte_count() + m_cfgs.bytes_per_flit - 1) 
+                        / m_cfgs.bytes_per_flit;
+                }
+                new_msg.dst = in_entry.sender;
+                new_msg.mem_msg.req_id = i_req->second.in_req_id;
+                new_msg.mem_msg.req = in_entry.req;
+                if (m_out_msg_queues[new_msg.type]->push_back(new_msg)) {
+                    LOG(log,3) << "[server " << get_id().get_numeric_id() << " @ " << system_time 
+                        << " ] is ready to send a memory reply to " << new_msg.dst << endl;
+                    (*m_server_in_req_table[i_req->second.sender]).erase(i_req->second.in_req_id);
+                    (i_req->second).mem_to_serve->finish(i_req->first);
+                    server_local_req_obsolete.push_back(i_req->first);
+                }
             }
         }
-    }
-    for (vector<mreq_id_t>::iterator i = server_local_req_obsolete.begin();
-            i != server_local_req_obsolete.end(); ++i) {
-        m_server_local_req_table[*i].mem_to_serve->finish(*i);
-        m_server_local_req_table.erase(*i);
+        for (vector<mreq_id_t>::iterator i = server_local_req_obsolete.begin();
+                i != server_local_req_obsolete.end(); ++i) 
+        {
+            i_level->second->erase(*i);
+        }
     }
 
     /* process */
@@ -254,20 +241,17 @@ void core::exec_mem_server() {
             /* actions in cache hierarchy */
             if (i_req->second.status == REQ_PROCESSED) {
                 shared_ptr<memoryRequest> req = i_req->second.req;
-                /* memory to serve this request */
-                uint32_t tgt_lv = i_req->second.target_level;
-                shared_ptr<memory> cur_level = m_nearest_memory;
-                while(tgt_lv > 1) { /* L1 is the first */
-                    cur_level = cur_level->next_memory();
-                    assert(cur_level);
-                    --tgt_lv;
+                uint32_t tgt_level = i_req->second.target_level;
+                assert(m_memory_hierarchy[tgt_level]); /* this node must have memory system for the level */
+                mreq_id_t local_req_id = m_memory_hierarchy[tgt_level]->request(req);
+
+                if (m_server_local_req_table.count(tgt_level) == 0) {
+                    m_server_local_req_table[tgt_level] = shared_ptr<map<mreq_id_t, server_local_req_entry_t> > 
+                        (new map<mreq_id_t, server_local_req_entry_t>);
                 }
-                mreq_id_t local_req_id = cur_level->request(req);
-
-                m_server_local_req_table[local_req_id].mem_to_serve = cur_level;
-                m_server_local_req_table[local_req_id].sender = i_sender->first;
-                m_server_local_req_table[local_req_id].in_req_id = i_req->first;
-
+                (*(m_server_local_req_table[tgt_level]))[local_req_id].mem_to_serve = m_memory_hierarchy[tgt_level];
+                (*(m_server_local_req_table[tgt_level]))[local_req_id].sender = i_sender->first;
+                (*(m_server_local_req_table[tgt_level]))[local_req_id].in_req_id = i_req->first;
                 i_req->second.status = REQ_WAIT;
             }
         }
@@ -292,7 +276,7 @@ void core::exec_mem_server() {
                 = m_in_msg_queues[*i_queue]->front().mem_msg.target_level;
             (*m_server_in_req_table[sender])[in_req_id].req = m_in_msg_queues[*i_queue]->front().mem_msg.req;
             m_in_msg_queues[*i_queue]->pop();
-            LOG(log, 3) << "[core " << get_id().get_numeric_id() << " @ " << system_time
+            LOG(log, 3) << "[server " << get_id().get_numeric_id() << " @ " << system_time
                         << " ] received a memory request from " << sender << endl;
         }
     }

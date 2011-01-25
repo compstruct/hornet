@@ -3,29 +3,33 @@
 
 #include "remoteMemory.hpp"
 
-remoteMemory::remoteMemory(const uint32_t numeric_id, const uint64_t &system_time, 
+remoteMemory::remoteMemory(const uint32_t numeric_id, const uint32_t level, const uint64_t &system_time, 
         logger &log, shared_ptr<random_gen> ran, remoteMemory_cfg_t cfgs)
-: memory(numeric_id, system_time, log, ran), m_cfgs(cfgs), m_max_remote_mreq_id(0), 
+: memory(numeric_id, level, system_time, log, ran), m_cfgs(cfgs), m_max_remote_mreq_id(0), 
     m_bytes_per_flit(8), m_flits_per_header(1)
 {
 }
 
 remoteMemory::~remoteMemory() {}
 
-void remoteMemory::set_home(int location, uint32_t level) {
+void remoteMemory::set_remote_home(int location, uint32_t level) {
     m_default_home = location;
     m_default_level = level;
 }
 
-shared_ptr<memory> remoteMemory::next_memory() {
-    return shared_ptr<memory>();
-}
-
 mreq_id_t remoteMemory::request(shared_ptr<memoryRequest> req) {
-    return request(req, m_default_home, m_default_level, false);
+    return _request(req, m_default_home, m_default_level, false);
 }
 
-mreq_id_t remoteMemory::request(shared_ptr<memoryRequest> req, int location, uint32_t level, bool ra) {
+mreq_id_t remoteMemory::ra_request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t level) {
+    return _request(req, location, level, true);
+}
+
+mreq_id_t remoteMemory::request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t level) {
+    return _request(req, location, level, false);
+}
+
+mreq_id_t remoteMemory::_request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t level, bool ra) {
     /* put an entry */
     /* assumes an infinite request table - if it's finite, deadlock must be considered */
     mreq_id_t new_id = take_new_mreq_id();

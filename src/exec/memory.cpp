@@ -3,11 +3,11 @@
 
 #include "memory.hpp"
 
-memory::memory(const uint32_t id, 
+memory::memory(const uint32_t id, const uint32_t level,
                const uint64_t &t,
                logger &l,
                shared_ptr<random_gen> r)
-    : m_id(id),
+    : m_id(id), m_level(level),
       system_time(t),
       log(l),
       ran(r), 
@@ -30,3 +30,6 @@ void memory::return_mreq_id(mreq_id_t old_id) {
     m_mreq_id_pool.push_back(old_id);
 }
 
+mreq_id_t memory::request(shared_ptr<memoryRequest> req) {
+    return request(req, m_id, m_level);
+}

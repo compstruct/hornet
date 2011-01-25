@@ -4,10 +4,10 @@
 #include "cache.hpp"
 #include "error.hpp"
 
-cache::cache(const uint32_t id, const uint64_t &t, 
+cache::cache(const uint32_t id, const uint32_t level, const uint64_t &t, 
              logger &log, shared_ptr<random_gen> ran,
              cache_cfg_t cfgs)
-: memory(id, t, log, ran), m_cfgs(cfgs), m_home(shared_ptr<cache>()) {
+: memory(id, level, t, log, ran), m_cfgs(cfgs), m_home(shared_ptr<cache>()) {
     int log2 = 0;
     for (uint32_t i = m_cfgs.block_size_bytes; i > 1; i = i/2) {
         assert(i%2 == 0); /* must be a power of 2 */
@@ -27,6 +27,9 @@ cache::cache(const uint32_t id, const uint64_t &t,
 
     m_tag_mask = ~(m_index_mask | m_offset_mask);
 
+    m_home_location = id;
+    m_home_level = level + 1;
+    
 }
 
 cache::~cache() {
@@ -39,15 +42,11 @@ cache::~cache() {
     }
 }
 
-void cache::set_home(shared_ptr<memory> home) {
+void cache::set_home_memory(shared_ptr<memory> home) {
     m_home = home;
 }
 
-shared_ptr<memory> cache::next_memory() {
-    return m_home;
-}
-
-mreq_id_t cache::request(shared_ptr<memoryRequest> req) {
+mreq_id_t cache::request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t target_level) {
     /* one cache line for one request */
     assert( req->addr()/m_cfgs.block_size_bytes == (req->addr() + req->byte_count() - 1)/m_cfgs.block_size_bytes);
 
@@ -103,7 +102,6 @@ void cache::initiate() {
             i->second.status = REQ_BUSY;
         }
     }
-    m_home->initiate();
 }
 
 cache::cache_line_t* cache::cache_line(maddr_t addr) {
@@ -145,7 +143,6 @@ void cache::update() {
     for (vector<mreq_id_t>::iterator i = to_be_deleted.begin(); i != to_be_deleted.end(); ++i) {
         m_out_req_table.erase(*i);
     }
-    m_home->update();
 }
 
 void cache::process() {
@@ -179,7 +176,7 @@ void cache::process() {
                         m_cache[index][i_way].last_access = system_time;
                         shared_ptr<memoryRequest> home_req (new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                     m_cfgs.block_size_bytes));
-                        mreq_id_t new_id = m_home->request(home_req);
+                        mreq_id_t new_id = m_home->request(home_req, m_home_location, m_home_level);
                         m_out_req_table[new_id] = home_req;
                         m_cache[index][i_way].on_the_fly = true;
                         has_space = true;
@@ -207,7 +204,7 @@ void cache::process() {
                         tgt->doomed = true;
                         shared_ptr<memoryRequest> home_req (new memoryRequest( (tgt->tag << m_tag_pos) | (index << m_index_pos),
                                     m_cfgs.block_size_bytes, tgt->data));
-                        mreq_id_t new_id = m_home->request(home_req);
+                        mreq_id_t new_id = m_home->request(home_req, m_home_location, m_home_level);
                         m_out_req_table[new_id] = home_req;
                     } else {
                         /* if not written, just drop */
@@ -242,7 +239,7 @@ void cache::process() {
                         /* initiate read request - in case the line is evicted while waiting for the bandwidth */
                         shared_ptr<memoryRequest> home_req (new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                     m_cfgs.block_size_bytes));
-                        mreq_id_t new_id = m_home->request(home_req);
+                        mreq_id_t new_id = m_home->request(home_req, m_home_location, m_home_level);
                         m_out_req_table[new_id] = home_req;
                         line->on_the_fly = true;
                     }
@@ -250,7 +247,6 @@ void cache::process() {
             }
         }
     }
-    m_home->process();
 }
 
 

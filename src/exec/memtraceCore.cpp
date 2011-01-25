@@ -126,7 +126,7 @@ void memtraceCore::exec_core() {
                     // RA case (request to remote, bookkeeping, -> LANE_WAIT)
 
                     /* Request to local L1 */
-                    assert(m_nearest_memory != shared_ptr<memory>());
+                    assert(nearest_memory() != shared_ptr<memory>());
                     assert(cur.thread->byte_count() > 0);
 
                     uint64_t addr = cur.thread->addr();
@@ -154,7 +154,7 @@ void memtraceCore::exec_core() {
                                 uint32_t wdata = get_id().get_numeric_id();
                                 req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count, &wdata));
                             }
-                            cur.mreq_id = m_remote_memory->request(req, home, 1);
+                            cur.mreq_id = m_remote_memory->ra_request(req, home, 1);
                             cur.req = req;
                             cur.mem_to_serve = m_remote_memory;
                             cur.status = LANE_WAIT;
@@ -177,9 +177,9 @@ void memtraceCore::exec_core() {
                         LOG(log,3) << "[thread " << cur.thread->get_id() << " @ " << system_time 
                                    << " ] is making a memory request to the nearest memory on core " 
                                    << get_id().get_numeric_id() << endl;
-                        cur.mreq_id = m_nearest_memory->request(req);
+                        cur.mreq_id = nearest_memory()->request(req);
                         cur.req = req;
-                        cur.mem_to_serve = m_nearest_memory;
+                        cur.mem_to_serve = nearest_memory();
                         cur.status = LANE_WAIT;
                     }
                 } else if (cur.thread->type() == memtraceThread::INST_OTHER) {

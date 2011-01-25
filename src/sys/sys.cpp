@@ -74,9 +74,6 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
 }
 
 static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_ptr<memtraceThreadPool> pool, logger &log) {
-#if 1 // for test only
-    random_gen ran(100, 7);
-#endif
     if (!files) {
         return;
     }
@@ -101,17 +98,6 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
                 } catch (const err &e) {
                     assert(false);
                 }
-#if 1 // for test only
-                uint32_t r = ran.random_range(3);
-                addr = r * 16 * 64;
-                home = r * 16 + 3;
-                addr = addr - addr%4;
-                if (ran.random_range(3)<2) {
-                    rw = 'R';
-                } else {
-                    rw = 'W';
-                }
-#endif
                 thread = pool->find(th_id);
                 if (thread == NULL) {
                     thread = new memtraceThread(th_id, log);
@@ -274,52 +260,40 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             p = new_core;
             memtrace_cores.push_back(new_core);
 
-            /* get local memories and an immediate remote home */
+            remoteMemory::remoteMemory_cfg_t rm_cfgs;
+            rm_cfgs.process_time = 1;
+            shared_ptr<remoteMemory> rm(new remoteMemory(id, 1, t->get_time(), log, ran, rm_cfgs));
+            new_core->add_remote_memory(rm);
+            shared_ptr<cache> last_local_cache = shared_ptr<cache>();
+
             uint32_t total_levels = read_word(img);
             assert(total_levels > 0);
             vector<uint32_t> locs;
-            bool ignore_others = false;
+
             for (uint32_t i = 0; i < total_levels; ++i) {
                 uint32_t loc = read_word(img);
-                if (!ignore_others) {
-                    locs.push_back(loc);
-                    if (loc != (uint32_t)id) {
-                        ignore_others = true;
-                    }
-                }
-            }
-            uint32_t local_levels = locs.size();
-
-            /* all cores have one remoteMemory (first) */
-            remoteMemory::remoteMemory_cfg_t rm_cfgs;
-            rm_cfgs.process_time = 1;
-            shared_ptr<remoteMemory> rm(new remoteMemory(id<<8, t->get_time(), log, ran, rm_cfgs));
-            shared_ptr<memory> first = shared_ptr<memory>();
-            shared_ptr<cache> last = shared_ptr<cache>();
-            for (uint32_t i = 0; i < local_levels; ++i) {
-                shared_ptr<memory> new_memory = shared_ptr<memory>();
-                uint32_t loc = locs[i];
-                if (loc == (uint32_t)id) {
-                    /* if thie level is in local */
+                if (loc == id) {
+                    shared_ptr<memory> new_memory;
                     if (i == total_levels - 1) {
-                        /* if it's the last level, it's a DRAM controller */
+                        /* create dram controller */
+                        dramController::dramController_cfg_t dc_cfgs;
                         if (!new_dram) {
                             new_dram = shared_ptr<dram> (new dram ());
                         }
-                        dramController::dramController_cfg_t dc_cfgs;
                         dc_cfgs.use_lock = true;
                         dc_cfgs.off_chip_latency = 50;
                         dc_cfgs.bytes_per_cycle = 8; 
                         dc_cfgs.dram_process_time = 10;
                         dc_cfgs.dc_process_time = 1;
                         dc_cfgs.header_size_bytes = 4;
-                        shared_ptr<dramController> dc (new dramController (id<<8|(i+1), t->get_time(), log, ran, new_dram, dc_cfgs));
+                        shared_ptr<dramController> dc (new dramController (id, i+1, t->get_time(), log, ran, new_dram, dc_cfgs));
                         new_memory = dc;
-                        if (last != shared_ptr<cache>()) {
-                            /* it's the home of previous cache, if exists */
-                            last->set_home(dc);
+                        if (last_local_cache) {
+                            last_local_cache->set_home_memory(new_memory);
+                            last_local_cache->set_home_location(loc, i+1);
                         }
                     } else {
+                        /* create cache*/
                         /* it's a new level of cache */
                         cache::cache_cfg_t cache_cfgs;
                         cache_cfgs.associativity = 1;
@@ -328,93 +302,72 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                         cache_cfgs.process_time = 1;
                         cache_cfgs.block_per_cycle = 1;
                         cache_cfgs.policy = cache::CACHE_RANDOM;
-                        shared_ptr<cache> new_cache ( new cache (id<<8|(i+1), t->get_time(), log, ran, cache_cfgs));
+                        shared_ptr<cache> new_cache ( new cache (id, i+1, t->get_time(), log, ran, cache_cfgs));
                         new_memory = new_cache;
-                        if (last != shared_ptr<cache>()) {
-                            last->set_home(new_cache);
+                        if (last_local_cache) {
+                            last_local_cache->set_home_memory(new_memory);
+                            last_local_cache->set_home_location(loc, i+1);
                         }
-                        last = new_cache;
+                        last_local_cache = new_cache;
                     }
-                    if (!first) {
-                        /* mark the first memory in the chain */
-                        first = new_memory;
+                    new_core->add_to_memory_hierarchy(i+1, new_memory);
+                } else  {
+                    if (i == 0) {
+                        rm->set_remote_home(loc, i+1);
                     }
-                } else {
-                    /* if it's remote, set remote memory to go there by default */
-                    rm->set_home(loc, i+1);
-                    if (last != shared_ptr<cache>()) {
-                        /* if there is a previous cache, let it use remote memory */
-                        last->set_home(rm);
+                    if (last_local_cache) {
+                        last_local_cache->set_home_memory(rm);
+                        last_local_cache->set_home_location(loc, i+1);
                     }
-                    /* the chain ends here */
-                    break;
+                    last_local_cache = shared_ptr<cache>();
                 }
             }
 
-            /* attach memory subsystems to the core */
-            new_core->add_remote_memory(rm);
-            if (first != shared_ptr<memory>()) {
-                new_core->add_cache_chain(first);
-            } else {
-                new_core->add_cache_chain(rm);
-            }
             break;
         }
         case CORE_CUSTOM: {
             /* set your core configuration */
+                              
             /* create core object */
             shared_ptr<core> new_core;
-
             p = new_core;
 
             /* adjust your memory subsystem here (feeling lazy and copy and paste) */
 
-            /* get local memories and an immediate remote home */
-            uint32_t num_levels = read_word(img);
-            assert(num_levels > 0);
-            vector<uint32_t> locs;
-            bool ignore_others = false;
-            for (uint32_t i = 0; i < num_levels; ++i) {
-                uint32_t loc = read_word(img);
-                if (ignore_others) {
-                    locs.push_back(loc);
-                    if (loc != (uint32_t)id) {
-                        ignore_others = true;
-                    }
-                }
-            }
-            num_levels = locs.size();
-
-            /* all cores have one remoteMemory (first) */
             remoteMemory::remoteMemory_cfg_t rm_cfgs;
             rm_cfgs.process_time = 1;
-            shared_ptr<remoteMemory> rm(new remoteMemory(id<<8, t->get_time(), log, ran, rm_cfgs));
-            shared_ptr<memory> first = shared_ptr<memory>();
-            shared_ptr<cache> last = shared_ptr<cache>();
-            for (uint32_t i = 0; i < num_levels; ++i) {
-                shared_ptr<memory> new_memory = shared_ptr<memory>();
-                uint32_t loc = locs[i];
-                if (loc == (uint32_t)id) {
-                    /* if thie level is in local */
-                    if (i == num_levels - 1) {
-                        /* if it's the last level, it's a DRAM controller */
+            shared_ptr<remoteMemory> rm(new remoteMemory(id, 1, t->get_time(), log, ran, rm_cfgs));
+            new_core->add_remote_memory(rm);
+            shared_ptr<cache> last_local_cache = shared_ptr<cache>();
+
+            uint32_t total_levels = read_word(img);
+            assert(total_levels > 0);
+            vector<uint32_t> locs;
+
+            for (uint32_t i = 0; i < total_levels; ++i) {
+                uint32_t loc = read_word(img);
+                if (loc == id) {
+                    shared_ptr<memory> new_memory;
+                    if (i == total_levels - 1) {
+                        /* create dram controller */
+                        dramController::dramController_cfg_t dc_cfgs;
                         if (!new_dram) {
                             new_dram = shared_ptr<dram> (new dram ());
                         }
-                        dramController::dramController_cfg_t cfgs;
-                        cfgs.use_lock = true;
-                        cfgs.off_chip_latency = 50;
-                        cfgs.bytes_per_cycle = 8; 
-                        cfgs.dram_process_time = 10;
-                        cfgs.dc_process_time = 1;
-                        cfgs.header_size_bytes = 4;
-                        shared_ptr<dramController> dc (new dramController (id<<8|(i+1), t->get_time(), log, ran, new_dram, cfgs));
+                        dc_cfgs.use_lock = true;
+                        dc_cfgs.off_chip_latency = 50;
+                        dc_cfgs.bytes_per_cycle = 8; 
+                        dc_cfgs.dram_process_time = 10;
+                        dc_cfgs.dc_process_time = 1;
+                        dc_cfgs.header_size_bytes = 4;
+                        shared_ptr<dramController> dc (new dramController (id, i+1, t->get_time(), log, ran, new_dram, dc_cfgs));
                         new_memory = dc;
-                        if (last != shared_ptr<cache>()) {
-                            /* it's the home of previous cache, if exists */
-                            last->set_home(dc);
+                        if (last_local_cache) {
+                            last_local_cache->set_home_memory(new_memory);
+                            last_local_cache->set_home_location(loc, i+1);
                         }
                     } else {
+                        /* create cache*/
                         /* it's a new level of cache */
                         cache::cache_cfg_t cache_cfgs;
                         cache_cfgs.associativity = 1;
@@ -423,35 +376,28 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                         cache_cfgs.process_time = 1;
                         cache_cfgs.block_per_cycle = 1;
                         cache_cfgs.policy = cache::CACHE_RANDOM;
-                        shared_ptr<cache> new_cache ( new cache (id<<8|(i+1), t->get_time(), log, ran, cache_cfgs));
+                        shared_ptr<cache> new_cache ( new cache (id, i+1, t->get_time(), log, ran, cache_cfgs));
                         new_memory = new_cache;
-                        if (last != shared_ptr<cache>()) {
-                            last->set_home(new_cache);
+                        if (last_local_cache) {
+                            last_local_cache->set_home_memory(new_memory);
+                            last_local_cache->set_home_location(loc, i+1);
                         }
-                        last = new_cache;
+                        last_local_cache = new_cache;
                     }
-                    if (!first) {
-                        /* mark the first memory in the chain */
-                        first = new_memory;
+                    new_core->add_to_memory_hierarchy(i+1, new_memory);
+                } else  {
+                    if (i == 0) {
+                        rm->set_remote_home(loc, i+1);
                     }
-                } else {
-                    /* if it's remote, set remote memory to go there by default */
-                    rm->set_home(loc, i+1);
-                    if (last != shared_ptr<cache>()) {
-                        /* if there is a previous cache, let it use remote memory */
-                        last->set_home(rm);
+                    if (last_local_cache) {
+                        last_local_cache->set_home_memory(rm);
+                        last_local_cache->set_home_location(loc, i+1);
                     }
-                    /* the chain ends here */
-                    break;
+                    last_local_cache = shared_ptr<cache>();
                 }
             }
-            /* attach memory subsystems to the core */
-            new_core->add_remote_memory(rm);
-            if (first != shared_ptr<memory>()) {
-                new_core->add_cache_chain(first);
-            } else {
-                new_core->add_cache_chain(rm);
-            }
+
+            break;
         }
         default:
             throw err_bad_mem_img();
