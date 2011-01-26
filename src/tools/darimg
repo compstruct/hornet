@@ -182,7 +182,6 @@ def write_pe(out, id, core, img, mem_locs, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_siz
     # image      
     if core in ['mips_mpi']:
         assert(img is not None)
-        out.write(w2bs(1)) # code
         file, format, entry, all_sections = \
                 read_section_headers(img, verbose=verbose)
         sections = sort_sections(all_sections, verbose=verbose)
