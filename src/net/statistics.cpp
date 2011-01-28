@@ -611,8 +611,8 @@ ostream &operator<<(ostream &out, const system_statistics &s) {
         combine_left(vqrd_port, ts-> vqrd_port);
         /* execution statistics */
         combine_left(total_mem_lat_stats, ts->mem_lat_stats);
-        combine_left(total_mem_read_lat_stats, ts->mem_lat_stats);
-        combine_left(total_mem_read_lat_stats, ts->mem_lat_stats);
+        combine_left(total_mem_read_lat_stats, ts->mem_read_lat_stats);
+        combine_left(total_mem_write_lat_stats, ts->mem_write_lat_stats);
         combine_left(total_completion_times, ts->execution_finish_times);
         combine_left(total_remote_accesses, ts->total_remote_accesses);
         combine_left(total_memory_accesses, ts->total_memory_accesses);
@@ -867,7 +867,7 @@ ostream &operator<<(ostream &out, const system_statistics &s) {
    if (total_completion_times.get_mean() > 0) {
        out << "Parallel Completion Time : " << total_completion_times.get_max() << " cycles" << endl;
        out << "  Fastest thread completion time : " << total_completion_times.get_min() << " cycles" << endl;
-       out << "  standard deviation : " << total_completion_times.get_std_dev() << endl;
+       out << "  Average thread completion time : " << total_completion_times.get_mean() << " cycles" << endl;
        out << endl;
    }
 
