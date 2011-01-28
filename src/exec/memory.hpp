@@ -17,6 +17,7 @@ class memory {
 public:
     memory(const uint32_t numeric_id, uint32_t level,
            const uint64_t &system_time,
+           shared_ptr<tile_statistics> stats,
            logger &log,
            shared_ptr<random_gen> ran);
     virtual ~memory();
@@ -51,6 +52,7 @@ protected:
     const uint64_t &system_time;
 
     /* Aux */
+    shared_ptr<tile_statistics> stats;
     logger &log;
     shared_ptr<random_gen> ran;
 

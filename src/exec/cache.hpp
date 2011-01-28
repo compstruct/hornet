@@ -2,7 +2,7 @@
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
 #ifndef __CACHE_HPP__
-#define __CACHE_CPP__
+#define __CACHE_HPP__
 
 #include "memory.hpp"
 #include "logger.hpp"
@@ -30,7 +30,7 @@ public:
     } cache_cfg_t;
 
     cache(const uint32_t numeric_id, const uint32_t level, const uint64_t &system_time,
-          logger &log, shared_ptr<random_gen> ran,
+          shared_ptr<tile_statistics> stats, logger &log, shared_ptr<random_gen> ran,
           cache_cfg_t cfgs);
     virtual ~cache();
 
@@ -46,7 +46,7 @@ public:
     void set_home_memory(shared_ptr<memory> home);
     inline void set_home_location(uint32_t location, uint32_t level) { m_home_location = location; m_home_level = level; }
 
-private:
+protected:
     typedef enum {
         REQ_INIT,    /* just requested */
         REQ_BUSY,    /* working on cache logic */
@@ -71,14 +71,14 @@ private:
         bool dirty;
     } cache_line_t;
 
-private:
+protected:
     inline uint64_t get_tag(maddr_t addr) { return (addr&m_tag_mask)>>m_tag_pos; }
     inline uint64_t get_index(maddr_t addr) { return (addr&m_index_mask)>>m_index_pos; }
     inline uint64_t get_offset(maddr_t addr) { return (addr&m_offset_mask); }
 
     cache_line_t* cache_line(maddr_t addr);
 
-private:
+protected:
     cache_cfg_t m_cfgs;
     shared_ptr<memory> m_home;
     uint32_t m_home_location;

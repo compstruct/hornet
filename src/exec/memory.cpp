@@ -4,11 +4,12 @@
 #include "memory.hpp"
 
 memory::memory(const uint32_t id, const uint32_t level,
-               const uint64_t &t,
+               const uint64_t &t, shared_ptr<tile_statistics> st,
                logger &l,
                shared_ptr<random_gen> r)
     : m_id(id), m_level(level),
       system_time(t),
+      stats(st),
       log(l),
       ran(r), 
       m_max_mreq_id(MAX_INVALID_MREQ_ID) { 
@@ -27,7 +28,11 @@ mreq_id_t memory::take_new_mreq_id() {
 }
 
 void memory::return_mreq_id(mreq_id_t old_id) {
-    m_mreq_id_pool.push_back(old_id);
+    if (false) {
+        /* temporarily disable reusing mreq_id to process memory requests in order */
+        /* TODO : inside memory classes, replace map with two vectors */
+        m_mreq_id_pool.push_back(old_id);
+    }
 }
 
 mreq_id_t memory::request(shared_ptr<memoryRequest> req) {

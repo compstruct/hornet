@@ -11,6 +11,7 @@
 #include "random.hpp"
 #include "core.hpp"
 #include "memory.hpp"
+#include "awayCache.hpp"
 #include "memtraceThread.hpp"
 #include "memtraceThreadPool.hpp"
 
@@ -18,11 +19,13 @@ class memtraceCore : public core {
 public:
     typedef enum { EM_NONE, EM_ENC }  em_type_t; /* TODO (Later) : more em schemes (swapInf, seapHS) */
     typedef enum { RA_NONE, RA_ONLY, RA_RANDOM } ra_type_t; /* TODO (Later) : EM/RA hybrid */
+    typedef enum { LIBRARY_NONE, LIBRARY_ONLY } library_type_t;
     typedef struct {
         uint32_t    max_threads;
         uint32_t    flits_per_mig;
         em_type_t   em_type;
         ra_type_t   ra_type;
+        library_type_t library_type;
     } memtraceCore_cfg_t;
 
 public:
@@ -64,6 +67,7 @@ private:
         mreq_id_t mreq_id;
         shared_ptr<memoryRequest> req;
         shared_ptr<memory> mem_to_serve;
+        uint64_t last_memory_issued;
     } lane_entry_t;
 
     typedef vector<lane_entry_t>::size_type lane_idx_t;
@@ -97,6 +101,7 @@ private:
     /* Running state */
     bool m_do_evict;
     pending_mig_t m_pending_mig;
+
 };
 
 /* TODO (Phase 4) : design memtraceCore stats */

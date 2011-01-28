@@ -29,9 +29,11 @@ class core : public pe {
 public:
     typedef struct {
         uint32_t msg_queue_size;
+        uint32_t max_active_remote_mem_requests;
         uint32_t flits_per_mem_msg_header;
         uint32_t bytes_per_flit;
         uint32_t memory_server_process_time;
+        bool     support_library;
     } core_cfg_t;
 
     core(const pe_id &id, const uint64_t &system_time,
@@ -56,6 +58,7 @@ public:
     virtual void set_stop_darsim() throw(err);
 
     void add_remote_memory(shared_ptr<remoteMemory> mem);
+    void add_away_cache(shared_ptr<memory> cache);
     void add_to_memory_hierarchy(int level, shared_ptr<memory> mem);
 
 protected:
@@ -68,6 +71,7 @@ protected:
 
     inline shared_ptr<memory> nearest_memory() { return m_memory_hierarchy[m_min_memory_level]; }
     inline shared_ptr<remoteMemory> remote_memory() { return m_remote_memory; }
+    inline shared_ptr<memory> away_cache() { return m_away_cache; }
 
 protected:
     /* Global time */
@@ -82,8 +86,6 @@ protected:
     map<msg_type_t, shared_ptr<coreMessageQueue> > m_out_msg_queues;
     map<msg_type_t, shared_ptr<coreMessageQueue> > m_in_msg_queues;
 
-    /* Memories */
-    shared_ptr<remoteMemory> m_remote_memory;
 
 private:
     void release_xmit_buffer();
@@ -102,7 +104,8 @@ private:
         REQ_INIT,
         REQ_BUSY,
         REQ_PROCESSED,
-        REQ_WAIT
+        REQ_WAIT,
+        REQ_DONE
     } req_status_t;
 
     typedef struct {
@@ -134,9 +137,14 @@ private:
     map<uint32_t, uint64_t*> m_xmit_buffer;
     
     /* Memories */
+    shared_ptr<remoteMemory> m_remote_memory;
+    shared_ptr<memory> m_away_cache;
     map<int, shared_ptr<memory> > m_memory_hierarchy;
     int m_max_memory_level;
     int m_min_memory_level;
+
+    /* memory server */
+    uint32_t m_num_active_remote_mem_requests;
 
     /* Aux */
     uint32_t m_current_receive_channel;

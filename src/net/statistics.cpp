@@ -177,7 +177,8 @@ tile_statistics::tile_statistics(const uint64_t &sys_time,
             total_received_flits(0), total_offered_packets(0),
             total_sent_packets(0), total_received_packets(0), 
             vqwr_flits(), total_vqwr_flits(0), vqwr_bridge(), vqwr_port(),  
-            vqrd_flits(), total_vqrd_flits(0), vqrd_bridge(), vqrd_port() { } 
+            vqrd_flits(), total_vqrd_flits(0), vqrd_bridge(), vqrd_port(),
+            total_remote_accesses(0), total_memory_accesses(0) { }
 
 bool tile_statistics::is_started() throw() {
     return system_time >= start_time;
@@ -550,6 +551,14 @@ ostream &operator<<(ostream &out, const system_statistics &s) {
     link_switch_counter_t link_switches;
     map<flow_id, reorder_buffer> reorder_buffers;
     flow_stats_t flow_reorder_stats;
+    
+    /* exeecution statistics */
+    running_stats total_mem_lat_stats;
+    running_stats total_mem_read_lat_stats;
+    running_stats total_mem_write_lat_stats;
+    running_stats total_completion_times;
+    uint64_t total_remote_accesses = 0;
+    uint64_t total_memory_accesses = 0;
 
     // combine per-tile statistics
     for (system_statistics::tile_stats_t::const_iterator tsi =
@@ -600,6 +609,13 @@ ostream &operator<<(ostream &out, const system_statistics &s) {
         combine_left(vqrd_bridge, ts-> vqrd_bridge);
         combine_left(vqwr_port, ts-> vqwr_port);
         combine_left(vqrd_port, ts-> vqrd_port);
+        /* execution statistics */
+        combine_left(total_mem_lat_stats, ts->mem_lat_stats);
+        combine_left(total_mem_read_lat_stats, ts->mem_lat_stats);
+        combine_left(total_mem_read_lat_stats, ts->mem_lat_stats);
+        combine_left(total_completion_times, ts->execution_finish_times);
+        combine_left(total_remote_accesses, ts->total_remote_accesses);
+        combine_left(total_memory_accesses, ts->total_memory_accesses);
     }
 
 
@@ -845,6 +861,32 @@ ostream &operator<<(ostream &out, const system_statistics &s) {
    out << "total power : " << (total_router_power + total_link_power)
        << " routers power : " << total_router_power 
        << " links power : " << total_link_power << endl;
+
+   out << endl;
+
+   if (total_completion_times.get_mean() > 0) {
+       out << "Parallel Completion Time : " << total_completion_times.get_max() << " cycles" << endl;
+       out << "  Fastest thread completion time : " << total_completion_times.get_min() << " cycles" << endl;
+       out << "  standard deviation : " << total_completion_times.get_std_dev() << endl;
+       out << endl;
+   }
+
+   if (total_mem_lat_stats.get_mean() > 0) {
+       out << "Average memory latency : " << total_mem_lat_stats.get_mean() 
+           << " cycles +/- " << total_mem_lat_stats.get_std_dev() << endl;
+       out << "  average memory latency - READ : " << total_mem_read_lat_stats.get_mean() 
+           << " cycles +/- " << total_mem_read_lat_stats.get_std_dev() << endl;
+       out << "  average memory latency - WRITE : " << total_mem_write_lat_stats.get_mean() 
+           << " cycles +/- " << total_mem_write_lat_stats.get_std_dev() << endl;
+       out << endl;
+   }
+
+   if (total_memory_accesses > 0) {
+       out << "Remote Access Rate : " << ((double)total_remote_accesses)/((double)total_memory_accesses)*100.0 << "%" << endl;
+       out << "  ( " << total_remote_accesses << " / " << total_memory_accesses << " ) " << endl;
+       out << endl;
+   }
+
     /*
     bool have_out_of_order = false;
     out << endl;

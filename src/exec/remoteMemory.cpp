@@ -4,8 +4,8 @@
 #include "remoteMemory.hpp"
 
 remoteMemory::remoteMemory(const uint32_t numeric_id, const uint32_t level, const uint64_t &system_time, 
-        logger &log, shared_ptr<random_gen> ran, remoteMemory_cfg_t cfgs)
-: memory(numeric_id, level, system_time, log, ran), m_cfgs(cfgs), m_max_remote_mreq_id(0), 
+        shared_ptr<tile_statistics> st, logger &log, shared_ptr<random_gen> ran, remoteMemory_cfg_t cfgs)
+: memory(numeric_id, level, system_time, st, log, ran), m_cfgs(cfgs), m_max_remote_mreq_id(0), 
     m_bytes_per_flit(8), m_flits_per_header(1)
 {
 }
@@ -17,19 +17,7 @@ void remoteMemory::set_remote_home(int location, uint32_t level) {
     m_default_level = level;
 }
 
-mreq_id_t remoteMemory::request(shared_ptr<memoryRequest> req) {
-    return _request(req, m_default_home, m_default_level, false);
-}
-
-mreq_id_t remoteMemory::ra_request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t level) {
-    return _request(req, location, level, true);
-}
-
 mreq_id_t remoteMemory::request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t level) {
-    return _request(req, location, level, false);
-}
-
-mreq_id_t remoteMemory::_request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t level, bool ra) {
     /* put an entry */
     /* assumes an infinite request table - if it's finite, deadlock must be considered */
     mreq_id_t new_id = take_new_mreq_id();
@@ -39,7 +27,6 @@ mreq_id_t remoteMemory::_request(shared_ptr<memoryRequest> req, uint32_t locatio
     new_entry.req = req;
     new_entry.location = location;
     new_entry.level = level;
-    new_entry.ra = ra;
     m_in_req_table[new_id] = new_entry;
     return new_id;
 }
@@ -99,6 +86,8 @@ void remoteMemory::update() {
             mreq_id_t remote_req_id = m_in_queues[*i_queue]->front().mem_msg.req_id;
             mreq_id_t in_req_id = m_remote_req_table[remote_req_id];
             m_in_req_table[in_req_id].status = REQ_DONE;
+            LOG(log,3) << "[remoteMemory " << m_id << " @ " << system_time 
+                       << " ] received a reply from " << m_in_req_table[in_req_id].location << endl;
             m_remote_req_table.erase(remote_req_id);
             m_in_queues[*i_queue]->pop();
         }
@@ -120,7 +109,7 @@ void remoteMemory::process() {
             shared_ptr<memoryRequest> req = i->second.req;
             /* initiates network packet */
             msg_t new_msg;
-            new_msg.type = (i->second.ra)? MSG_RA_REQ : MSG_MEM_REQ;
+            new_msg.type = (i->second.req->is_ra())? MSG_RA_REQ : MSG_MEM_REQ;
             new_msg.flit_count = m_flits_per_header;
             if ((i->second.req)->rw() == MEM_WRITE) {
                 new_msg.flit_count += ((i->second.req)->byte_count() + m_bytes_per_flit - 1) / m_bytes_per_flit;
@@ -132,7 +121,8 @@ void remoteMemory::process() {
             if (m_out_queues[new_msg.type]->push_back(new_msg)) {
                 i->second.status = REQ_WAIT;
                 m_remote_req_table[new_msg.mem_msg.req_id] = i->first;
-                LOG(log,3) << "a memory request is put into a send queue to " << i->second.location << endl;
+                LOG(log,4) << "[remoteMemory " << m_id << " @ " << system_time 
+                           << " ] a memory request is put into a send queue to " << i->second.location << endl;
             } else {
                 return_remote_mreq_id(new_msg.mem_msg.req_id);
             }

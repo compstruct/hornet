@@ -12,16 +12,18 @@ dram::~dram() {
 }
 
 dramController::dramController(const uint32_t id, const uint32_t level, const uint64_t &t, 
-                               logger &log, shared_ptr<random_gen> ran,
+                               shared_ptr<tile_statistics> st, logger &log, shared_ptr<random_gen> ran,
                                shared_ptr<dram> dram,
                                dramController_cfg_t cfgs)
-: memory(id, level, t, log, ran), m_dram(dram), m_cfgs(cfgs), m_to_dram_in_transit(0), m_from_dram_in_transit(0) {
+: memory(id, level, t, st, log, ran), m_dram(dram), m_cfgs(cfgs), m_to_dram_in_transit(0), m_from_dram_in_transit(0) {
     m_channel_width = m_cfgs.bytes_per_cycle * m_cfgs.off_chip_latency;
 }
 
 dramController::~dramController() {}
 
 mreq_id_t dramController::request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t target_level) {
+    LOG(log,3) << "[dramController " << m_id << " @ " << system_time 
+               << " ] received a request " << endl;
     mreq_id_t new_id = take_new_mreq_id();
     in_req_entry_t new_entry;
     new_entry.status = REQ_INIT;

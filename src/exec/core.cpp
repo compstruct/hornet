@@ -4,13 +4,14 @@
 #include "core.hpp"
 #include <boost/bind.hpp>
 #include <boost/function.hpp>
+#include "homeCache.hpp"
 
 core::core(const pe_id &id, const uint64_t &t,
         shared_ptr<id_factory<packet_id> > pif,
         shared_ptr<tile_statistics> st, logger &l,
         shared_ptr<random_gen> r, core_cfg_t cfgs
-        ) throw(err) : pe(id), system_time(t), stats(st), log(l), ran(r), m_cfgs(cfgs),
-    m_packet_id_factory(pif), m_max_memory_level(0), m_current_receive_channel() 
+        ) throw(err) : pe(id), system_time(t), stats(st), log(l), ran(r), m_cfgs(cfgs), m_packet_id_factory(pif), 
+    m_away_cache(shared_ptr<memory>()), m_max_memory_level(0), m_num_active_remote_mem_requests(0), m_current_receive_channel() 
 { 
     for (int i = 0; i < NUM_MSG_TYPES; ++i) {
         m_in_msg_queues[(msg_type_t)i] = shared_ptr<coreMessageQueue> (new coreMessageQueue((msg_type_t)i, m_cfgs.msg_queue_size));
@@ -27,6 +28,9 @@ void core::connect(shared_ptr<bridge> net_bridge) throw(err) {
     copy(qs->begin(), qs->end(), back_insert_iterator<vector<uint32_t> >(m_queue_ids));
 }
 
+void core::add_away_cache(shared_ptr<memory> cache) {
+    m_away_cache = cache;    
+}
 void core::add_remote_memory(shared_ptr<remoteMemory> mem) {
     m_remote_memory = mem;
 
@@ -105,18 +109,20 @@ void core::tick_positive_edge() throw(err) {
             stats->offer_packet(fid, pid, msg->flit_count); 
             /* save in xmit buffer until the transfer finished */
             m_xmit_buffer[xid] = p_env;
-            LOG(log,3) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
+            LOG(log,4) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
                        << " ] has sent a message type " << (uint32_t) *i_msg_type << endl;
             m_out_msg_queues[*i_msg_type]->pop();
         } else {
-            LOG(log,3) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
+            LOG(log,4) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
                        << " ] has failed sending a message type " << (uint32_t) *i_msg_type << endl;
             delete[] p_env;
         }
     }
-
     /* accept all new requests in memory components (they will begin working in this cycle) */
-    m_remote_memory->initiate();
+    remote_memory()->initiate();
+    if (away_cache()) {
+        away_cache()->initiate();
+    }
     for (int level = 0; level <= m_max_memory_level; ++level) {
         if (m_memory_hierarchy.count(level)) {
             m_memory_hierarchy[level]->initiate();
@@ -131,7 +137,10 @@ void core::tick_positive_edge() throw(err) {
     exec_mem_server();
 
     /* check if requests issued by middle-level memory components are done */
-    m_remote_memory->update();
+    remote_memory()->update();
+    if (away_cache()) {
+        away_cache()->update();
+    }
     for (int level = 0; level <= m_max_memory_level; ++level) {
         if (m_memory_hierarchy.count(level)) {
             m_memory_hierarchy[level]->update();
@@ -139,7 +148,10 @@ void core::tick_positive_edge() throw(err) {
     }
 
     /* serve accepted memory requests (the results will be updated to parents in the next cycle) */ 
-    m_remote_memory->process();
+    remote_memory()->process();
+    if (away_cache()) {
+        away_cache()->process();
+    }
     for (int level = 0; level <= m_max_memory_level; ++level) {
         if (m_memory_hierarchy.count(level)) {
             m_memory_hierarchy[level]->process();
@@ -206,8 +218,49 @@ void core::exec_mem_server() {
         for (map<mreq_id_t, server_local_req_entry_t>::iterator i_req = i_level->second->begin(); 
                 i_req != i_level->second->end(); ++i_req)
         {
-            if (i_req->second.mem_to_serve->ready(i_req->first)) {
-                server_in_req_entry_t in_entry = (*m_server_in_req_table[i_req->second.sender])[i_req->second.in_req_id];
+            mreq_id_t local_req_id = i_req->first;
+            server_local_req_entry_t &local_entry = i_req->second;
+            if (local_entry.mem_to_serve->ready(local_req_id)) {
+                server_in_req_entry_t &in_entry = (*m_server_in_req_table[local_entry.sender])[local_entry.in_req_id];
+                if (m_cfgs.support_library && in_entry.req->is_ra()) {
+                    shared_ptr<homeCache> home_cache = static_pointer_cast<homeCache, memory>(local_entry.mem_to_serve);
+
+                    uint64_t __attribute__((unused)) timestamp = home_cache->get_timestamp(local_req_id);
+                    uint64_t __attribute__((unused)) age = home_cache->get_age(local_req_id);
+                    uint64_t __attribute__((unused)) last_access = home_cache->get_last_access(local_req_id);
+                    uint64_t __attribute__((unused)) write_pending = home_cache->get_total_write_pending(local_req_id);
+
+                    /* LIBRARY COMPETITION */
+                    /* make a timestamp decision logic here */
+                    /* some basic information is provided in the above, */
+                    /* or you may modify codes to use additional information */
+                    /* but, be careful about hardware implementation costs */
+                    uint64_t new_timestamp = system_time + 888;
+
+                    in_entry.req->set_timestamp(new_timestamp);
+
+                    home_cache->update_timestamp(local_req_id, new_timestamp);
+                }
+                in_entry.status = REQ_DONE;
+                local_entry.mem_to_serve->finish(local_req_id);
+                server_local_req_obsolete.push_back(local_req_id);
+            }
+        }
+        for (vector<mreq_id_t>::iterator i = server_local_req_obsolete.begin(); i != server_local_req_obsolete.end(); ++i)  {
+            i_level->second->erase(*i);
+        }
+    }
+
+    /* sends out replies */
+    for (map<int, shared_ptr<map<mreq_id_t, server_in_req_entry_t> > >::iterator i_sender 
+            = m_server_in_req_table.begin();
+            i_sender != m_server_in_req_table.end(); ++i_sender) {
+        vector<mreq_id_t> server_in_req_obsolete;
+        for (map<mreq_id_t, server_in_req_entry_t>::iterator i_req = i_sender->second->begin(); 
+                i_req != i_sender->second->end(); ++i_req) {
+            mreq_id_t in_req_id = i_req->first;
+            server_in_req_entry_t &in_entry = i_req->second;
+            if (in_entry.status == REQ_DONE) {
                 msg_t new_msg;
                 new_msg.type = (in_entry.msg_type == MSG_RA_REQ)? MSG_RA_REP : MSG_MEM_REP;
                 new_msg.flit_count = m_cfgs.flits_per_mem_msg_header;
@@ -216,21 +269,19 @@ void core::exec_mem_server() {
                         / m_cfgs.bytes_per_flit;
                 }
                 new_msg.dst = in_entry.sender;
-                new_msg.mem_msg.req_id = i_req->second.in_req_id;
+                new_msg.mem_msg.req_id = in_req_id;
                 new_msg.mem_msg.req = in_entry.req;
+
                 if (m_out_msg_queues[new_msg.type]->push_back(new_msg)) {
                     LOG(log,3) << "[server " << get_id().get_numeric_id() << " @ " << system_time 
-                        << " ] is ready to send a memory reply to " << new_msg.dst << endl;
-                    (*m_server_in_req_table[i_req->second.sender]).erase(i_req->second.in_req_id);
-                    (i_req->second).mem_to_serve->finish(i_req->first);
-                    server_local_req_obsolete.push_back(i_req->first);
+                        << " ] has sent a memory reply to " << new_msg.dst << endl;
+                    server_in_req_obsolete.push_back(in_req_id);
+                    --m_num_active_remote_mem_requests;
                 }
             }
         }
-        for (vector<mreq_id_t>::iterator i = server_local_req_obsolete.begin();
-                i != server_local_req_obsolete.end(); ++i) 
-        {
-            i_level->second->erase(*i);
+        for (vector<mreq_id_t>::iterator i = server_in_req_obsolete.begin(); i != server_in_req_obsolete.end(); ++i) {
+            i_sender->second->erase(*i);
         }
     }
 
@@ -253,6 +304,8 @@ void core::exec_mem_server() {
                 shared_ptr<memoryRequest> req = i_req->second.req;
                 uint32_t tgt_level = i_req->second.target_level;
                 assert(m_memory_hierarchy[tgt_level]); /* this node must have memory system for the level */
+                LOG(log,3) << "[server " << get_id().get_numeric_id() << " @ " << system_time 
+                           << " ] initiated local memory requests for a message from " << i_req->second.sender << endl;
                 mreq_id_t local_req_id = m_memory_hierarchy[tgt_level]->request(req);
 
                 if (m_server_local_req_table.count(tgt_level) == 0) {
@@ -272,7 +325,8 @@ void core::exec_mem_server() {
     vector<msg_type_t> mem_req_vec (mem_reqs, mem_reqs + sizeof(mem_reqs)/sizeof(msg_type_t));
     for (vector<msg_type_t>::iterator i_queue = mem_req_vec.begin(); i_queue != mem_req_vec.end(); ++i_queue) {
         uint32_t num_msgs = m_in_msg_queues[*i_queue]->size();
-        for (uint32_t i_msg = 0; i_msg < num_msgs; ++i_msg) {
+        for (uint32_t i_msg = 0; i_msg < num_msgs && m_num_active_remote_mem_requests < m_cfgs.max_active_remote_mem_requests; 
+                ++i_msg) {
             int sender = m_in_msg_queues[*i_queue]->front().src;
             mreq_id_t in_req_id = m_in_msg_queues[*i_queue]->front().mem_msg.req_id;
             if (m_server_in_req_table.count(sender) == 0) {
@@ -286,7 +340,8 @@ void core::exec_mem_server() {
                 = m_in_msg_queues[*i_queue]->front().mem_msg.target_level;
             (*m_server_in_req_table[sender])[in_req_id].req = m_in_msg_queues[*i_queue]->front().mem_msg.req;
             m_in_msg_queues[*i_queue]->pop();
-            LOG(log, 3) << "[server " << get_id().get_numeric_id() << " @ " << system_time
+            ++m_num_active_remote_mem_requests;
+            LOG(log,3) << "[server " << get_id().get_numeric_id() << " @ " << system_time
                         << " ] received a memory request from " << sender << endl;
         }
     }

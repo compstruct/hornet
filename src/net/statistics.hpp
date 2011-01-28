@@ -112,6 +112,13 @@ public:
     inline uint64_t get_system_time() const throw();
     inline uint64_t get_start_time() const throw();
 
+    /* execution statistics */
+    inline void finish_execution(uint64_t time) { execution_finish_times.add(time, 1); }
+    inline void issue_memory() { ++total_memory_accesses; }
+    inline void issue_remote_access() { ++total_remote_accesses; }
+    inline void receive_mem_read(uint64_t latency) { mem_read_lat_stats.add(latency, 1); mem_lat_stats.add(latency, 1); }
+    inline void receive_mem_write(uint64_t latency) { mem_write_lat_stats.add(latency, 1); mem_lat_stats.add(latency, 1); }
+
 public:
     friend ostream &operator<<(ostream &, const system_statistics &);
 private:
@@ -183,6 +190,16 @@ private:
     uint64_t total_vqrd_flits; 
     vq_node_counter_t vqrd_bridge;
     vq_node_counter_t vqrd_port;
+
+    /* execution statistics */
+    running_stats mem_lat_stats;
+    running_stats mem_read_lat_stats;
+    running_stats mem_write_lat_stats;
+    running_stats execution_finish_times;
+    uint64_t total_remote_accesses;
+    uint64_t total_memory_accesses;
+    
+
 private:
     typedef struct {
         char v_offered;

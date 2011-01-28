@@ -16,15 +16,12 @@ public:
     } remoteMemory_cfg_t;
 
     remoteMemory(const uint32_t numeric_id, const uint32_t level, const uint64_t &system_time, 
+                 shared_ptr<tile_statistics> stats,
                  logger &log, shared_ptr<random_gen> ran,
                  remoteMemory_cfg_t cfgs);
     ~remoteMemory();
 
     /* requests by cores */
-    virtual mreq_id_t request(shared_ptr<memoryRequest> req);
-    virtual mreq_id_t ra_request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t level = 1);
-
-    /* requests by cache */
     virtual mreq_id_t request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t level);
 
     virtual bool ready(mreq_id_t id);
@@ -42,9 +39,6 @@ public:
     inline void set_in_queue(msg_type_t type, shared_ptr<coreMessageQueue> queue) { m_in_queues[type] = queue; }
 
 private:
-    virtual mreq_id_t _request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t level, bool ra);
-
-private:
     typedef enum {
         REQ_INIT,
         REQ_BUSY,
@@ -59,7 +53,7 @@ private:
         int location;
         uint32_t level;
         shared_ptr<memoryRequest> req;
-        bool ra;
+        //bool ra;
     } in_req_entry_t;
 
     mreq_id_t take_new_remote_mreq_id();

@@ -3,24 +3,28 @@
 
 #include "memtraceThread.hpp"
 
-memtraceThread::memtraceThread(mth_id_t id, logger &l) 
-    :m_id(id), log(l) 
+memtraceThread::memtraceThread(mth_id_t id, const uint64_t &t, logger &l) 
+    :m_id(id), system_time(t), log(l) 
 {
     m_cur.type = INST_NONE;
+    m_cur.repeats = 0;
 }
 
 memtraceThread::~memtraceThread() { }
 
-void memtraceThread::add_non_mem_inst(uint32_t alu_cost) {
+void memtraceThread::add_non_mem_inst(uint32_t repeats) {
+    /* for now, just assume all non-memory instruction takes 1 cycle */
     inst_t new_inst;
-    new_inst.alu_cost = alu_cost;
-    new_inst.remaining_alu_cost = alu_cost;
+    new_inst.repeats = repeats;
+    new_inst.alu_cost = 1;
+    new_inst.remaining_alu_cost = 1;
     new_inst.type = INST_OTHER;
     m_insts.push_back(new_inst);
 }
 
 void memtraceThread::add_mem_inst(uint32_t alu_cost, bool write, maddr_t addr, int home, uint32_t byte_count) {
     inst_t new_inst;
+    new_inst.repeats = 1;
     new_inst.alu_cost = alu_cost;
     new_inst.remaining_alu_cost = alu_cost;
     new_inst.type = INST_MEMORY;
@@ -32,8 +36,12 @@ void memtraceThread::add_mem_inst(uint32_t alu_cost, bool write, maddr_t addr, i
 }
 
 void memtraceThread::fetch() {
-    if (m_insts.size() > 0) {
+    if (m_cur.repeats > 0) {
+        --(m_cur.repeats);
+        m_cur.remaining_alu_cost = m_cur.alu_cost;
+    } else if (m_insts.size() > 0) {
         m_cur = m_insts.front();
+        --(m_cur.repeats);
         m_insts.erase(m_insts.begin());
     } else {
         LOG(log,2) << "[thread " << get_id() << " ] finished " << endl;
@@ -44,6 +52,9 @@ void memtraceThread::fetch() {
 void memtraceThread::execute() {
     assert(m_cur.remaining_alu_cost > 0);
     --(m_cur.remaining_alu_cost);
+    if (m_cur.remaining_alu_cost == 0 && m_cur.type == INST_MEMORY) {
+        m_cur.memory_issued_time = system_time;
+    }
 }
 
 void memtraceThread::reset_current_instruction() {

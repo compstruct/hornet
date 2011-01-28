@@ -105,6 +105,7 @@ void memtraceCore::exec_core() {
                 LOG(log,2) << "[memtraceCore:" << get_id().get_numeric_id() << "] "
                            << "finished a memtraceThread " << cur.thread->get_id()
                            << " @ " << system_time << endl;
+                stats->finish_execution(system_time);
                 unload_thread(m_lane_ptr);
             } else {
                 if (m_native_list.count(cur.thread->get_id()) == 0) {
@@ -155,11 +156,29 @@ void memtraceCore::exec_core() {
                                 wdata[0] = get_id().get_numeric_id();
                                 req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count, wdata));
                             }
-                            cur.mreq_id = remote_memory()->ra_request(req, home);
+                            req->set_ra();
+
+                            if (m_cfgs.library_type == LIBRARY_ONLY) {
+
+                                /* LIBRARY_COMPETITION */
+                                /* put additional information in req here, for the RA server to use */
+                                /* (see exec/memoryRequest.hpp) */
+                                /* example */
+                                /* req->set_first_info(888); */
+
+                                cur.mreq_id = away_cache()->request(req, home, 1);
+                                cur.mem_to_serve = away_cache();
+
+                            } else if (m_cfgs.library_type == LIBRARY_NONE) {
+                                cur.mreq_id = remote_memory()->request(req, home, 1);
+                                cur.mem_to_serve = remote_memory();
+                            }
                             cur.req = req;
-                            cur.mem_to_serve = remote_memory();
                             cur.status = LANE_WAIT;
-                            LOG(log,3) << "[thread " << cur.thread->get_id() << " @ " << system_time 
+                            if (stats->is_started()) {
+                                stats->issue_memory();
+                            }
+                            LOG(log,1) << "[thread " << cur.thread->get_id() << " @ " << system_time 
                                        << " ] is making a remote access request on core " 
                                        << get_id().get_numeric_id() << endl;
                         } else {
@@ -182,6 +201,9 @@ void memtraceCore::exec_core() {
                         cur.req = req;
                         cur.mem_to_serve = nearest_memory();
                         cur.status = LANE_WAIT;
+                        if (stats->is_started()) {
+                            stats->issue_memory();
+                        }
                     }
                 } else if (cur.thread->type() == memtraceThread::INST_OTHER) {
                     cur.status = LANE_IDLE;
@@ -194,17 +216,25 @@ void memtraceCore::exec_core() {
     for (vector<lane_entry_t>::iterator i = m_lanes.begin(); i != m_lanes.end(); ++i) {
         if ((*i).status == LANE_WAIT) {
             if((*i).mem_to_serve->ready((*i).mreq_id)) {
-                LOG(log,2) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
+                if (stats->is_started()){
+                    if ((*i).req->rw() == MEM_READ) {
+                        stats->receive_mem_read(system_time - (*i).thread->memory_issued_time());
+                    } else {
+                        stats->receive_mem_write(system_time - (*i).thread->memory_issued_time());
+                    }
+                }
+
+                LOG(log,1) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
                            << " ] finished memory operation : "; 
                 if ((*i).req->rw() == MEM_READ)  {
-                    LOG(log,2) << " read ";
+                    LOG(log,1) << " read ";
                 } else {
-                    LOG(log,2) << " written ";
+                    LOG(log,1) << " written ";
                 }
                 for (uint32_t j = 0; j < (*i).req->byte_count()/4; ++j) {
-                    LOG(log,2) << hex << (*i).req->data()[j] << dec;
+                    LOG(log,1) << hex << (*i).req->data()[j] << dec;
                 }
-                LOG(log,2) <<  " on addr " << hex << (*i).req->addr() << dec << endl; 
+                LOG(log,1) <<  " on addr " << hex << (*i).req->addr() << dec << endl; 
 #if 0
                 cerr << "[core " << get_id().get_numeric_id() << " @ " << system_time << " ] finished memory operation : "; 
                 if ((*i).req->rw() == MEM_READ)  {

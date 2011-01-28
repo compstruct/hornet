@@ -19,7 +19,7 @@ public:
     } inst_type_t;
 
 public:
-    memtraceThread(mth_id_t id, logger &l);
+    memtraceThread(mth_id_t id, const uint64_t &system_time, logger &l);
     ~memtraceThread();
 
     inline mth_id_t get_id() { return m_id; }
@@ -40,6 +40,7 @@ public:
     /* read from current instruction */
     inst_type_t type();
     uint32_t remaining_alu_cycle();
+    inline uint64_t memory_issued_time() { return m_cur.memory_issued_time; }
 
     /* read from current instruction - valid for INST_MEMORY only */
     mreq_type_t rw();
@@ -53,10 +54,11 @@ public:
 
     /* add instructions */
     void add_mem_inst(uint32_t alu_cost, bool write, maddr_t addr, int home, uint32_t byte_count);
-    void add_non_mem_inst(uint32_t alu_cost);
+    void add_non_mem_inst(uint32_t repeats);
 
 private:
     typedef struct {
+        uint32_t repeats;
         uint32_t alu_cost;
         uint32_t remaining_alu_cost;
         inst_type_t type;
@@ -64,9 +66,12 @@ private:
         maddr_t addr;
         int home;
         uint32_t byte_count;
+        /* stats */
+        uint64_t memory_issued_time;
     } inst_t;
 
     mth_id_t m_id;
+    const uint64_t &system_time;
     logger &log;
 
     inst_t m_cur;

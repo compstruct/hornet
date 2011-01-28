@@ -5,9 +5,9 @@
 #include "error.hpp"
 
 cache::cache(const uint32_t id, const uint32_t level, const uint64_t &t, 
-             logger &log, shared_ptr<random_gen> ran,
+             shared_ptr<tile_statistics> st, logger &log, shared_ptr<random_gen> ran,
              cache_cfg_t cfgs)
-: memory(id, level, t, log, ran), m_cfgs(cfgs), m_home(shared_ptr<cache>()) {
+: memory(id, level, t, st, log, ran), m_cfgs(cfgs), m_home(shared_ptr<cache>()) {
     int log2 = 0;
     for (uint32_t i = m_cfgs.block_size_bytes; i > 1; i = i/2) {
         assert(i%2 == 0); /* must be a power of 2 */

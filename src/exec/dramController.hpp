@@ -38,7 +38,7 @@ public:
     } dramController_cfg_t;
 
     dramController(const uint32_t numeric_id, const uint32_t level, const uint64_t &system_time,
-          logger &log, shared_ptr<random_gen> ran,
+          shared_ptr<tile_statistics> stats, logger &log, shared_ptr<random_gen> ran,
           shared_ptr<dram> dram,
           dramController_cfg_t cfgs);
     virtual ~dramController();
