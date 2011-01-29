@@ -77,8 +77,8 @@ def main(argv):
 
     print ' - memory instructions in every ' + str(mem_interval) + ' non-memory instructions.'
     print ' - actual private access ratio : ' + str( float(prob_remote_to_local) / float(prob_remote_to_local + prob_local_to_remote) * 100) + ' %'
-    print '     - the probablity of accessing remote data after accessing a local data : ' + str(prob_local_to_remote) + ' %'
-    print '     - the probablity of accessing local data after accessing a local data : ' + str(prob_local_to_remote) + ' %'
+    print '     - the probability of accessing remote data after accessing a local data : ' + str(prob_local_to_remote) + ' %'
+    print '     - the probability of accessing local data after accessing a local data : ' + str(prob_local_to_remote) + ' %'
     with open(out_file, 'w') as out:
         for thread in range(num_threads):
             local = True
