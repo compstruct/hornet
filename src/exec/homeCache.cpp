@@ -160,6 +160,7 @@ void homeCache::process() {
                         m_cache[index][i_way].tag = get_tag(req->addr());
                         m_cache[index][i_way].dirty = false;
                         m_cache[index][i_way].last_access = system_time;
+
                         shared_ptr<memoryRequest> home_req (new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                     m_cfgs.block_size_bytes));
                         LOG(log,4) << "[cache " << m_id << " @ " << system_time 
@@ -172,7 +173,8 @@ void homeCache::process() {
                     } else if (m_cache[index][i_way].doomed) {
                         /* will be waiting for this space (allow some race conditions) */
                         has_space = true;
-                    } else if (m_cache[index][i_way].ready) {
+                    } else if (m_cache[index][i_way].ready && m_cache[index][i_way].last_access < system_time) {
+                        /* it's contradictory to evict a cache line that is accessed on this cycle */
                         evict_cand.push_back(m_cache[index] + i_way);
                     }
                 }
@@ -208,8 +210,10 @@ void homeCache::process() {
                 if (line->ready) {
                     /* hit */
                     line->last_access = system_time;
-                    if (req->rw() == MEM_WRITE && line->timestamp > system_time) {
-                        ++line->total_write_pending;
+                    if (req->rw() == MEM_WRITE) {
+                        if (line->timestamp > system_time) {
+                            ++line->total_write_pending;
+                        }
                     } else if (transferred < m_cfgs.block_per_cycle) {
                         /* allowed bandwidth */
                         uint32_t *src, *tgt;
