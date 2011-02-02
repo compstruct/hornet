@@ -27,6 +27,10 @@ memtraceCore::~memtraceCore() throw() {}
 #define HIGH_PRIORITY_CHANNEL 0
 #define LOW_PRIORITY_CHANNEL 1
 
+static uint32_t distance(int src, int dst, int width) {
+    return abs(dst/width - src/width) + abs(dst%width - src%width);
+}
+
 void memtraceCore::exec_core() {
 
     /* update em */
@@ -146,6 +150,8 @@ void memtraceCore::exec_core() {
                         } else if (m_cfgs.ra_type == RA_RANDOM) {
                             /* 50% */
                             do_ra = (ran->random_range(2) == 0)? true : false;
+                        } else if (m_cfgs.ra_type == RA_DISTANCE) {
+                            do_ra = distance(home, get_id().get_numeric_id(), m_cfgs.network_width) < m_cfgs.ra_distance_threshold;
                         }
                         if (do_ra) {
                             shared_ptr<memoryRequest> req;
@@ -178,10 +184,13 @@ void memtraceCore::exec_core() {
                             if (stats->is_started()) {
                                 stats->issue_memory();
                             }
-                            LOG(log,1) << "[thread " << cur.thread->get_id() << " @ " << system_time 
+                            LOG(log,3) << "[thread " << cur.thread->get_id() << " @ " << system_time 
                                        << " ] is making a remote access request on core " 
                                        << get_id().get_numeric_id() << endl;
                         } else {
+                            LOG(log,3) << "[thread " << cur.thread->get_id() << " @ " << system_time 
+                                       << " ] wants to migrate to core from "
+                                       << get_id().get_numeric_id() << " to " << home << endl;
                             cur.thread->reset_current_instruction();
                             cur.status = LANE_MIG;
                         }
@@ -195,7 +204,7 @@ void memtraceCore::exec_core() {
                             req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count, &wdata));
                         }
                         LOG(log,3) << "[thread " << cur.thread->get_id() << " @ " << system_time 
-                                   << " ] is making a memory request to the nearest memory on core " 
+                            << " ] is making a memory request to the nearest memory on core " 
                                    << get_id().get_numeric_id() << endl;
                         cur.mreq_id = nearest_memory()->request(req);
                         cur.req = req;
@@ -224,17 +233,17 @@ void memtraceCore::exec_core() {
                     }
                 }
 
-                LOG(log,1) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
+                LOG(log,3) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
                            << " ] finished memory operation : "; 
                 if ((*i).req->rw() == MEM_READ)  {
-                    LOG(log,1) << " read ";
+                    LOG(log,3) << " read ";
                 } else {
-                    LOG(log,1) << " written ";
+                    LOG(log,3) << " written ";
                 }
                 for (uint32_t j = 0; j < (*i).req->byte_count()/4; ++j) {
-                    LOG(log,1) << hex << (*i).req->data()[j] << dec;
+                    LOG(log,3) << hex << (*i).req->data()[j] << dec;
                 }
-                LOG(log,1) <<  " on addr " << hex << (*i).req->addr() << dec << endl; 
+                LOG(log,3) <<  " on addr " << hex << (*i).req->addr() << dec << endl; 
 #if 0
                 cerr << "[core " << get_id().get_numeric_id() << " @ " << system_time << " ] finished memory operation : "; 
                 if ((*i).req->rw() == MEM_READ)  {

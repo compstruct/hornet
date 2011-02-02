@@ -112,7 +112,9 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
                     thread = new memtraceThread(th_id, system_time, log);
                     pool->add_thread(thread);
                 }
-                thread->add_non_mem_inst(interval);
+                if (interval > 0) {
+                    thread->add_non_mem_inst(interval);
+                }
                 thread->add_mem_inst(1, (rw == 'W')? true : false, addr, home, byte_count); 
             }
         }
@@ -253,7 +255,9 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             mc_cfgs.max_threads = 2;
             mc_cfgs.flits_per_mig = 2;
             mc_cfgs.em_type = memtraceCore::EM_ENC;
-            mc_cfgs.ra_type = memtraceCore::RA_RANDOM;
+            mc_cfgs.ra_type = memtraceCore::RA_NONE;
+            mc_cfgs.ra_distance_threshold = 3;
+            mc_cfgs.network_width = 8;
             mc_cfgs.library_type = memtraceCore::LIBRARY_NONE;
 
 #ifdef LIBRARY_COMPETITION

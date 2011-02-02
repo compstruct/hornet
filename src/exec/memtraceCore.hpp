@@ -18,7 +18,7 @@
 class memtraceCore : public core {
 public:
     typedef enum { EM_NONE, EM_ENC }  em_type_t; /* TODO (Later) : more em schemes (swapInf, seapHS) */
-    typedef enum { RA_NONE, RA_ONLY, RA_RANDOM } ra_type_t; /* TODO (Later) : EM/RA hybrid */
+    typedef enum { RA_NONE, RA_ONLY, RA_RANDOM, RA_DISTANCE } ra_type_t; /* TODO (Later) : EM/RA hybrid */
     typedef enum { LIBRARY_NONE, LIBRARY_ONLY } library_type_t;
     typedef struct {
         uint32_t    max_threads;
@@ -26,6 +26,8 @@ public:
         em_type_t   em_type;
         ra_type_t   ra_type;
         library_type_t library_type;
+        uint32_t    ra_distance_threshold;
+        uint32_t    network_width;
     } memtraceCore_cfg_t;
 
 public:
