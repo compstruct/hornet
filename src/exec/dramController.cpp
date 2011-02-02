@@ -160,6 +160,24 @@ void dramController::mem_access(shared_ptr<memoryRequest> req) {
     }
 }
 
+void dramController::mem_fill(  uint32_t mem_start,
+                                uint32_t mem_size, 
+                                shared_ptr<mem> m) {
+    for (uint32_t i = 0; i < mem_size; i += 4) {
+        uint64_t offset = (mem_start + i) % DRAM_BLOCK_SIZE;
+        uint64_t index = (mem_start + i) - offset;
+        if (m_dram->space.count(index) == 0) {
+            uint32_t *line = new uint32_t[DRAM_BLOCK_SIZE/4];
+            if (!line) throw err_out_of_mem();
+            for (uint32_t j = 0; j < DRAM_BLOCK_SIZE/4; ++j)  *(line+j) = 0;
+            m_dram->space[index] = line; 
+        }
+        uint32_t src = m->load<uint32_t>(mem_start + i);
+        uint32_t *tgt = (m_dram->space[index]) + offset/4;
+        (*tgt) = src;
+    }
+}
+
 void dramController::mem_access_safe(shared_ptr<memoryRequest> req) {
     unique_lock<recursive_mutex> lock(m_dram->dram_mutex);
     mem_access(req);

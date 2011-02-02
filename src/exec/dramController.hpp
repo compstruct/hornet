@@ -4,6 +4,9 @@
 #ifndef __DRAM_CONTROLLER_HPP__
 #define __DRAM_CONTROLLER_HPP__
 
+#include "instr.hpp"
+#include "mem.hpp"
+#include "endian.hpp"
 #include "memory.hpp"
 #include "logger.hpp"
 #include "random.hpp"
@@ -51,6 +54,8 @@ public:
     virtual void initiate();
     virtual void update();
     virtual void process();
+
+    virtual void mem_fill(uint32_t mem_start, uint32_t mem_size,  shared_ptr<mem> m);
 
 private:
     typedef enum {

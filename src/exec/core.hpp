@@ -69,6 +69,28 @@ protected:
     shared_ptr<coreMessageQueue> core_receive_queue(int channel);
     shared_ptr<coreMessageQueue> core_send_queue(int channel);
 
+    virtual void mh_initiate() {
+        for (int level = 0; level <= m_max_memory_level; ++level) {
+            if (m_memory_hierarchy.count(level)) {
+                m_memory_hierarchy[level]->initiate();
+            }
+        }
+    }
+    virtual void mh_update() {
+        for (int level = 0; level <= m_max_memory_level; ++level) {
+            if (m_memory_hierarchy.count(level)) {
+                m_memory_hierarchy[level]->update();
+            }
+        }    
+    }
+    virtual void mh_process() {
+        for (int level = 0; level <= m_max_memory_level; ++level) {
+            if (m_memory_hierarchy.count(level)) {
+                m_memory_hierarchy[level]->process();
+            }
+        }
+    }
+
     inline shared_ptr<memory> nearest_memory() { return m_memory_hierarchy[m_min_memory_level]; }
     inline shared_ptr<remoteMemory> remote_memory() { return m_remote_memory; }
     inline shared_ptr<memory> away_cache() { return m_away_cache; }
@@ -86,6 +108,8 @@ protected:
     map<msg_type_t, shared_ptr<coreMessageQueue> > m_out_msg_queues;
     map<msg_type_t, shared_ptr<coreMessageQueue> > m_in_msg_queues;
 
+    /* Memories */
+    shared_ptr<remoteMemory> m_remote_memory;
 
 private:
     void release_xmit_buffer();
@@ -137,7 +161,6 @@ private:
     map<uint32_t, uint64_t*> m_xmit_buffer;
     
     /* Memories */
-    shared_ptr<remoteMemory> m_remote_memory;
     shared_ptr<memory> m_away_cache;
     map<int, shared_ptr<memory> > m_memory_hierarchy;
     int m_max_memory_level;

@@ -24,6 +24,7 @@
 #include "sys.hpp"
 #include "ginj.hpp"
 #include "core.hpp"
+#include "mcpu.hpp"
 #include "memtraceCore.hpp"
 #include "memtraceThread.hpp"
 #include "memtraceThreadPool.hpp"
@@ -38,6 +39,7 @@ typedef enum {
     CORE_INJECTOR= 1,
     CORE_MEMTRACE= 2,
     CORE_CUSTOM = 3,
+    CORE_MCPU = 4,
     NUM_PES
 } core_type_t;
 
@@ -475,6 +477,58 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                 }
             }
 
+            break;
+        }
+        case CORE_MCPU: {
+            /* MIPS image setup --------------------------------------------- */ 
+            
+            uint32_t mem_start = read_word(img);
+            uint32_t mem_size = read_word(img);
+
+            shared_ptr<mem> m(new mem(id, mem_start, mem_size, log));
+            read_mem(m->ptr(mem_start), mem_size, img);
+
+            uint32_t cpu_entry_point = read_word(img);
+            uint32_t cpu_stack_pointer = read_word(img);
+
+            /* Core config setup -------------------------------------------- */
+
+            core::core_cfg_t core_cfgs;
+            core_cfgs.flits_per_mem_msg_header = 1;
+            core_cfgs.bytes_per_flit = 1;
+            core_cfgs.msg_queue_size = 4;
+            core_cfgs.memory_server_process_time = 1;
+
+            /* Memory hierarchy setup --------------------------------------- */           
+
+            shared_ptr<mcpu> new_core(new mcpu( pe_id(id), 
+                                                t->get_time(), 
+                                                cpu_entry_point,
+                                                cpu_stack_pointer,
+                                                t->get_packet_id_factory(),
+                                                t->get_statistics(),
+                                                log,
+                                                ran,
+                                                core_cfgs));;
+            p = new_core;
+
+            /* I$ setup ----------------------------------------------------- */
+
+            new_core->initialize_memory_hierarchy(  id, t, img, true, 
+                                                    shared_ptr<remoteMemory>(),
+                                                    mem_start, mem_size, m);
+
+            /* D$ hierarchy setup ------------------------------------------- */
+
+            remoteMemory::remoteMemory_cfg_t rm_cfgs;
+            rm_cfgs.process_time = 1;
+            shared_ptr<remoteMemory> rm(new remoteMemory(   id, 1, t->get_time(), 
+                                                            t->get_statistics(), 
+                                                            log, ran, rm_cfgs));
+            new_core->add_remote_memory(rm);
+            new_core->initialize_memory_hierarchy(  id, t, img, false, 
+                                                    rm,
+                                                    mem_start, mem_size, m);
             break;
         }
         default:

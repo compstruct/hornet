@@ -118,16 +118,13 @@ void core::tick_positive_edge() throw(err) {
             delete[] p_env;
         }
     }
+
     /* accept all new requests in memory components (they will begin working in this cycle) */
-    remote_memory()->initiate();
+    m_remote_memory->initiate();
     if (away_cache()) {
         away_cache()->initiate();
     }
-    for (int level = 0; level <= m_max_memory_level; ++level) {
-        if (m_memory_hierarchy.count(level)) {
-            m_memory_hierarchy[level]->initiate();
-        }
-    }
+    mh_initiate();
     
     /* execute core / memory server. */
     /* they will check if the requests they issued are done */
@@ -137,26 +134,18 @@ void core::tick_positive_edge() throw(err) {
     exec_mem_server();
 
     /* check if requests issued by middle-level memory components are done */
-    remote_memory()->update();
+    m_remote_memory->update();
     if (away_cache()) {
         away_cache()->update();
-    }
-    for (int level = 0; level <= m_max_memory_level; ++level) {
-        if (m_memory_hierarchy.count(level)) {
-            m_memory_hierarchy[level]->update();
-        }
-    }
+    }    
+    mh_update();
 
     /* serve accepted memory requests (the results will be updated to parents in the next cycle) */ 
-    remote_memory()->process();
+    m_remote_memory->process();
     if (away_cache()) {
         away_cache()->process();
-    }
-    for (int level = 0; level <= m_max_memory_level; ++level) {
-        if (m_memory_hierarchy.count(level)) {
-            m_memory_hierarchy[level]->process();
-        }
-    }
+    }    
+    mh_process();
 
     /* receive message(s) and put into correpsonding in_msg_queues */
     m_current_receive_channel++; /* round-robin */

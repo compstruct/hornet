@@ -4,6 +4,8 @@
 
 from __future__ import with_statement
 
+#import pdb; pdb.set_trace()
+
 import sys, os, optparse, re, subprocess, struct, ConfigParser
 
 objdump = 'objdump'
@@ -151,13 +153,14 @@ def write_header(out, verbose=False):
     out.write(file_magic)
     out.write(w2bs(file_version))
 
-def write_pe(out, id, core, img, mem_locs, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_size,
+def write_pe(out, id, core, img, mem_locs, imem_locs, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_size,
              n2b_queues, b2n_queues, one_q_per_f, one_f_per_q, verbose=False):
     core_id = {
         'mips_mpi':0,
         'injector':1,
         'memtraceCore':2,
-        'customCore':3
+        'customCore':3,
+        'mcpu':4
     }
     if verbose:
         print 'writing PE %d' % id
@@ -195,6 +198,23 @@ def write_pe(out, id, core, img, mem_locs, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_siz
         for loc in mem_locs:
             out.write(w2bs(loc))
     # customCore-specific cfgs
+    if core in ['mcpu']:
+        # mips data
+        file, format, entry, all_sections = \
+                read_section_headers(img, verbose=verbose)
+        sections = sort_sections(all_sections, verbose=verbose)
+        start = sections[0]['lma'] & 0xfffff000
+        addr_past_end = sections[-1]['lma'] + sections[-1]['size']
+        size = ((addr_past_end - start) & 0xfffff000) + 0x1000 + 0x4000
+        write_mem_image(out, file, start, size, entry, sections, verbose=verbose)
+        # memory hierarchy (I$)
+        out.write(w2bs(len(imem_locs))) # levels in the hierarchy
+        for iloc in imem_locs:
+            out.write(w2bs(iloc)) 
+        # memory hierarchy (D$)
+        out.write(w2bs(len(mem_locs))) # levels in the hierarchy
+        for loc in mem_locs:
+            out.write(w2bs(loc)) 
     if core in ['customCore']:
         # add your customCore-specific configurations
         None
@@ -497,12 +517,19 @@ def new_system_config(cfg, verbose=False):
                                                else None)
         else :
             progs = ({}, None)
+        mem_locs = dict()
+        
+        ## memory hierarchy i/d$ split
         if cfg.has_section('memory hierarchy') :
-            mem_locs = dict([(p_nat(n), map(int, v.split())) for n, v in cfg.items('memory hierarchy')])
-        else :
-            mem_locs = {}
-        mem_levels = mem_locs.keys()
-        mem_levels.sort()
+            mem_locs['d'] = dict([(p_nat(n), map(int, v.split())) for n, v in cfg.items('memory hierarchy')])
+            mem_levels = mem_locs['d'].keys()
+            mem_levels.sort()
+        if cfg.has_section('instruction memory hierarchy') :
+            mem_locs['i'] = dict([(p_nat(n), map(int, v.split())) for n, v in cfg.items('instruction memory hierarchy')])
+            imem_levels = mem_locs['i'].keys()
+            imem_levels.sort()
+        ## -- end
+
         node_ids = range(0, w * h)
         cpu_qs = get_qs('cpu')
         if get_bw('net')[1] is not None:
@@ -512,7 +539,8 @@ def new_system_config(cfg, verbose=False):
                    'one_f_per_q': one_f_per_q,
                    'core': get_core(cores, id),
                    'img': get_code(progs, id),
-                   'mem_locs' : [mem_locs[level][id] for level in mem_levels],
+                   'mem_locs' : [mem_locs['d'][level][id] for level in mem_levels] if cfg.has_section('memory hierarchy') else [],
+                   'imem_locs' : [mem_locs['i'][level][id] for level in imem_levels] if cfg.has_section('instruction memory hierarchy') else [],
                    'n2b_bw': get_bw('net')[0],
                    'b2n_bw': get_bw('cpu')[0],
                    'b2n_xbar_bw': get_bw('cpu')[1],
