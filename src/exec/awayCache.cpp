@@ -202,7 +202,7 @@ void awayCache::process() {
                         m_cache[index][i_way].on_the_fly = true;
                         has_space = true;
                         break;
-                    } else if (m_cache[index][i_way].ready) {
+                    } else if (m_cache[index][i_way].ready && m_cache[index][i_way].last_access < system_time) {
                         evict_cand.push_back(m_cache[index] + i_way);
                     }
                     if (!has_space && !evict_cand.empty()) {

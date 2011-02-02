@@ -188,7 +188,7 @@ void cache::process() {
                         m_cache[index][i_way].on_the_fly = true;
                         has_space = true;
                         break;
-                    } else if (m_cache[index][i_way].doomed) {
+                    } else if (m_cache[index][i_way].doomed && m_cache[index][i_way].last_access < system_time) {
                         /* will be waiting for this space (allow some race conditions) */
                         has_space = true;
                     } else if (m_cache[index][i_way].ready) {
