@@ -200,6 +200,7 @@ void homeCache::process() {
                                     m_cfgs.block_size_bytes, tgt->data));
                         mreq_id_t new_id = m_home->request(home_req, m_home_location, m_home_level);
                         m_out_req_table[new_id] = home_req;
+                        
                     } else {
                         /* if not written, just drop */
                         tgt->valid = false;
@@ -214,6 +215,7 @@ void homeCache::process() {
                         if (line->timestamp > system_time) {
                             ++line->total_write_pending;
                         }
+                        i->second.status = REQ_DONE;
                     } else if (transferred < m_cfgs.block_per_cycle) {
                         /* allowed bandwidth */
                         uint32_t *src, *tgt;
@@ -243,6 +245,7 @@ void homeCache::process() {
                     }
                 }
             }
+
         }
     }
 }
