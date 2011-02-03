@@ -214,8 +214,9 @@ void homeCache::process() {
                     if (req->rw() == MEM_WRITE) {
                         if (line->timestamp > system_time) {
                             ++line->total_write_pending;
+                        } else {
+                            i->second.status = REQ_DONE;
                         }
-                        i->second.status = REQ_DONE;
                     } else if (transferred < m_cfgs.block_per_cycle) {
                         /* allowed bandwidth */
                         uint32_t *src, *tgt;
