@@ -10,6 +10,10 @@
 #include <boost/shared_ptr.hpp>
 #include <map>
 
+#ifdef WRITE_NOW
+#include "awayCache.hpp"
+#endif
+
 using namespace std;
 using namespace boost;
 
@@ -32,6 +36,10 @@ public:
     uint64_t get_last_access(mreq_id_t id);
     uint64_t get_total_write_pending(mreq_id_t id);
 
+#ifdef WRITE_NOW
+    inline void set_awayCache_list(shared_ptr<map<uint32_t, shared_ptr<awayCache> > > list) {m_awayCache_list = list;}
+#endif
+
 private:
     typedef struct {
         bool valid;         /* entry is being used */
@@ -45,6 +53,7 @@ private:
         uint64_t timestamp;
         uint64_t birthday;
         uint64_t total_write_pending;
+        vector<uint32_t> sharers;
     } cache_line_t;
 
 private:
@@ -53,6 +62,9 @@ private:
 private:
     map<uint64_t, cache_line_t*>  m_cache;
 
+#ifdef WRITE_NOW
+    shared_ptr<map<uint32_t, shared_ptr<awayCache> > > m_awayCache_list;
+#endif
 };
 
 #endif

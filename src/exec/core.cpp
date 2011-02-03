@@ -121,10 +121,10 @@ void core::tick_positive_edge() throw(err) {
 
     /* accept all new requests in memory components (they will begin working in this cycle) */
     m_remote_memory->initiate();
+    mh_initiate();
     if (away_cache()) {
         away_cache()->initiate();
     }
-    mh_initiate();
     
     /* execute core / memory server. */
     /* they will check if the requests they issued are done */
@@ -135,17 +135,17 @@ void core::tick_positive_edge() throw(err) {
 
     /* check if requests issued by middle-level memory components are done */
     m_remote_memory->update();
+    mh_update();
     if (away_cache()) {
         away_cache()->update();
     }    
-    mh_update();
 
     /* serve accepted memory requests (the results will be updated to parents in the next cycle) */ 
     m_remote_memory->process();
+    mh_process();
     if (away_cache()) {
         away_cache()->process();
     }    
-    mh_process();
 
     /* receive message(s) and put into correpsonding in_msg_queues */
     m_current_receive_channel++; /* round-robin */
@@ -224,7 +224,7 @@ void core::exec_mem_server() {
                     /* some basic information is provided in the above, */
                     /* or you may modify codes to use additional information */
                     /* but, be careful about hardware implementation costs */
-                    uint64_t new_timestamp = system_time + 888;
+                    uint64_t new_timestamp = system_time + 10;
 
                     in_entry.req->set_timestamp(new_timestamp);
 
@@ -296,7 +296,6 @@ void core::exec_mem_server() {
                 LOG(log,3) << "[server " << get_id().get_numeric_id() << " @ " << system_time 
                            << " ] initiated local memory requests for a message from " << i_req->second.sender << endl;
                 mreq_id_t local_req_id = m_memory_hierarchy[tgt_level]->request(req);
-
                 if (m_server_local_req_table.count(tgt_level) == 0) {
                     m_server_local_req_table[tgt_level] = shared_ptr<map<mreq_id_t, server_local_req_entry_t> > 
                         (new map<mreq_id_t, server_local_req_entry_t>);

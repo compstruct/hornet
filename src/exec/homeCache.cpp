@@ -163,6 +163,9 @@ void homeCache::process() {
 
                         shared_ptr<memoryRequest> home_req (new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                     m_cfgs.block_size_bytes));
+#ifdef WRITE_NOW
+                        home_req->set_sender(m_id);
+#endif
                         LOG(log,4) << "[cache " << m_id << " @ " << system_time 
                                    << " ] requests its home cache at " << m_home_location << endl;
                         mreq_id_t new_id = m_home->request(home_req, m_home_location, m_home_level);
@@ -198,6 +201,9 @@ void homeCache::process() {
                         tgt->doomed = true;
                         shared_ptr<memoryRequest> home_req (new memoryRequest( (tgt->tag << m_tag_pos) | (index << m_index_pos),
                                     m_cfgs.block_size_bytes, tgt->data));
+#ifdef WRITE_NOW
+                        home_req->set_sender(m_id);
+#endif
                         mreq_id_t new_id = m_home->request(home_req, m_home_location, m_home_level);
                         m_out_req_table[new_id] = home_req;
                         
@@ -211,28 +217,54 @@ void homeCache::process() {
                 if (line->ready) {
                     /* hit */
                     line->last_access = system_time;
-                    if (req->rw() == MEM_WRITE) {
-                        if (line->timestamp > system_time) {
-                            ++line->total_write_pending;
-                        } else {
-                            i->second.status = REQ_DONE;
-                        }
-                    } else if (transferred < m_cfgs.block_per_cycle) {
-                        /* allowed bandwidth */
+                    if (transferred < m_cfgs.block_per_cycle) {
                         uint32_t *src, *tgt;
-                        if (req->rw() == MEM_READ) {
-                            src = line->data + get_offset(req->addr())/4;
-                            tgt = req->data();
-                        } else {
+                        if (req->rw() == MEM_WRITE) {
+#ifdef WRITE_NOW
+                            for (vector<uint32_t>::iterator j = line->sharers.begin(); j != line->sharers.end(); ++j) {
+                                LOG(log,4) << "[homeCache " << m_id << " @ " << system_time << " ] is invalidating sharer " 
+                                           << *j << " for line " << hex 
+                                           << req->addr() - req->addr()%m_cfgs.block_size_bytes << dec << endl;
+                                (*m_awayCache_list)[*j]->invalidate(req->addr() - req->addr()%m_cfgs.block_size_bytes);
+                            }
+                            line->sharers.clear();
                             src = req->data();
                             tgt = line->data + get_offset(req->addr())/4;
                             line->dirty = true;
+                            for (uint32_t j = 0; j < req->byte_count()/4; ++j) {
+                                tgt[j] = src[j];
+                            }
+                            i->second.status = REQ_DONE;
+                            ++transferred;
+#else
+                            if (line->timestamp > system_time) {
+                                ++line->total_write_pending;
+                            } else {
+                                src = req->data();
+                                tgt = line->data + get_offset(req->addr())/4;
+                                line->dirty = true;
+                                for (uint32_t j = 0; j < req->byte_count()/4; ++j) {
+                                    tgt[j] = src[j];
+                                }
+                                i->second.status = REQ_DONE;
+                                ++transferred;
+                            }
+#endif
+                        } else {
+                            /* allowed bandwidth */
+#ifdef WRITE_NOW
+                            if (req->sender() != m_id) {
+                                line->sharers.push_back(req->sender());
+                            }
+#endif
+                            src = line->data + get_offset(req->addr())/4;
+                            tgt = req->data();
+                            for (uint32_t j = 0; j < req->byte_count()/4; ++j) {
+                                tgt[j] = src[j];
+                            }
+                            ++transferred;
+                            i->second.status = REQ_DONE;
                         }
-                        for (uint32_t j = 0; j < req->byte_count()/4; ++j) {
-                            tgt[j] = src[j];
-                        }
-                        ++transferred;
-                        i->second.status = REQ_DONE;
                     }
                 } else {
                     /* data is not here yet */
@@ -240,13 +272,15 @@ void homeCache::process() {
                         /* initiate read request - in case the line is evicted while waiting for the bandwidth */
                         shared_ptr<memoryRequest> home_req (new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                     m_cfgs.block_size_bytes));
+#ifdef WRITE_NOW
+                        home_req->set_sender(m_id);
+#endif
                         mreq_id_t new_id = m_home->request(home_req, m_home_location, m_home_level);
                         m_out_req_table[new_id] = home_req;
                         line->on_the_fly = true;
                     }
                 }
             }
-
         }
     }
 }

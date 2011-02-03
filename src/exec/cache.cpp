@@ -184,6 +184,7 @@ void cache::process() {
                         shared_ptr<memoryRequest> home_req (new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                     m_cfgs.block_size_bytes));
                         mreq_id_t new_id = m_home->request(home_req, m_home_location, m_home_level);
+
                         m_out_req_table[new_id] = home_req;
                         m_cache[index][i_way].on_the_fly = true;
                         has_space = true;

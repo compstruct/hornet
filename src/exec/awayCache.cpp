@@ -55,6 +55,15 @@ mreq_id_t awayCache::request(shared_ptr<memoryRequest> req, uint32_t location, u
     return new_id;
 }
 
+#ifdef WRITE_NOW
+void awayCache::invalidate(maddr_t addr) {
+    LOG(log,3) << "[awayCache " << m_id << " @ " << system_time << " ] is invalidating line " << hex << addr << dec << endl;
+    cache_line_t* line = cache_line(addr);
+    if (line) {
+        line->timestamp = 0;
+    }
+}
+#endif
 bool awayCache::finish(mreq_id_t id) {
     if (m_in_req_table.count(id) == 0) {
         return true;
@@ -94,7 +103,16 @@ void awayCache::update() {
             if (req->rw() == MEM_READ) {   
                 line->last_access = system_time;
                 /* give new timestamp */
+#ifdef WRITE_NOW
+                if (line->timestamp == 0) {
+                    /* this line is invalidated while the reply is coming */
+                    line->timestamp = system_time;
+                } else {
+                    line->timestamp = UINT64_MAX;
+                }
+#else
                 line->timestamp = req->timestamp();
+#endif
                 if (line->timestamp < system_time) {
                     /* only valid for this cycle */
                     line->timestamp = system_time;
@@ -162,6 +180,9 @@ void awayCache::process() {
                         shared_ptr<memoryRequest> home_req (new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                     m_cfgs.block_size_bytes));
                         home_req->set_ra();
+#ifdef WRITE_NOW
+                        home_req->set_sender(m_id);
+#endif
                         mreq_id_t new_id = remote_memory()->request(home_req, 
                                 m_in_req_aux_info[in_req_id].location, m_in_req_aux_info[in_req_id].target_level);
                         if (stats->is_started()) {
@@ -183,6 +204,9 @@ void awayCache::process() {
                         m_cache[index][i_way].ready = false;
                         m_cache[index][i_way].tag = get_tag(req->addr());
                         m_cache[index][i_way].last_access = system_time;
+#ifdef WRITE_NOW
+                        m_cache[index][i_way].timestamp = system_time;
+#endif
                         shared_ptr<memoryRequest> home_req;
                         if (req->rw() == MEM_READ) {
                             m_cache[index][i_way].on_hold = false;
@@ -193,6 +217,9 @@ void awayCache::process() {
                             home_req = shared_ptr<memoryRequest>(new memoryRequest(req->addr(), req->byte_count()));
                         }
                         home_req->set_ra();
+#ifdef WRITE_NOW
+                        home_req->set_sender(m_id);
+#endif
                         mreq_id_t new_id = remote_memory()->request(home_req, 
                                 m_in_req_aux_info[in_req_id].location, m_in_req_aux_info[in_req_id].target_level);
                         if (stats->is_started()) {

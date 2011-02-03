@@ -20,6 +20,7 @@ void remoteMemory::set_remote_home(int location, uint32_t level) {
 mreq_id_t remoteMemory::request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t level) {
     /* put an entry */
     /* assumes an infinite request table - if it's finite, deadlock must be considered */
+
     mreq_id_t new_id = take_new_mreq_id();
     in_req_entry_t new_entry;
     new_entry.status = REQ_INIT;
@@ -86,7 +87,7 @@ void remoteMemory::update() {
             mreq_id_t remote_req_id = m_in_queues[*i_queue]->front().mem_msg.req_id;
             mreq_id_t in_req_id = m_remote_req_table[remote_req_id];
             m_in_req_table[in_req_id].status = REQ_DONE;
-            LOG(log,3) << "[remoteMemory " << m_id << " @ " << system_time 
+            LOG(log,4) << "[remoteMemory " << m_id << " @ " << system_time 
                        << " ] received a reply from " << m_in_req_table[in_req_id].location << endl;
             m_remote_req_table.erase(remote_req_id);
             m_in_queues[*i_queue]->pop();
@@ -122,7 +123,8 @@ void remoteMemory::process() {
                 i->second.status = REQ_WAIT;
                 m_remote_req_table[new_msg.mem_msg.req_id] = i->first;
                 LOG(log,4) << "[remoteMemory " << m_id << " @ " << system_time 
-                           << " ] a memory request is put into a send queue to " << i->second.location << endl;
+                           << " ] a memory request (" << hex << req->addr() << dec << ") is put into a send queue to " 
+                           << i->second.location << endl;
             } else {
                 return_remote_mreq_id(new_msg.mem_msg.req_id);
             }

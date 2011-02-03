@@ -27,6 +27,10 @@ public:
     virtual bool finish(mreq_id_t id);
     virtual void process();
 
+#ifdef WRITE_NOW
+    void invalidate(maddr_t addr);
+#endif
+
 private:
     typedef struct {
         uint32_t location;

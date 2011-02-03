@@ -44,7 +44,7 @@ void memtraceThread::fetch() {
         --(m_cur.repeats);
         m_insts.erase(m_insts.begin());
     } else {
-        LOG(log,2) << "[thread " << get_id() << " ] finished " << endl;
+        LOG(log,1) << "[thread " << get_id() << " ] finished " << endl;
         m_cur.type = INST_NONE;
     }
 }

@@ -163,6 +163,9 @@ void memtraceCore::exec_core() {
                                 req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count, wdata));
                             }
                             req->set_ra();
+#ifdef WRITE_NOW
+                            req->set_sender(get_id().get_numeric_id());
+#endif
 
                             if (m_cfgs.library_type == LIBRARY_ONLY) {
 
@@ -203,7 +206,10 @@ void memtraceCore::exec_core() {
                             uint32_t wdata = get_id().get_numeric_id();
                             req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count, &wdata));
                         }
-                        LOG(log,3) << "[thread " << cur.thread->get_id() << " @ " << system_time 
+#ifdef WRITE_NOW
+                        req->set_sender(get_id().get_numeric_id());
+#endif
+                        LOG(log,2) << "[thread " << cur.thread->get_id() << " @ " << system_time 
                             << " ] is making a memory request to the nearest memory on core " 
                                    << get_id().get_numeric_id() << endl;
                         cur.mreq_id = nearest_memory()->request(req);
@@ -233,17 +239,17 @@ void memtraceCore::exec_core() {
                     }
                 }
 
-                LOG(log,3) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
+                LOG(log,2) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
                            << " ] finished memory operation : "; 
                 if ((*i).req->rw() == MEM_READ)  {
-                    LOG(log,3) << " read ";
+                    LOG(log,2) << " read ";
                 } else {
-                    LOG(log,3) << " written ";
+                    LOG(log,2) << " written ";
                 }
                 for (uint32_t j = 0; j < (*i).req->byte_count()/4; ++j) {
-                    LOG(log,3) << hex << (*i).req->data()[j] << dec;
+                    LOG(log,2) << hex << (*i).req->data()[j] << dec;
                 }
-                LOG(log,3) <<  " on addr " << hex << (*i).req->addr() << dec << endl; 
+                LOG(log,2) <<  " on addr " << hex << (*i).req->addr() << dec << endl; 
 #if 0
                 cerr << "[core " << get_id().get_numeric_id() << " @ " << system_time << " ] finished memory operation : "; 
                 if ((*i).req->rw() == MEM_READ)  {
@@ -260,6 +266,7 @@ void memtraceCore::exec_core() {
                 /* memtraceThread doesn't care for values, so release it */
                 (*i).mem_to_serve->finish((*i).mreq_id);
             }
+
         }
     }
 

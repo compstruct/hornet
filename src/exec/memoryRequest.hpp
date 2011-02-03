@@ -29,6 +29,10 @@ public:
     inline uint32_t byte_count() { return m_byte_count; }
     inline bool is_ra() { return m_is_ra; }
     inline void set_ra() { m_is_ra = true; }
+#ifdef WRITE_NOW
+    inline void set_sender(uint32_t sender) { m_sender = sender; }
+    inline uint32_t sender() { return m_sender;}
+#endif
 
     inline uint32_t* data() { return m_data; }
     inline uint64_t timestamp() { return m_timestamp; }
@@ -48,6 +52,9 @@ protected:
     uint32_t      m_byte_count;
     uint64_t      m_timestamp;
     bool          m_is_ra;
+#ifdef WRITE_NOW
+    uint32_t      m_sender;
+#endif
 
     /* LIBRARY COMPETITION */
     /* add instance variables for additional information */
