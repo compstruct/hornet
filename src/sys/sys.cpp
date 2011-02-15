@@ -163,7 +163,10 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
     vector<shared_ptr<memtraceCore> > memtrace_cores;
     shared_ptr<memtraceThreadPool> memtrace_thread_pool(new memtraceThreadPool());
-    shared_ptr<dram> new_dram = shared_ptr<dram>();
+
+    // TODO: changed from null ptr
+    shared_ptr<dram> new_dram(new dram ());
+    //shared_ptr<dram> new_dram = shared_ptr<dram>();
 
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
@@ -480,7 +483,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             break;
         }
         case CORE_MCPU: {
-            /* MIPS image setup --------------------------------------------- */ 
+            // MIPS image setup ------------------------------------------------ 
             
             uint32_t mem_start = read_word(img);
             uint32_t mem_size = read_word(img);
@@ -491,7 +494,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             uint32_t cpu_entry_point = read_word(img);
             uint32_t cpu_stack_pointer = read_word(img);
 
-            /* Core config setup -------------------------------------------- */
+            // Core config setup -----------------------------------------------
 
             core::core_cfg_t core_cfgs;
             core_cfgs.flits_per_mem_msg_header = 1;
@@ -499,7 +502,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             core_cfgs.msg_queue_size = 4;
             core_cfgs.memory_server_process_time = 1;
 
-            /* Memory hierarchy setup --------------------------------------- */           
+            // Memory hierarchy setup ------------------------------------------       
 
             shared_ptr<mcpu> new_core(new mcpu( pe_id(id), 
                                                 t->get_time(), 
@@ -512,13 +515,14 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                                                 core_cfgs));;
             p = new_core;
 
-            /* I$ setup ----------------------------------------------------- */
+            // I$ setup --------------------------------------------------------
 
             new_core->initialize_memory_hierarchy(  id, t, img, true, 
                                                     shared_ptr<remoteMemory>(),
-                                                    mem_start, mem_size, m);
+                                                    mem_start, mem_size, 
+                                                    m, shared_ptr<dram> ());
 
-            /* D$ hierarchy setup ------------------------------------------- */
+            // D$ hierarchy setup ----------------------------------------------
 
             remoteMemory::remoteMemory_cfg_t rm_cfgs;
             rm_cfgs.process_time = 1;
@@ -528,7 +532,8 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             new_core->add_remote_memory(rm);
             new_core->initialize_memory_hierarchy(  id, t, img, false, 
                                                     rm,
-                                                    mem_start, mem_size, m);
+                                                    mem_start, mem_size, 
+                                                    m, new_dram);
             break;
         }
         default:

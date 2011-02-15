@@ -156,11 +156,11 @@ void memtraceCore::exec_core() {
                         if (do_ra) {
                             shared_ptr<memoryRequest> req;
                             if (read) {
-                                req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count));
+                                req = shared_ptr<memoryRequest> (new memoryRequest(get_id().get_numeric_id(), addr, byte_count));
                             } else {
                                 uint32_t wdata[byte_count];
                                 wdata[0] = get_id().get_numeric_id();
-                                req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count, wdata));
+                                req = shared_ptr<memoryRequest> (new memoryRequest(get_id().get_numeric_id(), addr, byte_count, wdata));
                             }
                             req->set_ra();
 #ifdef WRITE_NOW
@@ -201,15 +201,15 @@ void memtraceCore::exec_core() {
                         /* core hit */
                         shared_ptr<memoryRequest> req;
                         if (read) {
-                            req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count));
+                            req = shared_ptr<memoryRequest> (new memoryRequest(get_id().get_numeric_id(), addr, byte_count));
                         } else {
                             uint32_t wdata = get_id().get_numeric_id();
-                            req = shared_ptr<memoryRequest> (new memoryRequest(addr, byte_count, &wdata));
+                            req = shared_ptr<memoryRequest> (new memoryRequest(get_id().get_numeric_id(), addr, byte_count, &wdata));
                         }
 #ifdef WRITE_NOW
                         req->set_sender(get_id().get_numeric_id());
 #endif
-                        LOG(log,2) << "[thread " << cur.thread->get_id() << " @ " << system_time 
+                        LOG(log,3) << "[thread " << cur.thread->get_id() << " @ " << system_time 
                             << " ] is making a memory request to the nearest memory on core " 
                                    << get_id().get_numeric_id() << endl;
                         cur.mreq_id = nearest_memory()->request(req);

@@ -48,6 +48,12 @@ ostream &operator<<(ostream &out, const fpr &r) {
     return out << "f" << dec << r.reg_no;
 }
 
+ostream &operator<<(ostream &out, const cfr &r) {
+    assert(r.reg_no >= 0);
+    assert(r.reg_no <= 7);
+    return out << "flag" << dec << r.reg_no;
+}
+
 ostream &operator<<(ostream &out, const c0r &r) {
     assert(r.reg_no >= 0);
     assert(r.reg_no <= 31);

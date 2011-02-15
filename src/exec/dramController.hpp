@@ -25,7 +25,7 @@ public:
     friend class dramController;
 
 private:
-    map<uint64_t, uint32_t* > space;
+    map<uint32_t, map<uint64_t, uint32_t* > > space;
     mutable recursive_mutex dram_mutex;;
 };
 
@@ -55,8 +55,9 @@ public:
     virtual void update();
     virtual void process();
 
-    virtual void mem_fill(uint32_t mem_start, uint32_t mem_size,  shared_ptr<mem> m);
-
+    virtual void mem_read_instant(  int proposed_tid,   void * destination,     maddr_t start,      size_t count, bool endianc);  
+    virtual void mem_write_instant( int proposed_tid,   shared_ptr<mem> source, uint32_t mem_start, uint32_t mem_size);
+    virtual void mem_write_instant( int proposed_tid,   void * source,          uint32_t mem_start, uint32_t mem_size, bool endianc);
 private:
     typedef enum {
         REQ_INIT,

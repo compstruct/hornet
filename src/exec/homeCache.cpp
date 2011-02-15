@@ -161,7 +161,7 @@ void homeCache::process() {
                         m_cache[index][i_way].dirty = false;
                         m_cache[index][i_way].last_access = system_time;
 
-                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
+                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->tid(), req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                     m_cfgs.block_size_bytes));
 #ifdef WRITE_NOW
                         home_req->set_sender(m_id);
@@ -199,7 +199,7 @@ void homeCache::process() {
 
                     if (tgt->dirty) {
                         tgt->doomed = true;
-                        shared_ptr<memoryRequest> home_req (new memoryRequest( (tgt->tag << m_tag_pos) | (index << m_index_pos),
+                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->tid(), (tgt->tag << m_tag_pos) | (index << m_index_pos),
                                     m_cfgs.block_size_bytes, tgt->data));
 #ifdef WRITE_NOW
                         home_req->set_sender(m_id);
@@ -270,7 +270,7 @@ void homeCache::process() {
                     /* data is not here yet */
                     if (!line->on_the_fly) {
                         /* initiate read request - in case the line is evicted while waiting for the bandwidth */
-                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
+                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->tid(), req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                     m_cfgs.block_size_bytes));
 #ifdef WRITE_NOW
                         home_req->set_sender(m_id);

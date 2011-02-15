@@ -169,5 +169,469 @@ inline static void print_string(const char *s) {
          : "a0", "v0" );
 }
 
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// added for blackscholes (CF ~2/5/11)
+
+// Headers ---------------------------------------------------------------------
+
+/* A short explanation of the data structure and algorithms. An area returned 
+by malloc() is called a slot. Each slot contains the number of bytes 
+requested, but preceeded by an extra pointer to the next the slot in memory. 
+'_bottom' and '_top' point to the first/last slot. More memory is asked for 
+using brk() and appended to top. The list of free slots is maintained to keep 
+malloc() fast. '_empty' points the the first free slot. Free slots are linked 
+together by a pointer at the start of the user visable part, so just after the 
+next-slot pointer. Free slots are merged together by free(). */
+
+/* CF~ 2/5/11: for blackscholes, we only setup memory once, and assume that we 
+have enough.  So we forget about keeping track of the end of the program data 
+segments. */
+//extern void *_sbrk(int);
+//extern int _brk(void *);
+static void *_bottom, *_top, *_empty;
+static void * memcpy(void *dst, const void *src, unsigned int len) __attribute__((unused));
+static void * malloc(unsigned int) __attribute__((unused));
+static void * realloc(void *oldp, unsigned int size) __attribute__((unused));
+static void free(void *) __attribute__((unused));
+
+/* effects: perform single-point (_s) and double-point (_d) precision function 
+            intrinsics. 
+   returns: the float/double result */
+static float    __H_sqrt_s(float);
+static float    __H_log_s(float);
+static float    __H_exp_s(float);
+static double   __H_sqrt_d(double);
+static double   __H_log_d(double);
+static double   __H_exp_d(double);
+
+/* effects: prints various types to std out */
+static void     print_float(float);
+static void     print_double(double);
+static void     print_char(char);
+
+/* effects: flush std out */
+static void     __H_fflush();
+
+/* effects: takes a filename and opens a file. 
+   returns: a handle (unique id) to the opened file. */
+static int      __H_fopen(char *);
+
+/* effects: takes a file handle (returned from __H_fopen), a destination buffer, 
+   and a byte count, and writes the requested number of bytes from the file into 
+   the buffer. 
+   returns: the number of bytes successfully transferred. */
+static int      __H_read_line(int, char *, int);
+
+/* effects: given a file handle, closes the file. 
+   returns: 0 if the operation was sucessfull. */
+static int      __H_fclose(int);
+
+/* effects: turns on the Hornet memory hierarchy.  Before this function is 
+   called, all loads and stores are magic single-cycle operations. This magic 
+   mode is important when data is being read and written directly from backing 
+   store (such as with __H_read_line calls) and memory is not coherent. */
+static void     __H_enable_memory_hierarchy();
+
+/* effects: loads a word directly from backing store (DRAM), bypassing the 
+   memory hierarchy (regardless of whether __H_enable_memory_hierarchy has been 
+   called. 
+   returns: the loaded word. */
+static int      __H_ucLoadWord(int *);
+
+/* effects: sets a specified bit (given by its position relative to the LSB) in 
+   the word specified by the address. The bit is set in a way that bypasses the 
+   memory hierarchy, regardless of whether __H_enable_memory_hierarchy has been 
+   called. */
+static void     __H_ucSetBit(int *, int);
+
+/* effects: calls exit() with the provided error code */
+static void     __H_exit(int);
+
+/* effects: checks whether an asertion is true, and throws an error if it is 
+   not.  CURRENTLY UNIMPLEMENTED (2/14/11) */
+static void     __H_assert(int);
+
+// Helpers ---------------------------------------------------------------------
+
+#define __prefix_double_out__   unsigned long int bot_o; \
+                                unsigned long int top_o;
+#define __prefix_double_in__    unsigned long long int temp = *((unsigned long long int *) (&in)); \
+                                unsigned long int bot_i = temp; \
+                                unsigned long int top_i = temp >> 32;
+#define __suffix_double__       unsigned long long int out = bot_o | (((unsigned long long int) top_o) << 32); \
+                                union { \
+		                                double f; \
+		                                unsigned long long int i; \
+	                                } u; \
+	                                u.i = out; \
+                                return u.f;
+
+// Memory management -----------------------------------------------------------
+
+#ifdef _KERNEL
+#include <types.h>
+#include <lib.h>
+#else
+#include <string.h>
+#endif
+
+  /* replace undef by define */
+  #undef   DEBUG          /* check assertions */
+  #undef   SLOWDEBUG      /* some extra test loops (requires DEBUG) */
+
+  #ifndef DEBUG
+  #define NDEBUG
+  #endif
+
+  #if _EM_WSIZE == _EM_PSIZE
+  #define ptrint          int
+  #else
+  #define ptrint          long
+  #endif
+
+  #if     _EM_PSIZE == 2
+  #define BRKSIZE         1024
+  #else
+  #define BRKSIZE         4096
+  #endif
+  #define PTRSIZE         ((int) sizeof(void *))
+  #define Align(x,a)      (((x) + (a - 1)) & ~(a - 1))
+  #define NextSlot(p)     (* (void **) ((p) - PTRSIZE))
+  #define NextFree(p)     (* (void **) (p))
+
+static void * memcpy(void *dst, const void *src, unsigned int len) {
+	unsigned int i;
+	if ((unsigned int)dst % sizeof(long) == 0 &&
+			(unsigned int)src % sizeof(long) == 0 &&
+			len % sizeof(long) == 0) {
+
+			long *d = dst;
+			const long *s = src;
+
+			for (i=0; i<len/sizeof(long); i++) d[i] = s[i];
+	}
+	else {
+		char *d = dst;
+		const char *s = src;
+		for (i=0; i<len; i++) d[i] = s[i];
+	}
+	return dst;
+}
+
+static int grow(unsigned int len) {
+	register char *p;
+
+	//__H_assert(NextSlot((char *)_top) == 0);
+	if ((char *) _top + len < (char *) _top
+		|| (p = (char *)Align((ptrint)_top + len, BRKSIZE)) < (char *) _top ) {
+		 //errno = ENOMEM; NOTE: Removed
+		 return(0);
+	}
+	//if (_brk(p) != 0) return(0); NOTE: Removed
+	NextSlot((char *)_top) = p;
+	NextSlot(p) = 0;
+	free(_top);
+	_top = p;
+	return 1;
+}
+
+static void * malloc(unsigned int size) {
+	register char *prev, *p, *next, *new_;
+	register unsigned len, ntries;
+
+	if (size == 0) return NULL;
+
+	for (ntries = 0; ntries < 2; ntries++) {
+		if ((len = Align(size, PTRSIZE) + PTRSIZE) < 2 * PTRSIZE) {
+			//errno = ENOMEM; NOTE: Removed
+			return NULL;
+		}
+		if (_bottom == 0) {
+			// if ((p = _sbrk(2 * PTRSIZE)) == (char *) -1) return NULL; NOTE: Removed
+			p = (char *) Align((ptrint)p, PTRSIZE);
+			p += PTRSIZE;
+			_top = _bottom = p;
+			NextSlot(p) = 0;
+		}
+#ifdef SLOWDEBUG
+		for (p = _bottom; (next = NextSlot(p)) != 0; p = next) __H_assert(next > p);
+		//__H_assert(p == _top);
+#endif
+		for (prev = 0, p = _empty; p != 0; prev = p, p = NextFree(p)) {
+			next = NextSlot(p);
+			new_ = p + len; /* easily overflows!! */
+			if (new_ > next || new_ <= p)  continue; /* too small */
+			if (new_ + PTRSIZE < next) { /* too big, so split */
+				/* + PTRSIZE avoids tiny slots on free list */
+				NextSlot(new_) = next;
+				NextSlot(p) = new_;
+				NextFree(new_) = NextFree(p);
+				NextFree(p) = new_;
+			}
+			if (prev) NextFree(prev) = NextFree(p);
+			else _empty = NextFree(p);
+			/*print_string("Malloc returning: ");
+			print_int(p);
+			print_string("\n");
+			__H_fflush();*/
+			return p;
+		}
+		if (grow(len) == 0) break;
+	}
+	//__H_assert(ntries != 2);
+	return NULL;
+}
+
+void * realloc(void *oldp, unsigned int size) {
+	register char *prev, *p, *next, *new_;
+	char *old = oldp;
+	register unsigned int len, n;
+
+	if (old == 0) return malloc(size);
+	if (size == 0) {
+		free(old);
+		return NULL;
+	}
+	len = Align(size, PTRSIZE) + PTRSIZE;
+	next = NextSlot(old);
+	n = (int)(next - old); // old length
+	// extend old if there is any free space just behind it
+	for (prev = 0, p = _empty; p != 0; prev = p, p = NextFree(p)) {
+		if (p > next) break;
+		if (p == next) { // 'next' is a free slot: merge
+		NextSlot(old) = NextSlot(p);
+		if (prev)  NextFree(prev) = NextFree(p);
+		else _empty = NextFree(p);
+		next = NextSlot(old);
+		break;
+		}
+	}
+	new_ = old + len;
+	// Can we use the old, possibly extended slot?
+	if (new_ <= next && new_ >= old) { // it does fit 
+		if (new_ + PTRSIZE < next) { // too big, so split 
+			// + PTRSIZE avoids tiny slots on free list
+			NextSlot(new_) = next;
+			NextSlot(old) = new_;
+			free(new_);
+		}
+		return old;
+	}
+	if ((new_ = malloc(size)) == NULL) return NULL; // it didn't fit
+	memcpy(new_, old, n); // n < size
+	free(old);
+	return new_;
+}
+
+static void free(void *ptr) {
+	register char *prev, *next;
+	char *p = ptr;
+
+	if (p == 0) return;
+
+	//__H_assert(NextSlot(p) > p); NOTE: Removed
+	for (prev = 0, next = _empty; next != 0; prev = next, next = NextFree(next))
+		if (p < next) break;
+	NextFree(p) = next;
+	if (prev) NextFree(prev) = p;
+	else _empty = p;
+	if (next) {
+		//__H_assert(NextSlot(p) <= next); NOTE: Removed
+		if (NextSlot(p) == next) { /* merge p and next */
+			NextSlot(p) = NextSlot(next);
+			NextFree(p) = NextFree(next);
+		}
+	}
+	if (prev) {
+		//__H_assert(NextSlot(prev) <= p); NOTE: Removed
+		if (NextSlot(prev) == p) { /* merge prev and p */
+			NextSlot(prev) = NextSlot(p);
+			NextFree(prev) = NextFree(p);
+		}
+	}
+}
+
+// Single precision intrinsics -------------------------------------------------
+
+inline static float __H_sqrt_s(float in) {
+    float result;
+    __asm__ __volatile__
+        ("move $a0, %1; addiu $v0, $0, 0x40; syscall; move %0, $v0;"
+         : "=r"(result)
+         : "r"(in)
+         : "a0", "v0");
+    return result;
+}
+inline static float __H_log_s(float in) {
+    float result;
+    __asm__ __volatile__
+        ("move $a0, %1; addiu $v0, $0, 0x41; syscall; move %0, $v0;"
+         : "=r"(result)
+         : "r"(in)
+         : "a0", "v0");
+    return result;
+}
+inline static float __H_exp_s(float in) {
+    float result;
+    __asm__ __volatile__
+        ("move $a0, %1; addiu $v0, $0, 0x42; syscall; move %0, $v0;"
+         : "=r"(result)
+         : "r"(in)
+         : "a0", "v0");
+    return result;
+}
+
+// Double precision intrinsics -------------------------------------------------
+
+inline static double __H_sqrt_d(double in) {
+    __prefix_double_in__
+    __prefix_double_out__
+    __asm__ __volatile__
+        ("move $a0, %2; move $a1, %3; addiu $v0, $0, 0x50; syscall; move %0, $v0; move %1, $v1;"
+         : "=r"(bot_o), "=r"(top_o) 
+         : "r"(bot_i), "r"(top_i)
+         : "a0", "a1", "v0", "v1");
+    __suffix_double__
+}
+inline static double __H_log_d(double in) {
+    __prefix_double_in__
+    __prefix_double_out__
+    __asm__ __volatile__
+        ("move $a0, %2; move $a1, %3; addiu $v0, $0, 0x51; syscall; move %0, $v0; move %1, $v1;"
+         : "=r"(bot_o), "=r"(top_o) 
+         : "r"(bot_i), "r"(top_i)
+         : "a0", "a1", "v0", "v1");
+    __suffix_double__
+}
+inline static double __H_exp_d(double in) {
+    __prefix_double_in__
+    __prefix_double_out__
+    __asm__ __volatile__
+        ("move $a0, %2; move $a1, %3; addiu $v0, $0, 0x52; syscall; move %0, $v0; move %1, $v1;"
+         : "=r"(bot_o), "=r"(top_o) 
+         : "r"(bot_i), "r"(top_i)
+         : "a0", "a1", "v0", "v1");
+    __suffix_double__
+}
+
+// File IO ---------------------------------------------------------------------
+
+inline static int __H_fopen(char * fname) {
+    int ret;
+    __asm__ __volatile__
+    ("move $a0, %1; addiu $v0, $0, 0x60; syscall; move %0, $v0;"
+     : "=r"(ret)
+     : "r"(fname)
+     : "a0", "v0");
+    return ret;
+}
+inline static int __H_read_line(int fid, char * dest, int count) {
+    int ret;
+    __asm__ __volatile__
+    ("move $a0, %1; move $a1, %2; move $a2, %3; addiu $v0, $0, 0x61; syscall; move %0, $v0;"
+     : "=r"(ret)
+     : "r"(fid), "r"(dest), "r"(count)
+     : "a0", "a1", "a2", "v0");
+    return ret;
+}
+inline static int __H_fclose(int fid) {    
+    int ret;
+    __asm__ __volatile__
+    ("move $a0, %1; addiu $v0, $0, 0x62; syscall; move %0, $v0;"
+     : "=r"(ret)
+     : "r"(fid)
+     : "a0", "v0");
+    return ret;
+}
+
+// DARSIM-C --------------------------------------------------------------------
+
+inline static void __H_enable_memory_hierarchy() {
+    __asm__ __volatile__
+    ("addiu $v0, $0, 0x77; syscall;"
+     : 
+     : 
+     : "v0");
+}
+
+// Uncached loads/stores -------------------------------------------------------
+
+inline static int __H_ucLoadWord(int * addr) {
+    int ret;
+    __asm__ __volatile__
+    ("move $a0, %1; addiu $v0, $0, 0x70; syscall; move %0, $v0;"
+     : "=r"(ret)
+     : "r"(addr)
+     : "a0", "v0");
+    return ret;
+}
+inline static void __H_ucSetBit(int * addr, int position) {
+    __asm__ __volatile__
+    ("move $a0, %0; move $a1, %1; addiu $v0, $0, 0x72; syscall;"
+     : 
+     : "r"(addr), "r"(position)
+     : "a0", "a1", "v0");
+}
+
+// Printers --------------------------------------------------------------------
+
+inline static void print_float(float n) {
+    __asm__ __volatile__
+        ("move $a0, %0; addiu $v0, $0, 0x06; syscall;"
+         : 
+         : "r"(n)
+         : "a0", "v0" );
+}
+inline static void print_double(double in) {
+    __prefix_double_in__
+    __asm__ __volatile__
+        ("move $a0, %0; move $a1, %1; addiu $v0, $0, 0x07; syscall;"
+         :
+         : "r"(bot_i), "r"(top_i) 
+         : "a0", "a1", "v0");
+}
+inline static void print_char(char c) {
+    __asm__ __volatile__
+        ("move $a0, %0; addiu $v0, $0, 0x01; syscall;"
+         :
+         : "r"(c)
+         : "a0",  "v0");
+}
+
+inline static void __H_fflush() {
+    __asm__ __volatile__
+    ("addiu $v0, $0, 0x09; syscall;"
+     : 
+     : 
+     : "v0");
+}
+
+// Misc ------------------------------------------------------------------------
+
+inline static void __H_exit(int code) {
+    __asm__ __volatile__
+    ("move $a0, %0; addiu $v0, $0, 0x11; syscall;"
+     : 
+     : "r"(code)
+     : "a0", "v0");
+}
+inline static int __H_printf(const char * format, ...) {
+    __asm__ __volatile__
+        ("sll $0, $0, $0"); // does nothing right now
+    return 0;
+}
+
+inline static void __H_assert(int b) {
+    __asm__ __volatile__
+    ("move $a0, %0; addiu $v0, $0, 0x12; syscall;"
+     : 
+     : "r"(b)
+     : "v0");
+}
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+
 #endif /* __RTS_H__ */
 

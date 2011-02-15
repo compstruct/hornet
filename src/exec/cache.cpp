@@ -181,7 +181,7 @@ void cache::process() {
                         m_cache[index][i_way].tag = get_tag(req->addr());
                         m_cache[index][i_way].dirty = false;
                         m_cache[index][i_way].last_access = system_time;
-                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
+                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->tid(), req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                     m_cfgs.block_size_bytes));
                         mreq_id_t new_id = m_home->request(home_req, m_home_location, m_home_level);
 
@@ -210,7 +210,7 @@ void cache::process() {
                     }
                     if (tgt->dirty) {
                         tgt->doomed = true;
-                        shared_ptr<memoryRequest> home_req (new memoryRequest( (tgt->tag << m_tag_pos) | (index << m_index_pos),
+                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->tid(), (tgt->tag << m_tag_pos) | (index << m_index_pos),
                                     m_cfgs.block_size_bytes, tgt->data));
                         mreq_id_t new_id = m_home->request(home_req, m_home_location, m_home_level);
                         m_out_req_table[new_id] = home_req;
@@ -245,7 +245,7 @@ void cache::process() {
                     /* data is not here yet */
                     if (!line->on_the_fly) {
                         /* initiate read request - in case the line is evicted while waiting for the bandwidth */
-                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
+                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->tid(), req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                     m_cfgs.block_size_bytes));
                         mreq_id_t new_id = m_home->request(home_req, m_home_location, m_home_level);
                         m_out_req_table[new_id] = home_req;

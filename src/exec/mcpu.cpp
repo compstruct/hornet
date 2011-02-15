@@ -9,6 +9,7 @@
 #include "endian.hpp"
 #include "syscalls.hpp"
 #include "mcpu.hpp"
+#include "math.h"
 
 using namespace std;
 
@@ -31,15 +32,23 @@ mcpu::mcpu( const pe_id                         &new_id,
                                                 core_cfgs), 
                 running(true), 
                 instr_count(0),
-                byte_count(4),
+                byte_count(4), // TODO make static---move to mcpu.hpp
                 pc(entry_point), 
                 net(),
                 jump_active(false), 
                 interrupts_enabled(false), 
                 stdout_buffer(),
                 pending_i_request(false),
-                pending_request(false),
-                pending_lw_gpr(gpr(0)) { // TODO: don't pass by copy
+                pending_req(shared_ptr<memoryRequest>()),
+                pending_request_gpr(false),
+                pending_request_fpr(false),
+                pending_request_memory(false),
+                pending_lw_gpr(gpr(0)),
+                pending_lw_fpr(fpr(0)),
+                enable_memory_hierarchy(false),                
+                fid_key(0),
+                fid_value(NULL),
+                backingDRAM_data(shared_ptr<dramController>()) {
     pc = entry_point;
     gprs[29] = stack_ptr;
     LOG(log,3) << "mcpu " << get_id() << " created with entry point at "
@@ -50,8 +59,40 @@ mcpu::mcpu( const pe_id                         &new_id,
 mcpu::~mcpu() throw() { }
 
 /* -------------------------------------------------------------------------- */
-/* Memory hierarchy                                                           */
+/* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
+
+/* These functions should perhaps be moved elsewhere. */
+
+float intBitsToFloat(int x) {
+	union {
+		float f;  // assuming 32-bit IEEE 754 single-precision
+		int i;    // assuming 32-bit 2's complement int
+	} u;
+	u.i = x;
+	return u.f;
+}
+
+double intBitsToDouble(uint64_t x) {
+	union {
+		double f;  			// assuming 64-bit IEEE 754 double-precision
+		uint64_t i;    	// assuming 64-bit 2's complement int
+	} u;
+	u.i = x;
+	return u.f;
+}
+
+uint32_t floatBitsToInt(float x) {
+    uint32_t y;
+    memcpy(&y, &x, 4);
+    return y;
+}
+
+uint64_t doubleBitsToInt(double x) {
+    uint64_t y;
+    memcpy(&y, &x, 8);
+    return y;
+}
 
 // TODO: Copied from sys.cpp
 inline uint32_t read_word_temp(shared_ptr<ifstream> in) throw(err) {
@@ -61,6 +102,10 @@ inline uint32_t read_word_temp(shared_ptr<ifstream> in) throw(err) {
     word = endian(word);
     return word;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Memory hierarchy                                                           */
+/* -------------------------------------------------------------------------- */
 
 void mcpu::add_to_i_memory_hierarchy(int level, shared_ptr<memory> mem) {
     /* assume only one meory per level */
@@ -89,7 +134,7 @@ void mcpu::mh_update() {
         if (m_i_memory_hierarchy.count(level)) {
             m_i_memory_hierarchy[level]->update();
         }
-    }    
+    }
 }
 
 void mcpu::mh_process() {
@@ -108,10 +153,10 @@ void mcpu::initialize_memory_hierarchy( uint32_t id,
                                         shared_ptr<remoteMemory> rm,
                                         uint32_t mem_start,
                                         uint32_t mem_size, 
-                                        shared_ptr<mem> m) {
+                                        shared_ptr<mem> memory_backing_store,
+                                        shared_ptr<dram> dram_backing_store) {
 
     shared_ptr<cache> last_local_cache = shared_ptr<cache>();
-    shared_ptr<dram> new_dram = shared_ptr<dram>();
 
     uint32_t total_levels = read_word_temp(img);
     assert(total_levels > 0);
@@ -123,33 +168,37 @@ void mcpu::initialize_memory_hierarchy( uint32_t id,
             shared_ptr<memory> new_memory;
             if (i == total_levels - 1) {
                 // cout << "Creating DRAM controller at level " << i << "\n";
-                // create dram controller
                 dramController::dramController_cfg_t dc_cfgs;
-                if (!new_dram) {
-                    new_dram = shared_ptr<dram> (new dram ());
+                if (!dram_backing_store) {
+                    dram_backing_store = shared_ptr<dram> (new dram ());
                 }
                 dc_cfgs.use_lock = true;
                 dc_cfgs.off_chip_latency = 50;
-                dc_cfgs.bytes_per_cycle = 8; 
+                dc_cfgs.bytes_per_cycle = 8;
                 dc_cfgs.dram_process_time = 10;
                 dc_cfgs.dc_process_time = 1;
                 dc_cfgs.header_size_bytes = 4;
                 shared_ptr<dramController> dc(new dramController(id, i+1, 
                                        tile->get_time(), tile->get_statistics(), 
-                                       log, ran, new_dram, dc_cfgs));
-                // Optionally initialize memory
-                if (mem_size > 0) dc->mem_fill(mem_start, mem_size, m);
-                new_memory = dc;
+                                       log, ran, dram_backing_store, dc_cfgs));
+                // Optionally initialize memory.  This call does not risk memory 
+                // hierarchy inconsistancy because it happens at initialization 
+                // time
+                if (mem_size > 0) dc->mem_write_instant(get_id().get_numeric_id(), 
+                                                        memory_backing_store, 
+                                                        mem_start, mem_size);
+                new_memory = shared_ptr<dramController> (dc);
+                // we use this to perform syscall reads directly from the dram
+                if (!icash) backingDRAM_data = dc;
                 if (last_local_cache) {
                     last_local_cache->set_home_memory(new_memory);
                     last_local_cache->set_home_location(loc, i+1);
                 }
             } else {
                 // cout << "Creating cache at level " << i << "\n";
-                // create cache (new level of cache)
                 cache::cache_cfg_t cache_cfgs;
                 cache_cfgs.associativity = 1;
-                cache_cfgs.block_size_bytes = 16;
+                cache_cfgs.block_size_bytes = 1024;
                 cache_cfgs.total_block = (i == 0) ? 64 : 256;
                 cache_cfgs.process_time = 1;
                 cache_cfgs.block_per_cycle = 1;
@@ -207,7 +256,7 @@ void mcpu::exec_core() {
     //cout << "exec_core PID: " << get_id() << ", jump_active: " << jump_active << endl;
     data_complete();
     shared_ptr<instr> i = instruction_fetch_complete(pc);    
-    if (running && i && !pending_request) {
+    if (running && i && !pending_request()) {
         instr_count++;
         execute(i);
         if (jump_active && (jump_time <= system_time)) {
@@ -224,83 +273,161 @@ void mcpu::exec_core() {
 /* Memory interface                                                           */
 /* -------------------------------------------------------------------------- */
 
+// Instructions ----------------------------------------------------------------
+
 shared_ptr<instr> mcpu::instruction_fetch_complete(uint32_t pc) {
-    if (pending_i_request && !pending_request /* no OoO */ &&
+    if (pending_i_request && !pending_request() /* no OoO */ &&
         nearest_i_memory()->ready(pending_instruction_reqid)) {
         shared_ptr<memoryRequest> ld_req = 
                         nearest_i_memory()->get_req(pending_instruction_reqid);
         uint32_t raw = *(ld_req->data());
-        //if (get_id() == 0) printf("Completed instruction_fetch_complete, address: %x, instr: %x\n", (uint32_t) ld_req->addr(), raw);
+        //if (get_id() == 0) 
+        //    printf("Completed instruction_fetch_complete, address: %x, instr: %x\n", (uint32_t) ld_req->addr(), raw);
         nearest_i_memory()->finish(pending_instruction_reqid);
         pending_i_request = false;
         return shared_ptr<instr> (new instr(raw));
     }
     if (!pending_i_request) {
-        //if (get_id() == 0) printf("Issued instruction_fetch_complete, address: %x\n", pc);
-        shared_ptr<memoryRequest> read_req(new memoryRequest(pc, byte_count));
+        //if (get_id() == 0) 
+        //    printf("Issued instruction_fetch_complete, address: %x\n", pc);
+        shared_ptr<memoryRequest> read_req(
+                  new memoryRequest(get_id().get_numeric_id(), pc, byte_count));
         pending_instruction_reqid = nearest_i_memory()->request(read_req);
         pending_i_request = true;
     }
     return shared_ptr<instr>();
 }
 
+// Data ------------------------------------------------------------------------
+
 void mcpu::data_complete() {
-    if (pending_request && nearest_memory()->ready(pending_reqid)) {
-        shared_ptr<memoryRequest> req = 
-            nearest_memory()->get_req(pending_reqid);
-        if (req->rw() == MEM_READ) 
-            set(gpr(pending_lw_gpr), data_complete_read(req));
-        close_memory_op();
+    if (pending_request()) {
+        if (!enable_memory_hierarchy) {
+            if (pending_req->rw() == MEM_READ) {    
+                // for reads, get the read data manually
+                uint32_t rdata[pending_req->byte_count()/4];
+                backingDRAM_data->mem_read_instant( get_id().get_numeric_id(), 
+                                                    rdata, 
+                                                    pending_req->addr(), 
+                                                    pending_req->byte_count(), 
+                                                    false);
+                data_complete_helper(shared_ptr<memoryRequest> (
+                                  new memoryRequest(get_id().get_numeric_id(), 
+                                                    pending_req->addr(), 
+                                                    pending_req->byte_count(), 
+                                                    rdata)));                
+            } else {
+                assert(pending_req->rw() == MEM_WRITE);
+                // for writes, perform the write manually
+                backingDRAM_data->mem_write_instant(get_id().get_numeric_id(), 
+                                                    pending_req->data(),
+                                                    pending_req->addr(), 
+                                                    pending_req->byte_count(),
+                                                    false);
+            }
+            close_memory_op();
+        } else if (nearest_memory()->ready(pending_reqid)) {
+            shared_ptr<memoryRequest> req = 
+                                       nearest_memory()->get_req(pending_reqid);
+            if (req->rw() == MEM_READ) data_complete_helper(req);
+            close_memory_op();
+        }
     }
 }
 
-uint32_t mcpu::data_complete_read(const shared_ptr<memoryRequest> &req) {
-    uint32_t m;            
+void mcpu::data_complete_helper(const shared_ptr<memoryRequest> &req) {
+    uint64_t m;
     switch (req->byte_count()) { 
         case 1: m = 0xFF; break;  
         case 2: m = 0xFFFF; break;
         case 3: m = 0xFFFFFF; break;
         case 4: m = 0xFFFFFFFF; break;
+        case 8: m = 0xFFFFFFFFFFFFFFFF; break;        
         default: throw exc_addr_align();
     }
-    uint32_t raw = *(req->data()) & m;
+    uint64_t raw;
+    if (req->byte_count() == 8) {
+        // this order corresponds to what is written in the .o file
+        uint64_t bot = *(req->data()+1); 
+        uint64_t top = ((uint64_t) *(req->data())) << 32;
+        raw = bot | top;
+    }
+    else {
+        raw = *(req->data());
+    }
+    raw = raw & m;
     if (pending_lw_sign_extend) {
         uint32_t check = raw & (1 << (req->byte_count()*8 - 1));
-        m = (check) ? 0xffffffffU << (req->byte_count()*8) : 0x0;
+        m = (check) ? 0xffffffffffffffffU << (req->byte_count()*8) : 0x0;
         raw = raw | m;
     }
-    return raw;
+    if (pending_request_gpr) {
+        //if (get_id() == 0) 
+        //    printf("[mcpu %d] Completed load gpr[%d], address: %x, data: %016llX\n", 
+        //            get_id().get_numeric_id(), pending_lw_gpr.get_no(), (uint32_t) req->addr(), 
+        //            (long long unsigned int) raw); 
+        set(gpr(pending_lw_gpr), raw);
+    } else {
+        assert(pending_request_fpr);
+        //if (get_id() == 0) 
+        //    printf("[mcpu %d] Completed load fpr[%d], address: %x, data: %f (%016llX)\n", 
+        //            get_id().get_numeric_id(), pending_lw_fpr.get_no(), (uint32_t) req->addr(),
+        //            intBitsToDouble(raw), (long long unsigned int) raw);            
+        if (req->byte_count() == 4) 
+            set_s(fpr(pending_lw_fpr), raw);
+        else if (req->byte_count() == 8) 
+            set_d(fpr(pending_lw_fpr), raw);
+        else { throw exc_addr_align(); }
+    }
 }
 
-inline void mcpu::close_memory_op() {
-    nearest_memory()->finish(pending_reqid);
-    pending_request = false;
+void mcpu::data_fetch_to_gpr(   const gpr dst,
+                                const uint32_t &addr, 
+                                const uint32_t &bytes,
+                                bool sign_extend) throw(err) {
+    data_fetch_read(addr, bytes, sign_extend);
+    pending_lw_gpr = dst;
+    pending_request_gpr = true;
 }
-
-void mcpu::data_fetch_read( const gpr dst,
-                            const uint32_t &addr, 
+void mcpu::data_fetch_to_fpr(   const fpr dst,
+                                const uint32_t &addr, 
+                                const uint32_t &bytes) throw(err) {
+    data_fetch_read(addr, bytes, false);
+    pending_lw_fpr = dst;
+    pending_request_fpr = true;
+}
+void mcpu::data_fetch_read( const uint32_t &addr, 
                             const uint32_t &bytes,
                             bool sign_extend) throw(err) {
-    assert(!pending_request);
-    shared_ptr<memoryRequest> read_req(new memoryRequest(addr, bytes));
-    pending_reqid = nearest_memory()->request(read_req); 
-    pending_lw_gpr = dst; // TODO: don't pass by copy!
+    assert(!pending_request());
+    //printf("[mcpu %d] Memory read at %x\n", get_id().get_numeric_id(), addr);
+    pending_req = shared_ptr<memoryRequest> (
+                     new memoryRequest(get_id().get_numeric_id(), addr, bytes));
+    pending_reqid = nearest_memory()->request(pending_req); 
     pending_lw_sign_extend = sign_extend;
-    pending_request = true;
 }
 
 void mcpu::data_fetch_write(    const uint32_t &addr, 
-                                const uint32_t &val, 
+                                const uint64_t &val,
                                 const uint32_t &bytes) throw(err) {
-    assert(!pending_request);
-    uint32_t wdata[1] = {val};
-    shared_ptr<memoryRequest> write_req(new memoryRequest(addr, bytes, wdata));
-    pending_reqid = nearest_memory()->request(write_req);
-    pending_request = true;
+    assert(!pending_request());
+    //printf("[mcpu %d] Memory write at %x\n", get_id().get_numeric_id(), addr);
+    uint32_t wdata[bytes/4];
+    if (bytes != 8) {
+        assert(bytes <= 4);
+        wdata[0] = (uint32_t) val;
+    } else {
+        wdata[0] = (uint32_t) (val >> 32);
+        wdata[1] = (uint32_t) val;
+    }
+    pending_req = shared_ptr<memoryRequest> (
+              new memoryRequest(get_id().get_numeric_id(), addr, bytes, wdata));
+    pending_reqid = nearest_memory()->request(pending_req);
+    pending_request_memory = true;
 }
 
 /* -------------------------------------------------------------------------- */
-/* MIPS helpers                                                               */
+/* MIPS scalar                                                                */
 /* -------------------------------------------------------------------------- */
 
 static void unimplemented_instr(instr i, uint32_t addr) throw(err_tbd) {
@@ -314,6 +441,7 @@ inline uint32_t check_align(uint32_t addr, uint32_t mask) {
     return addr;
 }
 
+// Scalar
 #define op3sr(op) { set(i.get_rd(), (int32_t) get(i.get_rs()) op \
                                     (int32_t) get(i.get_rt())); }
 #define op3ur(op) { set(i.get_rd(), get(i.get_rs()) op get(i.get_rt())); }
@@ -342,11 +470,39 @@ inline uint32_t check_align(uint32_t addr, uint32_t mask) {
 #define mem_addrh() (check_align(mem_addr(), 0x1))
 #define mem_addrw() (check_align(mem_addr(), 0x3))
 
+// Floating point
+#define opcfp_s(n, op) {    float left = intBitsToFloat(get_s(i.get_fs())); \
+                            float right = intBitsToFloat(get_s(i.get_ft())); \
+                            bool result = left op right; \
+                            set_cp1_cf(cfr(n), result); }
+#define op3fp_s(op) {       float left = intBitsToFloat(get_s(i.get_fs())); \
+                            float right = intBitsToFloat(get_s(i.get_ft())); \
+                            float result = left op right; \
+                            set_s(i.get_fd(), floatBitsToInt(result)); }
+#define op3fp_d(op) {       double left = intBitsToDouble(get_d(i.get_fs())); \
+                            double right = intBitsToDouble(get_d(i.get_ft())); \
+                            double result = left op right; \
+                            set_d(i.get_fd(), doubleBitsToInt(result)); }
+
+// Syscall
+#define __prefix_single__   float in = intBitsToFloat(get(gpr(4)));
+#define __suffix_single__   set(gpr(2), floatBitsToInt(result)); break;
+#define __prefix_double__   uint32_t bot_i = get(gpr(4)); \
+                            uint64_t top_i = get(gpr(5)); \
+                            uint64_t com = (top_i << 32) | bot_i; \
+                            double in = intBitsToDouble(com);
+#define __suffix_double__   uint64_t out = doubleBitsToInt(result); \
+                            uint32_t bot_o = out; \
+                            uint32_t top_o = out >> 32; \
+                            set(gpr(2), bot_o); \
+                            set(gpr(3), top_o);
+
 void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     instr i = *ip;
-    LOG(log, 5) << "[mcpu " << get_id() << "] "
-                << hex << setfill('0') << setw(8) << pc << ": "
-                << i << " (instr #: " << instr_count << ")" << endl;
+    //if (get_id() == 0)
+    //    cout << "[mcpu " << get_id() << "] "
+    //                << hex << setfill('0') << setw(8) << pc << ": "
+    //                << i << " (instr #: " << instr_count << ")" << endl;
     instr_code code = i.get_opcode();
     switch (code) {
     case IC_ABS_D: unimplemented_instr(i, pc);
@@ -356,9 +512,13 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     case IC_ADDI: op3si_of(+); break;
     case IC_ADDIU: op3si(+); break;
     case IC_ADDU: op3ur(+); break;
-    case IC_ADD_D: unimplemented_instr(i, pc);
+    case IC_ADD_D: // FP
+        op3fp_d(+);
+        break;
     case IC_ADD_PS: unimplemented_instr(i, pc);
-    case IC_ADD_S: unimplemented_instr(i, pc);
+    case IC_ADD_S: // FP
+        op3fp_s(+);
+        break;
     case IC_ALNV_PS: unimplemented_instr(i, pc);
     case IC_AND: op3ur(&); break;
     case IC_ANDI: op3ui(&); break;
@@ -366,7 +526,9 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     case IC_BAL: branch_link(); break;
     case IC_BC1F: unimplemented_instr(i, pc);
     case IC_BC1FL: unimplemented_instr(i, pc);
-    case IC_BC1T: unimplemented_instr(i, pc);
+    case IC_BC1T: // FP
+        if (get_cp1_cf(cfr(0))) branch(); 
+        break;
     case IC_BC1TL: unimplemented_instr(i, pc);
     case IC_BC2F: unimplemented_instr(i, pc);
     case IC_BC2FL: unimplemented_instr(i, pc);
@@ -412,12 +574,20 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     case IC_CTC1: unimplemented_instr(i, pc);
     case IC_CTC2: unimplemented_instr(i, pc);
     case IC_CVT_D_L: unimplemented_instr(i, pc);
-    case IC_CVT_D_S: unimplemented_instr(i, pc);
+    case IC_CVT_D_S: {
+        double src = (double) intBitsToFloat(get_s(i.get_fs()));
+        set_d(i.get_fd(), doubleBitsToInt(src)); 
+        break;        
+    }
     case IC_CVT_D_W: unimplemented_instr(i, pc);
     case IC_CVT_L_D: unimplemented_instr(i, pc);
     case IC_CVT_L_S: unimplemented_instr(i, pc);
     case IC_CVT_PS_S: unimplemented_instr(i, pc);
-    case IC_CVT_S_D: unimplemented_instr(i, pc);
+    case IC_CVT_S_D: { // FP
+        float src = (float) intBitsToDouble(get_d(i.get_fs()));
+        set_s(i.get_fd(), floatBitsToInt(src)); 
+        break;    
+    }
     case IC_CVT_S_L: unimplemented_instr(i, pc);
     case IC_CVT_S_PL: unimplemented_instr(i, pc);
     case IC_CVT_S_PU: unimplemented_instr(i, pc);
@@ -435,7 +605,9 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     case IC_C_LE_S: unimplemented_instr(i, pc);
     case IC_C_LT_D: unimplemented_instr(i, pc);
     case IC_C_LT_PS: unimplemented_instr(i, pc);
-    case IC_C_LT_S: unimplemented_instr(i, pc);
+    case IC_C_LT_S: // FP
+        opcfp_s(0, <);
+        break;
     case IC_C_NGE_D: unimplemented_instr(i, pc);
     case IC_C_NGE_PS: unimplemented_instr(i, pc);
     case IC_C_NGE_S: unimplemented_instr(i, pc);
@@ -490,8 +662,12 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
         }
         break;
     }
-    case IC_DIV_D: unimplemented_instr(i, pc);
-    case IC_DIV_S: unimplemented_instr(i, pc);
+    case IC_DIV_D: // FP
+        op3fp_d(/);
+        break;        
+    case IC_DIV_S: // FP
+        op3fp_s(/);
+        break;
     case IC_EHB: break;
     case IC_EI: interrupts_enabled = true;
     case IC_ERET: unimplemented_instr(i, pc);
@@ -512,21 +688,25 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     case IC_JALR_HB: set(i.get_rd(), pc + 8); jump(get(i.get_rs())); break;
     case IC_JR:
     case IC_JR_HB: set(i.get_rd(), pc + 8); jump(get(i.get_rs())); break;
-    case IC_LB: data_fetch_read(i.get_rt(), mem_addr(), 1, true); break;
-    case IC_LBU: data_fetch_read(i.get_rt(), mem_addr(), 1, false); break;
-    case IC_LDC1: unimplemented_instr(i, pc);
+    case IC_LB: data_fetch_to_gpr(i.get_rt(), mem_addr(), 1, true); break;
+    case IC_LBU: data_fetch_to_gpr(i.get_rt(), mem_addr(), 1, false); break;
+    case IC_LDC1: // FP
+        data_fetch_to_fpr(i.get_ft(), mem_addrw(), 8);
+        break;
     case IC_LDC2: unimplemented_instr(i, pc);
     case IC_LDXC1: unimplemented_instr(i, pc);
-    case IC_LH: data_fetch_read(i.get_rt(), mem_addrh(), 2, true); break;
-    case IC_LHU: data_fetch_read(i.get_rt(), mem_addrh(), 2, false); break;
+    case IC_LH: data_fetch_to_gpr(i.get_rt(), mem_addrh(), 2, true); break;
+    case IC_LHU: data_fetch_to_gpr(i.get_rt(), mem_addrh(), 2, false); break;
     case IC_LL: unimplemented_instr(i, pc);
     case IC_LUI: set(i.get_rt(), i.get_imm() << 16); break;
     case IC_LUXC1: unimplemented_instr(i, pc);
-    case IC_LW: data_fetch_read(i.get_rt(), mem_addrw(), 4, true); break;
-    case IC_LWC1: unimplemented_instr(i, pc);
+    case IC_LW: data_fetch_to_gpr(i.get_rt(), mem_addrw(), 4, true); break;
+    case IC_LWC1: // FP
+        data_fetch_to_fpr(i.get_ft(), mem_addrw(), 4);
+        break;
     case IC_LWC2: unimplemented_instr(i, pc);
     case IC_LWL: unimplemented_instr(i, pc);
-    /*{ 
+    /*{ TODO: do we actually need these?
         uint32_t a = mem_addr();
         uint32_t w = load<uint32_t>(a);
         uint32_t m = 0xffffffffU << ((a & 0x3) << 3);
@@ -534,7 +714,7 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
         break;
     }*/
     case IC_LWR: unimplemented_instr(i, pc);
-    /*{
+    /*{ TODO: do we actually need these?
         uint32_t a = mem_addr();
         uint32_t w = load<uint32_t>(a - 3);
         uint32_t m = ~(0xffffff00U << ((a & 0x3) << 3));
@@ -552,7 +732,9 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     case IC_MADD_PS: unimplemented_instr(i, pc);
     case IC_MADD_S: unimplemented_instr(i, pc);
     case IC_MFC0: unimplemented_instr(i, pc);
-    case IC_MFC1: unimplemented_instr(i, pc);
+    case IC_MFC1: // FP
+        set(i.get_rt(), get_s(i.get_fs())); 
+        break;
     case IC_MFC2: unimplemented_instr(i, pc);
     case IC_MFHC1: unimplemented_instr(i, pc);
     case IC_MFHC2: unimplemented_instr(i, pc);
@@ -577,9 +759,13 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     case IC_MOVZ_D: unimplemented_instr(i, pc);
     case IC_MOVZ_PS: unimplemented_instr(i, pc);
     case IC_MOVZ_S: unimplemented_instr(i, pc);
-    case IC_MOV_D: unimplemented_instr(i, pc);
+    case IC_MOV_D: // FP
+        set_d(i.get_fd(), get_d(i.get_fs())); 
+        break;        
     case IC_MOV_PS: unimplemented_instr(i, pc);
-    case IC_MOV_S: unimplemented_instr(i, pc);
+    case IC_MOV_S: // FP
+        set_s(i.get_fd(), get_s(i.get_fs())); 
+        break;
     case IC_MSUB: set_hi_lo(hi_lo - ((int64_t) ((int32_t) get(i.get_rs())) *
                                      (int64_t) ((int32_t) get(i.get_rt()))));
                   break;
@@ -590,7 +776,9 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     case IC_MSUB_PS: unimplemented_instr(i, pc);
     case IC_MSUB_S: unimplemented_instr(i, pc);
     case IC_MTC0: unimplemented_instr(i, pc);
-    case IC_MTC1: unimplemented_instr(i, pc);
+    case IC_MTC1: // FP
+        set_s(i.get_fs(), get(i.get_rt())); 
+        break;
     case IC_MTC2: unimplemented_instr(i, pc);
     case IC_MTHC1: unimplemented_instr(i, pc);
     case IC_MTHC2: unimplemented_instr(i, pc);
@@ -609,9 +797,13 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     case IC_MULTU: set_hi_lo((uint64_t) get(i.get_rs()) *
                              (uint64_t) get(i.get_rt()));
                    break;
-    case IC_MUL_D: unimplemented_instr(i, pc);
+    case IC_MUL_D: // FP
+        op3fp_d(*);
+        break;
     case IC_MUL_PS: unimplemented_instr(i, pc);
-    case IC_MUL_S: unimplemented_instr(i, pc);
+    case IC_MUL_S: // FP
+        op3fp_s(*);
+        break;
     case IC_NEG_D: unimplemented_instr(i, pc);
     case IC_NEG_PS: unimplemented_instr(i, pc);
     case IC_NEG_S: unimplemented_instr(i, pc);
@@ -647,7 +839,9 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     case IC_SB: data_fetch_write(mem_addr(), get(i.get_rt()), 1); break;
     case IC_SC: unimplemented_instr(i, pc);
     case IC_SDBBP: unimplemented_instr(i, pc);
-    case IC_SDC1: unimplemented_instr(i, pc);
+    case IC_SDC1: // FP
+        data_fetch_write(mem_addrw(), get_d(i.get_ft()), 8); 
+        break;
     case IC_SDC2: unimplemented_instr(i, pc);
     case IC_SDXC1: unimplemented_instr(i, pc);
     case IC_SEB: set(i.get_rd(), (int32_t) ((int8_t) get(i.get_rt()))); break;
@@ -671,12 +865,18 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     case IC_SSNOP: break;
     case IC_SUB: op3ur_of(-); break;
     case IC_SUBU: op3ur(-); break;
-    case IC_SUB_D: unimplemented_instr(i, pc);
+    case IC_SUB_D: 
+        op3fp_d(-);
+        break;
     case IC_SUB_PS: unimplemented_instr(i, pc);
-    case IC_SUB_S: unimplemented_instr(i, pc);
+    case IC_SUB_S: // FP
+        op3fp_s(-);
+        break;
     case IC_SUXC1: unimplemented_instr(i, pc);
     case IC_SW: data_fetch_write(mem_addrw(), get(i.get_rt()), 4); break;
-    case IC_SWC1: unimplemented_instr(i, pc);
+    case IC_SWC1: 
+        data_fetch_write(mem_addrw(), get_d(i.get_ft()), 4); 
+        break;
     case IC_SWC2: unimplemented_instr(i, pc);
     case IC_SWL: unimplemented_instr(i, pc);
     case IC_SWR: unimplemented_instr(i, pc);
@@ -684,7 +884,9 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     case IC_SYNC: unimplemented_instr(i, pc);
     case IC_SYNCI: unimplemented_instr(i, pc);
     case IC_SYSCALL: syscall(get(gpr(2))); break;
-    case IC_TEQ: unimplemented_instr(i, pc);
+    case IC_TEQ: 
+        if (get(i.get_rs()) == get(i.get_rt())) trap();
+        break;
     case IC_TEQI: unimplemented_instr(i, pc);
     case IC_TGE: unimplemented_instr(i, pc);
     case IC_TGEI: unimplemented_instr(i, pc);
@@ -703,7 +905,9 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     case IC_TRUNC_L_D: unimplemented_instr(i, pc);
     case IC_TRUNC_L_S: unimplemented_instr(i, pc);
     case IC_TRUNC_W_D: unimplemented_instr(i, pc);
-    case IC_TRUNC_W_S: unimplemented_instr(i, pc);
+    case IC_TRUNC_W_S:
+        set_s(i.get_fd(), ((int32_t) get_s(i.get_fs())));
+        break;
     case IC_WAIT: unimplemented_instr(i, pc);
     case IC_WRPGPR: unimplemented_instr(i, pc);
     case IC_WSBH: unimplemented_instr(i, pc);
@@ -715,31 +919,172 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
 
 void mcpu::syscall(uint32_t call_no) throw(err) {
     switch (call_no) {
-    case SYSCALL_PRINT_INT:
-        stdout_buffer << dec << (int32_t) get(gpr(4)); break;
-    case SYSCALL_PRINT_STRING: {
-        err_panic("MCPU: SYSCALL_PRINT_STRING not implemented.");
-        /*
-        uint32_t saddr = get(gpr(4));
-        // construct string
-        data_fetch_read(const gpr dst, saddr, 1, bool sign_extend)        
-
-        string s(reinterpret_cast<char *>(ram->ptr(get(gpr(4)))));
-        string::size_type last_pos = 0;
-        string::size_type eol_pos = 0;
-        while ((eol_pos = s.find('\n', last_pos)) != string::npos) {
-            stdout_buffer << string(s, last_pos, eol_pos + 1);
-            flush_stdout();
-            last_pos = eol_pos + 1;
-        }
-        stdout_buffer << string(s, last_pos);
-        */
+    // Single precision intrinsics ---------------------------------------------
+    case SYSCALL_SQRT_S: {
+        __prefix_single__
+        float result = sqrt(in);
+        __suffix_single__
+    }
+    case SYSCALL_LOG_S: {
+        __prefix_single__
+        float result = std::log(in);
+        __suffix_single__
+    }
+    case SYSCALL_EXP_S: {
+        __prefix_single__
+        float result = exp(in);
+        __suffix_single__
+    }
+    // Double precision intrinsics ---------------------------------------------
+    case SYSCALL_SQRT_D: {
+        __prefix_double__
+        double result = sqrt(in);
+        __suffix_double__
         break;
     }
+    case SYSCALL_LOG_D: {
+        __prefix_double__
+        double result = std::log(in);
+        __suffix_double__
+        break;
+    }
+    case SYSCALL_EXP_D: {
+        __prefix_double__
+        double result = exp(in);
+        __suffix_double__
+        break;
+    }
+    // File I/O ----------------------------------------------------------------
+    case SYSCALL_FOPEN: {
+        // 1.) build file name from memory
+        maddr_t fname_start = (maddr_t) get(gpr(4));
+        char * fname_buffer = (char *) malloc(sizeof(char) * MAX_BUFFER_SIZE);
+        backingDRAM_data->mem_read_instant( get_id().get_numeric_id(), 
+                                            fname_buffer, fname_start,
+                                            MAX_BUFFER_SIZE, true);
+        // 2.) open the file & return a key
+        fid_value = fopen(fname_buffer, "r");
+        fid_key = (fid_value == NULL) ? 0 : 1; // TODO: turn into map for multi-file support
+        free(fname_buffer);
+        set(gpr(2), fid_key);
+        break;
+    }
+    case SYSCALL_READ_LINE: {
+        assert(!enable_memory_hierarchy);
+        // 1.) inputs
+        int fid_key_temp = get(gpr(4));
+        if (fid_key_temp == -1 || fid_key_temp != fid_key)
+            err_panic("MCPU: SYSCALL_FSCANF BAD FILE.");      
+        uint32_t dest = (uint32_t) get(gpr(5));
+        uint32_t count = (uint32_t) get(gpr(6));
+        uint32_t size = sizeof(char) * MAX_BUFFER_SIZE;
+        // 2.) call
+        char * walk; char * data_buffer;
+        data_buffer = (char *) malloc(size);  walk = data_buffer; 
+        char lc = NULL; uint32_t write_count;
+        for (write_count = 0; write_count < count; write_count++) {
+            if (feof(fid_value)) break;
+            lc = fgetc(fid_value);
+            //if (get_id() == 0)
+            //    printf("Just read: %1x\n", (unsigned)(unsigned char) lc);
+            *walk = lc; walk++;
+        }
+        backingDRAM_data->mem_write_instant(get_id().get_numeric_id(), 
+                                            data_buffer, dest, 
+                                            write_count, false);
+        free(data_buffer);
+        set(gpr(2), write_count);
+        break;
+    }
+    case SYSCALL_FCLOSE: {
+        int fid_key_temp = get(gpr(4));
+        if (fid_key_temp == -1 || fid_key_temp != fid_key)
+            err_panic("MCPU: SYSCALL_FSCANF BAD FILE.");
+        int ret = fclose(fid_value);
+        set(gpr(2), ret);    
+        break;
+    }
+    // DARSIM-C ----------------------------------------------------------------
+    case SYSCALL_ENABLE_MEMORY_HIERARCHY: {
+        assert(!enable_memory_hierarchy);
+        enable_memory_hierarchy = true;        
+        break;    
+    }
+    // Unached LW/SW -----------------------------------------------------------
+    case SYSCALL_UNCACHED_LOAD_WORD: {
+        maddr_t addr = (maddr_t) get(gpr(4));
+        int loaded;
+        backingDRAM_data->mem_read_instant( get_id().get_numeric_id(), 
+                                            &loaded, addr, 4, true);
+        set(gpr(2), loaded);
+        break;
+    }
+    case SYSCALL_UNCACHED_SET_BIT: {
+        maddr_t addr = (maddr_t) get(gpr(4));
+        uint32_t position = get(gpr(5));
+        uint32_t mask = 0x1 << position;
+        int loaded;
+        backingDRAM_data->mem_read_instant( get_id().get_numeric_id(), 
+                                            &loaded, addr, 4, true);
+        loaded = loaded | mask;
+        backingDRAM_data->mem_write_instant(get_id().get_numeric_id(), 
+                                            &loaded, addr, 4, true);
+        break;    
+    }
+    // Printers ----------------------------------------------------------------
+    case SYSCALL_PRINT_CHAR: {
+        char p = (char) get(gpr(4));
+        stdout_buffer << dec << p; 
+        break;
+    }
+    case SYSCALL_PRINT_INT: {
+        int p = (int32_t) get(gpr(4));
+        stdout_buffer << dec << p;
+        break;
+    }
+    case SYSCALL_PRINT_FLOAT: {
+        float p = intBitsToFloat(get(gpr(4)));
+        stdout_buffer << dec << p; 
+        break;
+    }
+    case SYSCALL_PRINT_DOUBLE: {
+        __prefix_double__
+        stdout_buffer << dec << in; 
+        break;
+    }
+    case SYSCALL_PRINT_STRING: {
+        maddr_t fname_start = (maddr_t) get(gpr(4));
+        char * fname_buffer = (char *) malloc(sizeof(char) * MAX_BUFFER_SIZE);
+        backingDRAM_data->mem_read_instant( get_id().get_numeric_id(), 
+                                            fname_buffer, fname_start, 
+                                            MAX_BUFFER_SIZE, true);
+        stdout_buffer << fname_buffer;
+        free(fname_buffer);
+        break;
+    }
+    case SYSCALL_FLUSH: {
+        flush_stdout();
+        break;
+    }
+    // Exits -------------------------------------------------------------------
     case SYSCALL_EXIT_SUCCESS:
         flush_stdout(); running = false; break;
-    case SYSCALL_EXIT:
-        flush_stdout(); running = false; break;
+    case SYSCALL_EXIT: {
+        int code = get(gpr(4));
+        flush_stdout();
+        running = false;
+        exit(code);
+    }
+    case SYSCALL_ASSERT: {
+        int r = get(gpr(4));
+        if (!r) {
+            flush_stdout();
+            running = false;
+            err_panic("Assertion failure.");
+        }  
+        break;      
+    }
+    // Network -----------------------------------------------------------------
     case SYSCALL_SEND:
         err_panic("MCPU: SYSCALL_SEND not implemented.");
         /* TODO
@@ -774,3 +1119,6 @@ void mcpu::syscall(uint32_t call_no) throw(err) {
     }
 }
 
+void mcpu::trap() throw(err) {
+    err_panic("Trap raised!");
+}

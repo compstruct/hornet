@@ -177,7 +177,7 @@ void awayCache::process() {
                     /* data is not here yet */
                     if (!line->on_the_fly) {
                         /* initiate read request - in case the line is evicted while waiting for the bandwidth */
-                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
+                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->tid(), req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                     m_cfgs.block_size_bytes));
                         home_req->set_ra();
 #ifdef WRITE_NOW
@@ -210,11 +210,11 @@ void awayCache::process() {
                         shared_ptr<memoryRequest> home_req;
                         if (req->rw() == MEM_READ) {
                             m_cache[index][i_way].on_hold = false;
-                            home_req = shared_ptr<memoryRequest>(new memoryRequest(req->addr() - req->addr()%m_cfgs.block_size_bytes,
+                            home_req = shared_ptr<memoryRequest>(new memoryRequest(req->tid(), req->addr() - req->addr()%m_cfgs.block_size_bytes,
                                         m_cfgs.block_size_bytes));
                         } else {
                             m_cache[index][i_way].on_hold = true;
-                            home_req = shared_ptr<memoryRequest>(new memoryRequest(req->addr(), req->byte_count()));
+                            home_req = shared_ptr<memoryRequest>(new memoryRequest(req->tid(), req->addr(), req->byte_count()));
                         }
                         home_req->set_ra();
 #ifdef WRITE_NOW

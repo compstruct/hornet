@@ -6,8 +6,10 @@
 
 dram::dram() {}
 dram::~dram() {
-    for (map<uint64_t, uint32_t*>::iterator i = space.begin(); i != space.end(); ++i) {
-        delete[] i->second;
+    for (map<uint32_t, map<uint64_t, uint32_t* > >::iterator i = space.begin(); i != space.end(); ++i) {
+        for (map<uint64_t, uint32_t*>::iterator j = space[i->first].begin(); j != space[i->first].end(); ++j) {
+            delete[] j->second;
+        }
     }
 }
 
@@ -139,11 +141,28 @@ void dramController::process() {
     }
 }
 
+/*  decides whether to keep the input tid (if the memory access is to a per-
+    thread private address space) or map the request to the shared address space 
+    (arbitrarily set to -1). */
+int get_tid(int proposed_tid, maddr_t addr) {
+    int tid;
+    int aspace = addr & 0x00400000;    
+    if (aspace) {
+        // private -- map to bins based on thread
+        tid = proposed_tid;    
+    } else {
+        // shared -- always map to same bin
+        tid = -1;
+    }
+    return tid;
+}
+
 void dramController::mem_access(shared_ptr<memoryRequest> req) {
+    int tid_index = get_tid(req->tid(), req->addr());    
     for (uint32_t i = 0; i < req->byte_count(); i += 4) {
         uint64_t offset = (req->addr() + i) % DRAM_BLOCK_SIZE;
         uint64_t index = (req->addr() + i) - offset;
-        if (m_dram->space.count(index) == 0) {
+        if (m_dram->space[tid_index].count(index) == 0) {
             uint32_t *line = new uint32_t[DRAM_BLOCK_SIZE/4];
             if (!line) {
                 throw err_out_of_mem();
@@ -152,29 +171,16 @@ void dramController::mem_access(shared_ptr<memoryRequest> req) {
             for (uint32_t j = 0; j < DRAM_BLOCK_SIZE/4; ++j) {
                 *(line+j) = 0;
             }
-            m_dram->space[index] = line; 
+            m_dram->space[tid_index][index] = line; 
         }
-        uint32_t *src = (req->rw() == MEM_READ)? (m_dram->space[index]) + offset/4 : req->data() + i/4;
-        uint32_t *tgt = (req->rw() == MEM_READ)? req->data() + i/4: (m_dram->space[index]) + offset/4;
+        uint32_t *src = (req->rw() == MEM_READ)? (m_dram->space[tid_index][index]) + offset/4 : req->data() + i/4;
+        uint32_t *tgt = (req->rw() == MEM_READ)? req->data() + i/4: (m_dram->space[tid_index][index]) + offset/4;
         (*tgt) = (*src);
-    }
-}
 
-void dramController::mem_fill(  uint32_t mem_start,
-                                uint32_t mem_size, 
-                                shared_ptr<mem> m) {
-    for (uint32_t i = 0; i < mem_size; i += 4) {
-        uint64_t offset = (mem_start + i) % DRAM_BLOCK_SIZE;
-        uint64_t index = (mem_start + i) - offset;
-        if (m_dram->space.count(index) == 0) {
-            uint32_t *line = new uint32_t[DRAM_BLOCK_SIZE/4];
-            if (!line) throw err_out_of_mem();
-            for (uint32_t j = 0; j < DRAM_BLOCK_SIZE/4; ++j)  *(line+j) = 0;
-            m_dram->space[index] = line; 
-        }
-        uint32_t src = m->load<uint32_t>(mem_start + i);
-        uint32_t *tgt = (m_dram->space[index]) + offset/4;
-        (*tgt) = src;
+        //
+        //printf("read DRAM[%d][%x] == %x\n", tid_index, (unsigned int) req->addr() + i, *src);
+        //if (req->rw() == MEM_READ)
+        //    printf("read DRAM[%d][%llu][%llu] == %x\n", tid_index, (long long unsigned int) index, (long long unsigned int)  offset/4, *src);
     }
 }
 
@@ -182,3 +188,100 @@ void dramController::mem_access_safe(shared_ptr<memoryRequest> req) {
     unique_lock<recursive_mutex> lock(m_dram->dram_mutex);
     mem_access(req);
 }
+
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+// Addendum for MIPS frontend (CF 2/5/11)
+
+/* effects: memcpy from this dram's backing store to a specified buffer 
+            (transfers are in bytes) */
+void dramController::mem_read_instant(  int proposed_tid,
+                                        void * destination, 
+                                        maddr_t mem_start, 
+                                        size_t count,
+                                        bool endianc) {
+    int tid_index = get_tid(proposed_tid, mem_start);    
+    for (uint32_t i = 0; i < count; i+=4) {
+        uint64_t offset = (mem_start + i) % DRAM_BLOCK_SIZE;
+        uint64_t index = (mem_start + i) - offset;
+        uint32_t src;        
+        if (m_dram->space[tid_index].count(index) > 0) 
+            src = *((m_dram->space[tid_index][index]) + offset/4);
+        else /* makes uncached loads/stores easier to implement */
+            src = 0x0; 
+        if (endianc) src = endian(src);
+        uint32_t * tgt = ((uint32_t *) destination) + i/4;
+        *tgt = src;
+
+        /* Temporary debugging
+        printf("%d:\n", src);
+        printf("%c", (char) src);
+        printf("%c", (char) (src >> 8));
+        printf("%c", (char) (src >> 16));
+        printf("%c\n\n", (char) (src >> 24));
+        */
+        //printf("read DRAM[%d][%x] == %x\n", tid_index, (unsigned int) mem_start + i, src);
+    }
+}
+
+/* effects: Initializes the DRAM with data stored in source.  This function 
+            should only be used to initialize memory before the program starts 
+            -- i.e. used by sys.cpp. */
+void dramController::mem_write_instant( int proposed_tid,
+                                        shared_ptr<mem> source,
+                                        uint32_t mem_start,
+                                        uint32_t mem_size) {
+    int tid_index = get_tid(proposed_tid, mem_start);
+    for (uint32_t i = 0; i < mem_size; i += 4) {
+        uint64_t offset = (mem_start + i) % DRAM_BLOCK_SIZE;
+        uint64_t index = (mem_start + i) - offset;
+        if (m_dram->space[tid_index].count(index) == 0) {
+            uint32_t *line = new uint32_t[DRAM_BLOCK_SIZE/4];
+            if (!line) throw err_out_of_mem();
+            for (uint32_t j = 0; j < DRAM_BLOCK_SIZE/4; ++j)  *(line+j) = 0;
+            m_dram->space[tid_index][index] = line; 
+        }
+        uint32_t src = source->load<uint32_t>(mem_start + i);
+        uint32_t *tgt = (m_dram->space[tid_index][index]) + offset/4;
+        (*tgt) = src;
+
+        // Temporary debugging
+        //printf("write init DRAM[%d][%x] <- %x\n", tid_index, (unsigned int) mem_start + i, src);
+        //printf("write init DRAM[%d][%llu][%llu] == %x\n", tid_index, 
+        //        (long long unsigned int) index, (long long unsigned int)  offset/4, src);
+        //uint32_t *second_tgt = (m_dram->space[tid_index][index]) + (offset/4 - 1);
+        //printf("Target (%p): %x, previous target (%p): %x\n", tgt, *tgt, second_tgt, *second_tgt);        
+    }
+}
+
+/* effects: Writes data to backing store while the program is running.  The 
+            memory hierarchy must a.) be disabled or b.) support memory 
+            coherence for this function to not garble system state. */
+void dramController::mem_write_instant( int proposed_tid,
+                                        void * source,
+                                        uint32_t mem_start,
+                                        uint32_t mem_size,
+                                        bool endianc) {
+    int tid_index = get_tid(proposed_tid, mem_start);
+    for (uint32_t i = 0; i < mem_size; i += 4) {
+        uint64_t offset = (mem_start + i) % DRAM_BLOCK_SIZE;
+        uint64_t index = (mem_start + i) - offset;
+        if (m_dram->space[tid_index].count(index) == 0) {
+            uint32_t *line = new uint32_t[DRAM_BLOCK_SIZE/4];
+            if (!line) throw err_out_of_mem();
+            for (uint32_t j = 0; j < DRAM_BLOCK_SIZE/4; ++j)  *(line+j) = 0;
+            m_dram->space[tid_index][index] = line; 
+        }
+        uint32_t src = *(((uint32_t *) source) + i/4);
+        if (endianc) src = endian(src);
+        uint32_t *tgt = (m_dram->space[tid_index][index]) + offset/4;
+        (*tgt) = src;
+
+        // Temporary debugging
+        //printf("%d\n", src);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------

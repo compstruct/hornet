@@ -37,6 +37,14 @@ public:
     friend ostream &operator<<(ostream &, const fpr &);
 };
 
+class cfr : public reg { // condition flag register
+public:
+    cfr(unsigned new_reg_no) throw(err_bad_reg);
+    cfr(const cfr &copied_reg) throw();
+public:
+    friend ostream &operator<<(ostream &, const cfr &);
+};
+
 class c0r : public reg {
 public:
     c0r(unsigned new_reg_no) throw(err_bad_reg);
@@ -78,6 +86,10 @@ ostream &operator<<(ostream &, const gpr &);
 inline fpr::fpr(unsigned reg_no) throw(err_bad_reg) : reg(reg_no) { }
 inline fpr::fpr(const fpr &orig) throw() : reg(orig.get_no()) { }
 ostream &operator<<(ostream &, const fpr &);
+
+inline cfr::cfr(unsigned reg_no) throw(err_bad_reg) : reg(reg_no) { }
+inline cfr::cfr(const cfr &orig) throw() : reg(orig.get_no()) { }
+ostream &operator<<(ostream &, const cfr &);
 
 inline c0r::c0r(unsigned reg_no) throw(err_bad_reg) : reg(reg_no) { }
 inline c0r::c0r(const c0r &orig) throw() : reg(orig.get_no()) { }
