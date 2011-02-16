@@ -276,14 +276,27 @@ void mcpu::exec_core() {
 // Instructions ----------------------------------------------------------------
 
 shared_ptr<instr> mcpu::instruction_fetch_complete(uint32_t pc) {
-    if (pending_i_request && !pending_request() /* no OoO */ &&
-        nearest_i_memory()->ready(pending_instruction_reqid)) {
+   /* if (!enable_memory_hierarchy) {
+        if (pending_i_request && !pending_request()) {
+
+        Really, we could skip the memory hierarchy here as well.        
+        
+        } 
+        if (!pending_i_request) {
+                    
+        }
+        return shared_ptr<instr>();
+    } else {
+    */
+    if (pending_i_request && !pending_request() && 
+        nearest_i_memory()->ready(pending_i_reqid)) {
         shared_ptr<memoryRequest> ld_req = 
-                        nearest_i_memory()->get_req(pending_instruction_reqid);
+                     nearest_i_memory()->get_req(pending_i_reqid);
         uint32_t raw = *(ld_req->data());
         //if (get_id() == 0) 
-        //    printf("Completed instruction_fetch_complete, address: %x, instr: %x\n", (uint32_t) ld_req->addr(), raw);
-        nearest_i_memory()->finish(pending_instruction_reqid);
+        //    printf("Completed instruction_fetch_complete, address: %x, 
+        //    instr: %x\n", (uint32_t) ld_req->addr(), raw);
+        nearest_i_memory()->finish(pending_i_reqid);
         pending_i_request = false;
         return shared_ptr<instr> (new instr(raw));
     }
@@ -291,11 +304,12 @@ shared_ptr<instr> mcpu::instruction_fetch_complete(uint32_t pc) {
         //if (get_id() == 0) 
         //    printf("Issued instruction_fetch_complete, address: %x\n", pc);
         shared_ptr<memoryRequest> read_req(
-                  new memoryRequest(get_id().get_numeric_id(), pc, byte_count));
-        pending_instruction_reqid = nearest_i_memory()->request(read_req);
+              new memoryRequest(get_id().get_numeric_id(), pc, byte_count));
+        pending_i_reqid = nearest_i_memory()->request(read_req);
         pending_i_request = true;
     }
     return shared_ptr<instr>();
+    /*}*/
 }
 
 // Data ------------------------------------------------------------------------
@@ -403,7 +417,8 @@ void mcpu::data_fetch_read( const uint32_t &addr,
     //printf("[mcpu %d] Memory read at %x\n", get_id().get_numeric_id(), addr);
     pending_req = shared_ptr<memoryRequest> (
                      new memoryRequest(get_id().get_numeric_id(), addr, bytes));
-    pending_reqid = nearest_memory()->request(pending_req); 
+    if (enable_memory_hierarchy) 
+        pending_reqid = nearest_memory()->request(pending_req); 
     pending_lw_sign_extend = sign_extend;
 }
 
@@ -422,7 +437,8 @@ void mcpu::data_fetch_write(    const uint32_t &addr,
     }
     pending_req = shared_ptr<memoryRequest> (
               new memoryRequest(get_id().get_numeric_id(), addr, bytes, wdata));
-    pending_reqid = nearest_memory()->request(pending_req);
+    if (enable_memory_hierarchy)
+        pending_reqid = nearest_memory()->request(pending_req);
     pending_request_memory = true;
 }
 

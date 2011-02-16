@@ -4,8 +4,15 @@
 #include <rts.h>
 
 int main(int argc, char **argv) {
+    int a[2];
+    a[0] = 5;
+    a[1] = 6;
     print_string("hello from cpu ");
     print_int(cpu_id());
+    print_string(" ");
+    print_int(a[0]);
+    print_string(", ");    
+    print_int(a[1]);
     print_string("\n");
 }
 

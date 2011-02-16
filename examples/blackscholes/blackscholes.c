@@ -332,8 +332,7 @@ int bs_thread(void *tid_ptr) {
 				print_int(j);
 				print_string("][");
 				print_int(i);
-				print_string("]:\n");
-				__H_fflush();
+				print_string("] ");
 
 				/*print_fp(sptprice[i]);
 				print_string("\n");
@@ -637,7 +636,7 @@ int main(int argc, char **argv)
 		}
 		int tid=id;
 		bs_thread(&tid);
-		while (__H_ucLoadWord(__H_MUTEX_BARRIER_FINISH) != nThreadsMask) {/*spin*/};
+		while (__H_ucLoadWord(__H_MUTEX_BARRIER_FINISH) != nThreadsMask) { };
 #else//ENABLE_THREADS_HORNET
 #ifdef ENABLE_OPENMP
     {

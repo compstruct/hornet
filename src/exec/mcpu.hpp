@@ -111,7 +111,8 @@ private: // instruction memory hierarchy
 private: // instruction/data interface
 
     // instruction
-    mreq_id_t pending_instruction_reqid;
+    mreq_id_t pending_i_reqid;
+    shared_ptr<memoryRequest> pending_i_req; // currently unused
     bool pending_i_request;
 
     // data

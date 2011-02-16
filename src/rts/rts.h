@@ -69,8 +69,6 @@ static void print_string(const char *);
 /* effects: halts the processor */
 extern void halt() __attribute__((__noreturn__));
 
-
-
 /* IMPLEMENTATION */
 
 inline static unsigned cpu_id() {
@@ -175,15 +173,14 @@ inline static void print_string(const char *s) {
 
 // Headers ---------------------------------------------------------------------
 
-/* A short explanation of the data structure and algorithms. An area returned 
-by malloc() is called a slot. Each slot contains the number of bytes 
-requested, but preceeded by an extra pointer to the next the slot in memory. 
-'_bottom' and '_top' point to the first/last slot. More memory is asked for 
-using brk() and appended to top. The list of free slots is maintained to keep 
-malloc() fast. '_empty' points the the first free slot. Free slots are linked 
-together by a pointer at the start of the user visable part, so just after the 
-next-slot pointer. Free slots are merged together by free(). */
-
+/* A short explanation of the data structure and algorithms. An area returned by 
+malloc() is called a slot. Each slot contains the number of bytes requested, but 
+preceeded by an extra pointer to the next the slot in memory. '_bottom' and 
+'_top' point to the first/last slot. More memory is asked for using brk() and 
+appended to top. The list of free slots is maintained to keep malloc() fast. 
+'_empty' points the the first free slot. Free slots are linked together by a 
+pointer at the start of the user visable part, so just after the next-slot 
+pointer. Free slots are merged together by free(). */
 /* CF~ 2/5/11: for blackscholes, we only setup memory once, and assume that we 
 have enough.  So we forget about keeping track of the end of the program data 
 segments. */
