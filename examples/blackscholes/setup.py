@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import string, struct, os, binascii
 
 def binify(fin, fout):
