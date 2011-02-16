@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <sstream>
 #include <cassert>
+#include <cstring>
 #include "endian.hpp"
 #include "syscalls.hpp"
 #include "mcpu.hpp"
@@ -352,11 +353,11 @@ void mcpu::data_complete() {
 void mcpu::data_complete_helper(const shared_ptr<memoryRequest> &req) {
     uint64_t m;
     switch (req->byte_count()) { 
-        case 1: m = 0xFF; break;  
-        case 2: m = 0xFFFF; break;
-        case 3: m = 0xFFFFFF; break;
-        case 4: m = 0xFFFFFFFF; break;
-        case 8: m = 0xFFFFFFFFFFFFFFFF; break;        
+        case 1: m = 0xFFULL; break;  
+        case 2: m = 0xFFFFULL; break;
+        case 3: m = 0xFFFFFFULL; break;
+        case 4: m = 0xFFFFFFFFULL; break;
+        case 8: m = 0xFFFFFFFFFFFFFFFFULL; break;
         default: throw exc_addr_align();
     }
     uint64_t raw;
@@ -372,7 +373,7 @@ void mcpu::data_complete_helper(const shared_ptr<memoryRequest> &req) {
     raw = raw & m;
     if (pending_lw_sign_extend) {
         uint32_t check = raw & (1 << (req->byte_count()*8 - 1));
-        m = (check) ? 0xffffffffffffffffU << (req->byte_count()*8) : 0x0;
+        m = (check) ? 0xffffffffffffffffULL << (req->byte_count()*8) : 0x0;
         raw = raw | m;
     }
     if (pending_request_gpr) {
