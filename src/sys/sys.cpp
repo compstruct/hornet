@@ -167,6 +167,9 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     // TODO: changed from null ptr
     shared_ptr<dram> new_dram(new dram ());
     //shared_ptr<dram> new_dram = shared_ptr<dram>();
+#ifdef WRITE_NOW
+    shared_ptr<map<uint32_t, shared_ptr<awayCache> > > awayCache_list ( new map<uint32_t, shared_ptr<awayCache> >());
+#endif
 
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
@@ -259,11 +262,11 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             memtraceCore::memtraceCore_cfg_t mc_cfgs;
             mc_cfgs.max_threads = 2;
             mc_cfgs.flits_per_mig = 2;
-            mc_cfgs.em_type = memtraceCore::EM_ENC;
-            mc_cfgs.ra_type = memtraceCore::RA_NONE;
+            mc_cfgs.em_type = memtraceCore::EM_NONE;
+            mc_cfgs.ra_type = memtraceCore::RA_ONLY;
             mc_cfgs.ra_distance_threshold = 3;
             mc_cfgs.network_width = 8;
-            mc_cfgs.library_type = memtraceCore::LIBRARY_NONE;
+            mc_cfgs.library_type = memtraceCore::LIBRARY_ONLY;
 
 #ifdef LIBRARY_COMPETITION
             mc_cfgs.em_type = memtraceCore::EM_NONE;
@@ -276,7 +279,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             core_cfgs.msg_queue_size = 2;
             core_cfgs.memory_server_process_time = 1;
             core_cfgs.max_active_remote_mem_requests = 8;
-            core_cfgs.support_library = false;
+            core_cfgs.support_library = true;
 #ifdef LIBRARY_COMPETITION
             core_cfgs.support_library = true;
 #endif
@@ -351,13 +354,16 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                         cache_cfgs.total_block = (i == 0)? 64 : 256;
                         cache_cfgs.process_time = 1;
                         cache_cfgs.block_per_cycle = 1;
-                        cache_cfgs.policy = cache::CACHE_RANDOM;
+                        cache_cfgs.policy = cache::CACHE_LRU;
 #endif
                         shared_ptr<cache> new_cache;
                         if (core_cfgs.support_library) {
                             /* When using the library scheme, use homeCache for L1 */
                             new_cache = shared_ptr<cache>( new homeCache (id, i+1, t->get_time(), 
                                         t->get_statistics(), log, ran, cache_cfgs));
+#ifdef WRITE_NOW
+                            static_pointer_cast<homeCache, cache>(new_cache)->set_awayCache_list(awayCache_list);
+#endif
                         } else {
                             new_cache = shared_ptr<cache>( new cache (id, i+1, t->get_time(), 
                                         t->get_statistics(), log, ran, cache_cfgs));
@@ -396,13 +402,16 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             cache_cfgs.total_block = 64;
             cache_cfgs.process_time = 1;
             cache_cfgs.block_per_cycle = 1;
-            cache_cfgs.policy = cache::CACHE_RANDOM;
+            cache_cfgs.policy = cache::CACHE_LRU;
 #endif
             if (core_cfgs.support_library) {
                 shared_ptr<awayCache> new_cache ( new awayCache (id, 1, t->get_time(), 
                             t->get_statistics(), log, ran, cache_cfgs));
                 new_core->add_away_cache(new_cache);
                 new_cache->set_home_memory(rm);
+#ifdef WRITE_NOW
+                (*awayCache_list)[id] = new_cache;
+#endif
             }
             break;
         }
