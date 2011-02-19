@@ -1,0 +1,3 @@
+mips-linux-gnu-gcc  -std=c99 -fno-PIC -march=mips32r2 -mno-mips16 -static -mno-shared -mno-abicalls -nostdlib -I/home/cwfletcher/wc/svnm/branches/Shared/Hornet/trunk/dar/lib/rts/include -c -o mcpu.o_mips mcpu.c
+
+mips-linux-gnu-ld -nostdlib -static -s -o mcpu.mips mcpu.o_mips /home/cwfletcher/wc/svnm/branches/Shared/Hornet/trunk/dar/lib/rts/lib/crt0.o -L/home/cwfletcher/wc/svnm/branches/Shared/Hornet/trunk/dar/lib/rts/lib -lrts
