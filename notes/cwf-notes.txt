@@ -1,0 +1,35 @@
+--------------------------------------------------------------------------------
+Checkout (when logged into login.csail.mit.edu):
+
+git clone file:///afs/csail.mit.edu/group/csg/gitroots/dar.git
+
+--------------------------------------------------------------------------------
+Dependancies:
+
+- a C++ compiler
+- the Boost C++ library (sudo apt get install libboost-all-dev)
+- Python 2.5
+- Automake/Autoconf/Libtool
+- binutils and GCC for cross-compiling to a MIPS target
+
+--------------------------------------------------------------------------------
+Setup: 
+
+sh bootstrap
+./configure --prefix=$HORNET_HOME --enable-mips-rts --enable-testsuite=no CFLAGS="-g -O0" CXXFLAGS="-g -O0"
+sudo make
+sudo make install
+
+errors in the 'make' step related to user access: follow the error messages---chances are the fix is adding 'sudo' to the beginning of a line in a makefile.
+
+--------------------------------------------------------------------------------
+Disable compiler optimizations:
+
+See above (change CF and CXX flags in configure step).
+You don't have to change the top-level Makefile.am.
+
+--------------------------------------------------------------------------------
+Parameters to xy-shmem.py
+
+to get the memtraceCore test working:
+python xy-shmem.py -x 8 -y 8 -v 1 -q 4 -c memtraceCore -e -r -o memtrace.cfg
