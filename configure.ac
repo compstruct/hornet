@@ -14,6 +14,7 @@ AC_C_BIGENDIAN
 AX_BOOST_BASE([1.34])
 AX_BOOST_DATE_TIME
 AX_BOOST_THREAD
+AX_BOOST_SYSTEM
 AX_BOOST_PROGRAM_OPTIONS
 AC_CHECK_LIB([m],[ceil])
 AM_PATH_PYTHON([2.5])
@@ -86,6 +87,7 @@ AC_OUTPUT(\
     src/sim/Makefile \
     src/tools/Makefile \
     src/rts/Makefile \
+    src/boost.task-0.4.2/Makefile \
     tests/Makefile \
     doc/Makefile \
     doc/design/Makefile \
