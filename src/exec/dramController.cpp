@@ -141,24 +141,8 @@ void dramController::process() {
     }
 }
 
-/*  decides whether to keep the input tid (if the memory access is to a per-
-    thread private address space) or map the request to the shared address space 
-    (arbitrarily set to -1). */
-int get_tid(int proposed_tid, maddr_t addr) {
-    int tid;
-    int aspace = addr & 0x00400000;    
-    if (aspace) {
-        // private -- map to bins based on thread
-        tid = proposed_tid;    
-    } else {
-        // shared -- always map to same bin
-        tid = -1;
-    }
-    return tid;
-}
-
 void dramController::mem_access(shared_ptr<memoryRequest> req) {
-    int tid_index = get_tid(req->tid(), req->addr());    
+    int tid_index = get_tid(req->addr(), req->tid());    
     for (uint32_t i = 0; i < req->byte_count(); i += 4) {
         uint64_t offset = (req->addr() + i) % DRAM_BLOCK_SIZE;
         uint64_t index = (req->addr() + i) - offset;
@@ -177,12 +161,44 @@ void dramController::mem_access(shared_ptr<memoryRequest> req) {
         uint32_t *tgt = (req->rw() == MEM_READ)? req->data() + i/4: (m_dram->space[tid_index][index]) + offset/4;
         (*tgt) = (*src);
 
-        //
         //printf("read DRAM[%d][%x] == %x\n", tid_index, (unsigned int) req->addr() + i, *src);
-        //if (req->rw() == MEM_READ)
-        //    printf("read DRAM[%d][%llu][%llu] == %x\n", tid_index, (long long unsigned int) index, (long long unsigned int)  offset/4, *src);
+        /*int id = get_id();
+        if (req->rw() == MEM_READ)
+            printf("read DRAM[%d][%d][%llu][%llu] %x --> %x\n", id, tid_index, (long long unsigned int) index, (long long unsigned int)  offset/4, *src, *tgt);
+        else
+            printf("write DRAM[%d][%d][%llu][%llu] %x <-- %x\n", id, tid_index, (long long unsigned int) index, (long long unsigned int)  offset/4, *tgt, *src);
+        */
+        //mem_access_tester(req);
     }
 }
+
+/* this was used to help scan across TIDs, which helped in debugging a memory problem
+
+void dramController::mem_access_tester(shared_ptr<memoryRequest> req) {
+    for (int tid_index = 0; tid_index < 4; tid_index++) {   
+        for (uint32_t i = 0; i < req->byte_count(); i += 4) {
+            uint64_t offset = (req->addr() + i) % DRAM_BLOCK_SIZE;
+            uint64_t index = (req->addr() + i) - offset;
+            if (m_dram->space[tid_index].count(index) == 0) {
+                uint32_t *line = new uint32_t[DRAM_BLOCK_SIZE/4];
+                if (!line) {
+                    throw err_out_of_mem();
+                }
+                for (uint32_t j = 0; j < DRAM_BLOCK_SIZE/4; ++j) {
+                    *(line+j) = 0;
+                }
+                m_dram->space[tid_index][index] = line; 
+            }
+            uint32_t *src = (req->rw() == MEM_READ)? (m_dram->space[tid_index][index]) + offset/4 : req->data() + i/4;
+            int id = get_id();
+            if (req->rw() == MEM_READ)
+                printf("read DRAM TEST[%d][%d][%llu][%llu] %x\n", id, tid_index, (long long unsigned int) index, (long long unsigned int)  offset/4, *src);
+            else
+                printf("write DRAM TEST[%d][%d][%llu][%llu] %x\n", id, tid_index, (long long unsigned int) index, (long long unsigned int)  offset/4, *src);
+        }
+    }
+}
+*/
 
 void dramController::mem_access_safe(shared_ptr<memoryRequest> req) {
     unique_lock<recursive_mutex> lock(m_dram->dram_mutex);
@@ -201,7 +217,7 @@ void dramController::mem_read_instant(  int proposed_tid,
                                         maddr_t mem_start, 
                                         size_t count,
                                         bool endianc) {
-    int tid_index = get_tid(proposed_tid, mem_start);    
+    int tid_index = get_tid(mem_start, proposed_tid);    
     for (uint32_t i = 0; i < count; i+=4) {
         uint64_t offset = (mem_start + i) % DRAM_BLOCK_SIZE;
         uint64_t index = (mem_start + i) - offset;
@@ -221,7 +237,7 @@ void dramController::mem_read_instant(  int proposed_tid,
         printf("%c", (char) (src >> 16));
         printf("%c\n\n", (char) (src >> 24));
         */
-        //printf("read DRAM[%d][%x] == %x\n", tid_index, (unsigned int) mem_start + i, src);
+        //printf("read DRAM[%d][%d][%x] == %x\n", get_id(), tid_index, (unsigned int) mem_start + i, src);
     }
 }
 
@@ -232,7 +248,7 @@ void dramController::mem_write_instant( int proposed_tid,
                                         shared_ptr<mem> source,
                                         uint32_t mem_start,
                                         uint32_t mem_size) {
-    int tid_index = get_tid(proposed_tid, mem_start);
+    int tid_index = get_tid(mem_start, proposed_tid);
     for (uint32_t i = 0; i < mem_size; i += 4) {
         uint64_t offset = (mem_start + i) % DRAM_BLOCK_SIZE;
         uint64_t index = (mem_start + i) - offset;
@@ -248,8 +264,9 @@ void dramController::mem_write_instant( int proposed_tid,
 
         // Temporary debugging
         //printf("write init DRAM[%d][%x] <- %x\n", tid_index, (unsigned int) mem_start + i, src);
-        //printf("write init DRAM[%d][%llu][%llu] == %x\n", tid_index, 
+        //printf( "write init DRAM[%d][%d][%llu][%llu] == %x\n", get_id(), tid_index, 
         //        (long long unsigned int) index, (long long unsigned int)  offset/4, src);
+        
         //uint32_t *second_tgt = (m_dram->space[tid_index][index]) + (offset/4 - 1);
         //printf("Target (%p): %x, previous target (%p): %x\n", tgt, *tgt, second_tgt, *second_tgt);        
     }
@@ -263,7 +280,7 @@ void dramController::mem_write_instant( int proposed_tid,
                                         uint32_t mem_start,
                                         uint32_t mem_size,
                                         bool endianc) {
-    int tid_index = get_tid(proposed_tid, mem_start);
+    int tid_index = get_tid(mem_start, proposed_tid);
     for (uint32_t i = 0; i < mem_size; i += 4) {
         uint64_t offset = (mem_start + i) % DRAM_BLOCK_SIZE;
         uint64_t index = (mem_start + i) - offset;
@@ -280,6 +297,8 @@ void dramController::mem_write_instant( int proposed_tid,
 
         // Temporary debugging
         //printf("%d\n", src);
+        //printf("write DRAM[%d][%d][%llu][%llu] == %x\n", get_id(), tid_index, 
+        //       (long long unsigned int) index, (long long unsigned int)  offset/4, src);
     }
 }
 

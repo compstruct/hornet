@@ -16,7 +16,7 @@ Dependancies:
 Setup: 
 
 sh bootstrap
-./configure --prefix=$HORNET_HOME --enable-mips-rts --enable-testsuite=no CFLAGS="-g -O0" CXXFLAGS="-g -O0"
+./configure --prefix=$HORNET_HOME --enable-mips-rts --enable-testsuite=no CFLAGS="-g -O0 -DEM2_PURE" CXXFLAGS="-g -O0 -DEM2_PURE"
 sudo make
 sudo make install
 
@@ -33,3 +33,4 @@ Parameters to xy-shmem.py
 
 to get the memtraceCore test working:
 python xy-shmem.py -x 8 -y 8 -v 1 -q 4 -c memtraceCore -e -r -o memtrace.cfg
+python xy-shmem.py -x 2 -y 1 -v 1 -q 4 -c mcpu -o blackscholes.cfg

@@ -102,6 +102,7 @@ void core::tick_positive_edge() throw(err) {
         packet_id pid = m_packet_id_factory->get_fresh_id();
         msg->src = get_id().get_numeric_id();
         uint32_t fid = (((((*i_msg_type) << 8) | msg->src ) << 8 ) | msg->dst ) << 8;
+        //printf("Forming flow ~ src: %d, dst: %d\n", msg->src, msg->dst);
         uint32_t xid = m_net->send(fid, (void*)p_env, msg->flit_count, pid, stats->is_started()); 
         if (xid!=0) {
             /* packet is said to be 'offered' when it begins to move... */ 

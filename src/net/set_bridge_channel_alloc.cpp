@@ -27,7 +27,7 @@ set_bridge_channel_alloc::
 add_route(const flow_id &f, const vector<tuple<virtual_queue_id,double> > &qids)
     throw(err) {
     if (routes.find(f) != routes.end())
-        throw err_duplicate_flow(get_id().get_numeric_id(), f.get_numeric_id());
+        throw err_duplicate_flow(get_id().get_numeric_id(), f.get_numeric_id());    
     if (!qids.empty()) { // add only specified queues with given propensities
         for (vector<tuple<virtual_queue_id,double> >::const_iterator idi =
                  qids.begin(); idi != qids.end(); ++idi) {
@@ -39,16 +39,19 @@ add_route(const flow_id &f, const vector<tuple<virtual_queue_id,double> > &qids)
                                              f.get_numeric_id(),
                                              get_id().get_numeric_id(),
                                              vqid.get_numeric_id());
+            //printf("Adding flow 1: %x\n", f.get_numeric_id());
             routes[f].push_back(make_tuple(qi->second, prop));
         }
     } else { // add all queues with equal propensity
         for(queues_t::iterator qi = queues.begin(); qi != queues.end(); ++qi) {
+            //printf("Adding flow 2: %x\n", f.get_numeric_id());
             routes[f].push_back(make_tuple(qi->second, 1.0));
         }
     }
 }
 
 virtual_queue_id set_bridge_channel_alloc::request(flow_id f) throw(err) {
+    //printf("Requesting flow: %x\n", f.get_numeric_id());
     if (routes.find(f) == routes.end())
         throw exc_bad_flow(get_id().get_numeric_id(), f.get_numeric_id());
     const route_queues_t &qs = routes[f];

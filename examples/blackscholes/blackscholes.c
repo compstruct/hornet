@@ -106,7 +106,7 @@ typedef struct OptionData_ {
 } OptionData;
 
 int		 * 	__H_MUTEX_BARRIER_START = 	0x003ffffc;
-int		 * 	__H_MUTEX_BARRIER_FINISH = 	0x003ffff8;
+int		 * 	__H_MUTEX_BARRIER_FINISH = 	0x003efff8; // TID0 doesn't scale beyond 32 cores!
 
 int		 ** __PROXY_numOptions = 				0x003ffff4;
 fptype ** __PROXY_prices = 						0x003ffff0;
@@ -120,7 +120,7 @@ fptype ** __PROXY_otime = 						0x003fffd8;
 //int numError = 0;
 
 int nThreads;
-int nThreadsMask;
+//int nThreadsMask;
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -282,6 +282,7 @@ int bs_thread(void *tid_ptr) {
 #ifdef ENABLE_THREADS_HORNET
 		while (!__H_ucLoadWord(__H_MUTEX_BARRIER_START)) { /* spin */ };
 #endif
+
     int i, j;
     fptype price;
     fptype priceDelta;
@@ -299,20 +300,20 @@ int bs_thread(void *tid_ptr) {
     int start = tid * (numOptions / nThreads);
     int end = start + (numOptions / nThreads);
 
-    print_string("tid=");
-		print_int(tid);
-		print_string(" go (start: ");
-		print_int(start);
-		print_string(", end: ");
-		print_int(end);
-		print_string(")\n");
+    //print_string("tid=");
+		//print_int(tid);
+		//print_string(" go (start: ");
+		//print_int(start);
+		//print_string(", end: ");
+		//print_int(end);
+		//print_string(")\n");
 
     for (j=0; j<NUM_RUNS; j++) {
-			print_string("tid=");
-			print_int(tid);
-			print_string(", runs=");
-			print_int(j);
-			print_string("\n");
+			//print_string("tid=");
+			//print_int(tid);
+			//print_string(", runs=");
+			//print_int(j);
+			//print_string("\n");
 			__H_fflush();
 #ifdef ENABLE_OPENMP
 			#pragma omp parallel for
@@ -333,6 +334,10 @@ int bs_thread(void *tid_ptr) {
 				print_string("][");
 				print_int(i);
 				print_string("] ");
+				print_string("Price: ");
+				print_float(price);
+				print_string("\n");
+				__H_fflush();
 
 				/*print_fp(sptprice[i]);
 				print_string("\n");
@@ -347,11 +352,6 @@ int bs_thread(void *tid_ptr) {
 				print_int(otype[i]);
 				print_string("\n");
 				__H_fflush();*/
-
-				print_string("Price: ");
-				print_float(price);
-				print_string("\n");
-        __H_fflush();
     
 #ifdef ERR_CHK
 				__H_exit(51); // data no longer has global scope, and DGrefval isn't being properly shared
@@ -372,13 +372,13 @@ int bs_thread(void *tid_ptr) {
         }
     }
 #ifdef ENABLE_THREADS
-    print_string("tid=");
-		print_int(tid);
-		print_string(" done\n");
+    //print_string("tid=");
+		//print_int(tid);
+		//print_string(" done\n");
     BARRIER(barrier);
 #else//ENABLE_THREADS
 #ifdef ENABLE_THREADS_HORNET
-		__H_ucSetBit(__H_MUTEX_BARRIER_FINISH, tid);
+		//__H_ucSetBit(__H_MUTEX_BARRIER_FINISH, tid); TODO: re-enable join
 #endif//ENABLE_THREADS_HORNET
 #endif//ENABLE_THREADS
 
@@ -391,19 +391,29 @@ int bs_thread(void *tid_ptr) {
 ////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char **argv)
 {
-	unsigned id = cpu_id();
+	unsigned id = thread_id();
 
 #ifdef ENABLE_THREADS_HORNET
 	nThreads = 4;
-	nThreadsMask = 0xF; // 4 1s in lsb positions -- TODO: turn into a function
+	//nThreadsMask = 0x1FF; // 4 1s in lsb positions -- TODO: turn into a function
 #else
 	nThreads = 1;
-	nThreadsMask = 0x1;
+	//nThreadsMask = 0x1;
 #endif
+
+	print_string("Starting thread # ");
+	print_int(id);
+	print_string("\n");
+	__H_fflush();
 
 #ifdef ENABLE_THREADS_HORNET
 	if (id == 0) { // only intialize with the master thread
 #endif
+		print_string("Starting ");
+		print_int(nThreads);
+		print_string(" Blackscholes threads.\n");
+		__H_fflush();
+
 		int numOptions;
 		OptionData *data;
 		int file;   
@@ -459,9 +469,16 @@ int main(int argc, char **argv)
 		__H_fclose(file);
 		__H_exit(1);		
 	}
-	if(nThreads > numOptions) {
+
+	print_string("Processing ");
+	print_int(numOptions);
+	print_string(" stock options.\n");
+	__H_fflush();	
+
+	if (nThreads > numOptions) {
 		print_string("\nWARNING: Not enough work, reducing number of threads to match number of options.\n");
 		nThreads = numOptions;
+		__H_fflush();
 	}
 
 #if !defined(ENABLE_THREADS) && !defined(ENABLE_OPENMP) && !defined(ENABLE_THREADS_HORNET)
@@ -559,7 +576,7 @@ int main(int argc, char **argv)
     BARINIT(barrier, nThreads);
 #endif
 
-	print_string("Num of Options: ");
+	/*print_string("Num of Options: ");
 	print_int(numOptions);
 	print_string("\n");
 	__H_fflush();
@@ -567,7 +584,7 @@ int main(int argc, char **argv)
 	print_string("Num of Runs: ");
 	print_int(NUM_RUNS);
 	print_string("\n");
-	__H_fflush();
+	__H_fflush();*/
 
 #define PAD 256
 #define LINESIZE 64
@@ -602,10 +619,10 @@ int main(int argc, char **argv)
 			__H_fflush();
     }
 
-    print_string("Size of data: ");
-		print_int((int) numOptions * (sizeof(OptionData) + sizeof(int)));
-		print_string("\n");
-		__H_fflush();
+    //print_string("Size of data: ");
+		//print_int((int) numOptions * (sizeof(OptionData) + sizeof(int)));
+		//print_string("\n");
+		//__H_fflush();
 
 #ifdef ENABLE_THREADS_HORNET
 	}
@@ -614,8 +631,6 @@ int main(int argc, char **argv)
 // -----------------------------------------------------------------------------
 //														 Threads fork
 // -----------------------------------------------------------------------------
-
-	__H_enable_memory_hierarchy(); // Initialization is done!
 
 #ifdef ENABLE_PARSEC_HOOKS
     __parsec_roi_begin();
@@ -633,10 +648,11 @@ int main(int argc, char **argv)
 #ifdef ENABLE_THREADS_HORNET
 		if (id == 0) {
 			__H_ucSetBit(__H_MUTEX_BARRIER_START, 0);
+			__H_enable_memory_hierarchy(); // Initialization is done!
 		}
 		int tid=id;
 		bs_thread(&tid);
-		while (__H_ucLoadWord(__H_MUTEX_BARRIER_FINISH) != nThreadsMask) { };
+		//while (__H_ucLoadWord(__H_MUTEX_BARRIER_FINISH) != nThreadsMask) { }; TODO: re-enable join -- [but note that] this doesn't really matter for blackscholes
 #else//ENABLE_THREADS_HORNET
 #ifdef ENABLE_OPENMP
     {
@@ -649,12 +665,12 @@ int main(int argc, char **argv)
 	if (nThreads > 1)
 	{
 		  HANDLE threads[MAX_THREADS];
-		          int nums[MAX_THREADS];
-		          for(i=0; i<nThreads; i++) {
-		                  nums[i] = i;
-		                  threads[i] = CreateThread(0, 0, bs_thread, &nums[i], 0, 0);
-		          }
-		          WaitForMultipleObjects(nThreads, threads, TRUE, INFINITE);
+      int nums[MAX_THREADS];
+      for(i=0; i<nThreads; i++) {
+              nums[i] = i;
+              threads[i] = CreateThread(0, 0, bs_thread, &nums[i], 0, 0);
+      }
+      WaitForMultipleObjects(nThreads, threads, TRUE, INFINITE);
 	} else
 #endif
 	{

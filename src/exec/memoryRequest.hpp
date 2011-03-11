@@ -21,7 +21,7 @@ typedef uint64_t maddr_t;
 
 class memoryRequest {
 public:
-    memoryRequest(int tid, maddr_t addr, uint32_t byte_count, uint32_t* wdata = NULL);
+    memoryRequest(uint32_t tid, maddr_t addr, uint32_t byte_count, uint32_t* wdata = NULL);
     virtual ~memoryRequest();
 
     inline mreq_type_t rw() { return m_rw; }
@@ -44,7 +44,7 @@ public:
 
 protected:
     mreq_type_t   m_rw;
-    int           m_tid;
+    uint32_t      m_tid;
     maddr_t       m_addr;
     uint32_t*     m_data;
     uint32_t      m_byte_count;

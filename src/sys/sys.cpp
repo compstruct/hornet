@@ -165,6 +165,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     shared_ptr<memtraceThreadPool> memtrace_thread_pool(new memtraceThreadPool());
 
     // TODO: changed from null ptr
+    // CF: changed to support common DRAM for all cores
     shared_ptr<dram> new_dram(new dram ());
     //shared_ptr<dram> new_dram = shared_ptr<dram>();
 #ifdef WRITE_NOW
@@ -513,7 +514,8 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
             // Memory hierarchy setup ------------------------------------------       
 
-            shared_ptr<mcpu> new_core(new mcpu( pe_id(id), 
+            shared_ptr<mcpu> new_core(new mcpu( num_nodes,
+                                                pe_id(id), 
                                                 t->get_time(), 
                                                 cpu_entry_point,
                                                 cpu_stack_pointer,
@@ -521,7 +523,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                                                 t->get_statistics(),
                                                 log,
                                                 ran,
-                                                core_cfgs));;
+                                                core_cfgs));
             p = new_core;
 
             // I$ setup --------------------------------------------------------
@@ -529,7 +531,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             new_core->initialize_memory_hierarchy(  id, t, img, true, 
                                                     shared_ptr<remoteMemory>(),
                                                     mem_start, mem_size, 
-                                                    m, shared_ptr<dram> ());
+                                                    m, new_dram);
 
             // D$ hierarchy setup ----------------------------------------------
 

@@ -249,6 +249,9 @@ static void     __H_exit(int);
    not.  CURRENTLY UNIMPLEMENTED (2/14/11) */
 static void     __H_assert(int);
 
+/* returns the ID of the current thread */
+static unsigned thread_id();
+
 // Helpers ---------------------------------------------------------------------
 
 #define __prefix_double_out__   unsigned long int bot_o; \
@@ -625,6 +628,16 @@ inline static void __H_assert(int b) {
      : 
      : "r"(b)
      : "v0");
+}
+
+inline static unsigned thread_id() {
+    int ret;
+    __asm__ __volatile__
+    ("addiu $v0, $0, 0x78; syscall; move %0, $v0;"
+     : "=r"(ret)
+     : 
+     : "v0");
+    return ret;
 }
 
 //------------------------------------------------------------------------------

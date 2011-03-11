@@ -83,6 +83,7 @@ private:
     
 private:
     void mem_access(shared_ptr<memoryRequest> req);
+    //void mem_access_tester(shared_ptr<memoryRequest> req);
     void mem_access_safe(shared_ptr<memoryRequest> req);
 
 private:

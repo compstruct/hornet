@@ -65,18 +65,22 @@ protected:
         bool ready;         /* data has come */
         bool doomed;        /* will be evicted (write_back issued) */
         bool on_the_fly;    /* data is coming (a request sent) */
+        int tid;
         uint64_t tag;
         uint32_t *data;
         uint64_t last_access;
         bool dirty;
     } cache_line_t;
 
+private:
+    const static bool DEBUG_CACHE = false;
+
 protected:
     inline uint64_t get_tag(maddr_t addr) { return (addr&m_tag_mask)>>m_tag_pos; }
     inline uint64_t get_index(maddr_t addr) { return (addr&m_index_mask)>>m_index_pos; }
     inline uint64_t get_offset(maddr_t addr) { return (addr&m_offset_mask); }
 
-    cache_line_t* cache_line(maddr_t addr);
+    cache_line_t* cache_line(maddr_t addr, uint32_t tid);
 
 protected:
     cache_cfg_t m_cfgs;

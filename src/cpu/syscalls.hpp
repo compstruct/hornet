@@ -22,6 +22,7 @@ typedef enum {
     SYSCALL_UNCACHED_LOAD_WORD = 0x70,
     SYSCALL_UNCACHED_SET_BIT = 0x72,
     SYSCALL_ENABLE_MEMORY_HIERARCHY = 0x77,
+    SYSCALL_THREAD_ID = 0x78,
 
     // network communication
     SYSCALL_SEND = 0x80,

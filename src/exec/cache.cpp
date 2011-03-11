@@ -72,6 +72,7 @@ mreq_id_t cache::request(shared_ptr<memoryRequest> req, uint32_t location, uint3
         m_cache[index] = new cache_line_t[m_cfgs.associativity];
         for (uint32_t i = 0; i < m_cfgs.associativity; ++i) {
             m_cache[index][i].valid = false;
+            m_cache[index][i].tid = INT_MIN;
             uint32_t* data = new uint32_t[m_cfgs.block_size_bytes/4];
             if (!data) {
                 throw err_out_of_mem();
@@ -111,12 +112,13 @@ void cache::initiate() {
     }
 }
 
-cache::cache_line_t* cache::cache_line(maddr_t addr) {
-    uint64_t index = get_index(addr);
+cache::cache_line_t* cache::cache_line(maddr_t addr, uint32_t tid) {
+    uint64_t index = get_index(addr); 
     uint64_t tag = get_tag(addr);
+    int real_tid = get_tid(addr, tid);
     assert(m_cache.count(index) > 0);
     for (uint32_t i = 0; i < m_cfgs.associativity; ++i) {
-        if (m_cache[index][i].valid && m_cache[index][i].tag == tag) {
+        if (m_cache[index][i].valid && m_cache[index][i].tag == tag && m_cache[index][i].tid == real_tid) {       
             return m_cache[index] + i;
         }
     }
@@ -130,7 +132,7 @@ void cache::update() {
         mreq_id_t req_id = i->first;
         shared_ptr<memoryRequest> req = i->second;
         if (m_home->ready(req_id)) {
-            cache_line_t* line = cache_line(req->addr());   
+            cache_line_t* line = cache_line(req->addr(), req->tid());   
             if (req->rw() == MEM_READ) {   
                 /* a read copy arrived - line must be in invaid, on_the_fly status */
                 line->ready = true;
@@ -142,6 +144,7 @@ void cache::update() {
             } else {
                 /* write back is acknowledged  - line must be in doomed status */
                 line->valid = false;
+                line->tid = INT_MIN;
             }
             m_home->finish(req_id);
             to_be_deleted.push_back(req_id);
@@ -166,7 +169,7 @@ void cache::process() {
         /* actions in cache hierarchy */
         if (i->second.status == REQ_WAIT) {
             shared_ptr<memoryRequest> req = i->second.req;
-            cache_line_t* line = cache_line(req->addr());
+            cache_line_t* line = cache_line(req->addr(), req->tid());
             if (!line) {
                 /* no entry - miss */
                 bool has_space = false;
@@ -179,6 +182,7 @@ void cache::process() {
                         m_cache[index][i_way].ready = false;
                         m_cache[index][i_way].doomed = false;
                         m_cache[index][i_way].tag = get_tag(req->addr());
+                        m_cache[index][i_way].tid = get_tid(req->addr(), req->tid());                        
                         m_cache[index][i_way].dirty = false;
                         m_cache[index][i_way].last_access = system_time;
                         shared_ptr<memoryRequest> home_req (new memoryRequest(req->tid(), req->addr() - req->addr()%m_cfgs.block_size_bytes,
@@ -197,6 +201,7 @@ void cache::process() {
                     }
                 }
                 if (!has_space && !evict_cand.empty()) {
+                    // we didn't have space.... of all of the lines, choose one to evict based on different policies
                     cache_line_t* tgt = NULL;
                     if (m_cfgs.policy == CACHE_RANDOM) {
                         tgt = evict_cand[ran->random_range(evict_cand.size())];
@@ -209,14 +214,16 @@ void cache::process() {
                         }
                     }
                     if (tgt->dirty) {
+                        // if the line that we chose to evict was dirty...
                         tgt->doomed = true;
-                        shared_ptr<memoryRequest> home_req (new memoryRequest(req->tid(), (tgt->tag << m_tag_pos) | (index << m_index_pos),
+                        shared_ptr<memoryRequest> home_req (new memoryRequest(tgt->tid, (tgt->tag << m_tag_pos) | (index << m_index_pos),
                                     m_cfgs.block_size_bytes, tgt->data));
                         mreq_id_t new_id = m_home->request(home_req, m_home_location, m_home_level);
                         m_out_req_table[new_id] = home_req;
                     } else {
                         /* if not written, just drop */
                         tgt->valid = false;
+                        tgt->tid = INT_MIN;
                     }
                 }
             } else if (!line->doomed) {  /* if doomed, just wait until it gets an ack */

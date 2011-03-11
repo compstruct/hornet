@@ -59,6 +59,23 @@ protected:
     /* mreq_id */
     mreq_id_t m_max_mreq_id;
     vector<mreq_id_t> m_mreq_id_pool;
+
+protected:
+/*  decides whether to keep the input tid (if the memory access is to a per-
+    thread private address space) or map the request to the shared address space 
+    (arbitrarily set to -1). */
+    int get_tid(maddr_t addr, int proposed_tid) {
+        int tid;
+        int aspace = addr & 0x00400000;    
+        if (aspace) {
+            // private -- map to bins based on thread
+            tid = proposed_tid;    
+        } else {
+            // shared -- always map to same bin
+            tid = -1;
+        }
+        return tid;
+    }
 };
 
 /* TODO (Phase 4) : Design memory stats */

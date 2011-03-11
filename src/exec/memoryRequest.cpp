@@ -4,7 +4,7 @@
 #include "memoryRequest.hpp"
 #include <assert.h>
 
-memoryRequest::memoryRequest(int tid, maddr_t addr, uint32_t byte_count, uint32_t* wdata)
+memoryRequest::memoryRequest(uint32_t tid, maddr_t addr, uint32_t byte_count, uint32_t* wdata)
     : m_tid(tid), m_addr(addr), m_byte_count(byte_count), m_timestamp(0), m_is_ra(false) { 
 
     /* address should be aligned in 32bit (4bytes) */
