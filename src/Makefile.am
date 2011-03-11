@@ -1,2 +1,2 @@
-SUBDIRS = common power net pe cpu inject exec sys sim tools rts
-
+SUBDIRS = \
+    common boost.task-0.4.2 power net pe cpu inject exec sys sim tools rts

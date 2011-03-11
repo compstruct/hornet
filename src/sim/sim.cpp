@@ -6,6 +6,7 @@
 #include <numeric>
 #include <boost/function.hpp>
 #include <boost/bind.hpp>
+#include <boost/task/detail/bind_processor.hpp>
 #include "sim.hpp"
 
 template<typename T>
@@ -31,6 +32,7 @@ sim_thread::sim_thread(uint32_t new_thread_index,
                        vector<uint64_t> &new_per_thread_packet_count,
                        vector<uint64_t> &new_per_thread_next_time,
                        bool new_enable_fast_forward,
+                       int cpu_affinity,
                        shared_ptr<vcd_writer> new_vcd)
     : my_thread_index(new_thread_index), s(new_sys),
       my_tile_ids(tids.begin(), tids.end()),
@@ -45,9 +47,12 @@ sim_thread::sim_thread(uint32_t new_thread_index,
       per_thread_packet_count(new_per_thread_packet_count),
       per_thread_next_time(new_per_thread_next_time),
       enable_fast_forward(new_enable_fast_forward),
-      vcd(new_vcd) { }
+      cpu(cpu_affinity), vcd(new_vcd) { }
 
 void sim_thread::operator()() {
+    if (cpu >= 0) {
+        this_thread::bind_to_processor(cpu);
+    }
     sync_barrier->wait();
     uint64_t sync_count = 0; // count only post-negedge syncs
     while (sync_count < global_max_sync_count) {
@@ -140,13 +145,14 @@ sim::sim(shared_ptr<sys> s,
          const uint64_t sync_period, const uint32_t concurrency,
          bool enable_fast_forward,
          tile_mapping_t tile_mapping,
+         const vector<unsigned> &cpu_affinities,
          shared_ptr<vcd_writer> vcd, logger &new_log,
          shared_ptr<random_gen> new_rng)
     : global_drained(false), global_next_time(0),
       global_max_sync_count(UINT64_MAX), log(new_log), rng(new_rng) {
-    uint32_t num_threads =
-        concurrency != 0 ? concurrency : thread::hardware_concurrency();
-    if (num_threads == 0) num_threads = 1; // hardware_concurrency() failed
+    uint32_t hw_concurrency = thread::hardware_concurrency();
+    if (hw_concurrency == 0) hw_concurrency = 1;
+    uint32_t num_threads = concurrency != 0 ? concurrency : hw_concurrency;
     if (num_cycles == 0 && num_packets == 0) {
         LOG(log,0) << "simulating until drained" << endl;
     } else {
@@ -216,6 +222,10 @@ sim::sim(shared_ptr<sys> s,
     for (uint32_t i = 0; i < num_threads; ++i) {
         shared_ptr<vcd_writer> thr_vcd =
             i == num_threads - 1 ? vcd : shared_ptr<vcd_writer>();
+        int cpu_affinity = -1;
+        if (cpu_affinities.size() > 0) {
+            cpu_affinity = cpu_affinities[i % cpu_affinities.size()];
+        }
         shared_ptr<sim_thread> st = 
             shared_ptr<sim_thread>(new sim_thread(i, s, tiles_per_thread[i],
                                                   num_cycles, num_packets,
@@ -228,6 +238,7 @@ sim::sim(shared_ptr<sys> s,
                                                   per_thread_packet_count,
                                                   per_thread_next_time,
                                                   enable_fast_forward,
+                                                  cpu_affinity,
                                                   thr_vcd));
         sim_threads.push_back(st);
         try {

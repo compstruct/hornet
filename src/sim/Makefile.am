@@ -1,4 +1,5 @@
-AM_CPPFLAGS = -I$(top_srcdir)/src/power \
+AM_CPPFLAGS = -I$(top_srcdir)/src/boost.task-0.4.2 \
+              -I$(top_srcdir)/src/power \
               -I$(top_srcdir)/src/net \
               -I$(top_srcdir)/src/pe \
               -I$(top_srcdir)/src/cpu \
@@ -6,7 +7,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/src/power \
               -I$(top_srcdir)/src/sys \
 	      $(BOOST_CPPFLAGS)
 AM_LDFLAGS = $(BOOST_LDFLAGS) $(BOOST_PROGRAM_OPTIONS_LIB) $(BOOST_THREAD_LIB) \
-             @LTLIBOBJS@
+             $(BOOST_SYSTEM_LIB) @LTLIBOBJS@
 AM_CXXFLAGS = -Wall -Werror
 
 bin_PROGRAMS = darsim

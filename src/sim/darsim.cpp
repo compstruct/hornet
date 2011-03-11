@@ -10,7 +10,9 @@
 #include <iterator>
 #include <algorithm>
 #include <boost/shared_ptr.hpp>
+#include <boost/lexical_cast.hpp>
 #include <boost/program_options.hpp>
+#include <boost/algorithm/string.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include "endian.hpp"
 #include "version.hpp"
@@ -133,7 +135,9 @@ int main(int argc, char **argv) {
          "show this help message and exit");
     hidden_opts_desc.add_options()
         ("mem-image", po::value<string>(), "memory image")
-        ("test-flags", po::value<uint64_t>(), "test flags");
+        ("test-flags", po::value<uint64_t>(), "test flags")
+        ("cpu-affinity", po::value<string>(),
+         "specify the threads-to-CPUs mapping (e.g., 0 1 2; default: automatic)");
     args_desc.add("mem-image", 1);
     po::variables_map opts;
     all_opts_desc.add(opts_desc).add(hidden_opts_desc);
@@ -310,6 +314,35 @@ int main(int argc, char **argv) {
     if (opts.count("test-flags")) {
         test_flags = opts["test-flags"].as<uint64_t>();
     }
+    vector<unsigned> cpu_affinities;
+    if (opts.count("cpu-affinity")) {
+        vector<string> ws;
+        split(ws, opts["cpu-affinity"].as<string>(), is_any_of(" \t\n"),
+              token_compress_on);
+        unsigned hw_concurrency = thread::hardware_concurrency();
+        for (vector<string>::iterator w = ws.begin(); w != ws.end(); ++w) {
+            if (w->size() == 0) continue;
+            unsigned cpu_id;
+            try {
+                cpu_id = lexical_cast<unsigned>(*w);
+            } catch (const bad_lexical_cast &) {
+                cerr << "ERROR: argument to --cpu-affinity not "
+                     << "a valid CPU ID " << *w << endl;
+                exit(1);
+            }
+            if (hw_concurrency > 0 && cpu_id >= hw_concurrency) {
+                cerr << "ERROR: invalid CPU ID " << cpu_id
+                     << " in --cpu-affinity (valid ID"
+                     << (hw_concurrency == 1 ? "" : "s") << ":";
+                for (unsigned i = 0; i < hw_concurrency; ++i) {
+                    cerr << " " << i;
+                }
+                cerr << ")" << endl;
+                exit(1);
+            }
+            cpu_affinities.push_back(cpu_id);
+        }
+    }
     try {
         s = new_system(0, mem_image, stats_start, events_files, memtraces_files,
                        random_seed, test_flags);
@@ -331,7 +364,8 @@ int main(int argc, char **argv) {
             // the_sim does not leave the scope until simulation ends
             shared_ptr<random_gen> rng(new random_gen(-2, random_seed));
             sim the_sim(s, num_cycles, num_packets, sync_period, concurrency,
-                        fast_forward, tile_mapping, vcd, syslog, rng);
+                        fast_forward, tile_mapping, cpu_affinities,
+                        vcd, syslog, rng);
         }
         ptime sim_end_time = microsec_clock::local_time();
         stats->end_sim();
