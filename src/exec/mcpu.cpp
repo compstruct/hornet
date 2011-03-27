@@ -751,7 +751,11 @@ inline uint32_t check_align(uint32_t addr, uint32_t mask) {
 
 void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     instr i = *ip;
+#ifdef EM2_PURE
     if (DEBUG_INSTR && !get_context()->migration_active) {
+#else
+    if (DEBUG_INSTR) {
+#endif
         cout << "[mcpu " << get_id() << ", " << current_context << ", " << get_context()->tid << "] "
              << hex << setfill('0') << setw(8) 
              << get_context()->pc << ": " << i /*<< " (cycle #: " << system_time << ")"*/ << endl;
