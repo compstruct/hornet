@@ -11,9 +11,40 @@ set_router::set_router(node_id i, logger &l, shared_ptr<random_gen> r) throw()
 
 set_router::~set_router() throw() { }
 
-void set_router::add_egress(shared_ptr<egress> egress) throw(err) { }
+void set_router::add_egress(shared_ptr<egress> eg) throw(err) { 
+    assert(egresses.find(eg->get_target_id()) == egresses.end());
+    egresses[eg->get_target_id()] = eg;
+}
 
 void set_router::route() throw(err) {
+    map<uint32_t, int> next_hop_cost;
+    for (egresses_t::const_iterator ei = egresses.begin(); ei != egresses.end(); ++ei) {
+        next_hop_cost[ei->first.get_numeric_id()] = 0;
+        if (multi_path_routing() == RT_ADAPTIVE_QUEUE) {
+            /* add -1 for each available queues per egress port */
+            const ingress::queues_t &eqs = ei->second->get_remote_queues();
+            for (ingress::queues_t::const_iterator eqi = eqs.begin(); eqi != eqs.end(); ++eqi) {
+                const shared_ptr<virtual_queue> &eq = eqi->second;
+                if (!m_vca->is_claimed(eq->get_id()) &&  
+                    !eq->back_is_full() && !eq->back_is_mid_packet()) {
+                    --next_hop_cost[ei->first.get_numeric_id()];
+                }
+            }
+        } else if (multi_path_routing() == RT_ADAPTIVE_PACKET) {
+            /* add +1 for each head packet routed for the egress port */
+            for (ingresses_t::iterator ii = ingresses.begin(); ii != ingresses.end(); ++ii) {
+                const ingress::queues_t &iqs = (*ii)->get_queues();
+                for (ingress::queues_t::const_iterator qi = iqs.begin(); qi != iqs.end(); ++qi) {
+                    if (!qi->second->front_is_empty()) {
+                        if (qi->second->front_vq_id().is_valid() ) {
+                            ++next_hop_cost[qi->second->front_node_id().get_numeric_id()];
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     for (ingresses_t::iterator ii = ingresses.begin(); ii != ingresses.end();
          ++ii) {
         const node_id src = (*ii)->get_src_node_id();
@@ -35,11 +66,27 @@ void set_router::route() throw(err) {
                 }
                 const route_nodes_t &nodes = ri->second;
                 assert(!nodes.empty());
-                double r = ran->random_range_double(nodes.back().get<2>());
                 node_id dst_n;
                 flow_id dst_f;
-                for (route_nodes_t::const_iterator ni = nodes.begin();
-                     ni != nodes.end(); ++ni) {
+                int min_cost = INT_MAX;
+                double prop_sum = 0.0f;
+                route_nodes_t next_hops;
+                for (route_nodes_t::const_iterator ni = nodes.begin(); ni != nodes.end(); ++ni) {
+                    node_id n; flow_id nf; double prop; tie(n,nf,prop) = *ni;
+                    if (min_cost > next_hop_cost[n.get_numeric_id()]) {
+                        next_hops.clear();
+                        min_cost = next_hop_cost[n.get_numeric_id()];
+                        prop_sum = prop;
+                        next_hops.push_back(make_tuple(n, nf, prop_sum));
+                    } else if (min_cost == next_hop_cost[n.get_numeric_id()]) {
+                        prop_sum += prop;
+                        next_hops.push_back(make_tuple(n, nf, prop_sum));
+                    }
+                }
+                assert(!next_hops.empty());
+                double r = ran->random_range_double(next_hops.back().get<2>());
+                for (route_nodes_t::const_iterator ni = next_hops.begin();
+                     ni != next_hops.end(); ++ni) {
                     node_id n; flow_id nf; double prop; tie(n,nf,prop) = *ni;
                     if (r < prop) {
                         dst_n = n;

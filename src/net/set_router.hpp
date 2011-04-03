@@ -28,6 +28,8 @@ private:
     typedef map<route_query_t, route_nodes_t> routes_t;
     routes_t routes;
     shared_ptr<random_gen> ran;
+    typedef map<node_id, shared_ptr<egress> > egresses_t;
+    egresses_t egresses;
 };
 
 #endif // __SET_ROUTER_HPP__

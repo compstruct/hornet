@@ -3,7 +3,7 @@
 
 #include "router.hpp"
 
-router::router(node_id i, logger &l) throw() : id(i), ingresses(), log(l) { }
+router::router(node_id i, logger &l) throw() : id(i), ingresses(), log(l), m_multi_path_routing(RT_PROBABILITY) { }
 
 router::~router() throw() { }
 
