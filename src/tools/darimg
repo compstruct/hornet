@@ -154,7 +154,7 @@ def write_header(out, verbose=False):
     out.write(w2bs(file_version))
 
 def write_pe(out, id, core, img, mem_locs, imem_locs, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_size,
-             n2b_queues, b2n_queues, one_q_per_f, one_f_per_q, verbose=False):
+             n2b_queues, b2n_queues, one_q_per_f, one_f_per_q, multi_path_routing, verbose=False):
     core_id = {
         'mips_mpi':0,
         'injector':1,
@@ -162,12 +162,21 @@ def write_pe(out, id, core, img, mem_locs, imem_locs, n2b_bw, b2n_bw, b2n_xbar_b
         'customCore':3,
         'mcpu':4
     }
+    multi_path_routing_id = {
+        'probability':0,
+        'adaptive_queue':1,
+        'adaptive_packet':2
+    }
     if verbose:
         print 'writing PE %d' % id
     # node
     out.write(w2bs(id))
     out.write(w2bs(1 if one_q_per_f else 0))
     out.write(w2bs(1 if one_f_per_q else 0))
+    if multi_path_routing_id.has_key(multi_path_routing):
+        out.write(w2bs(multi_path_routing_id[multi_path_routing]))
+    else:
+        raise Err('bad multi-path routing scheme : %s (must be one of %s)' % (multi_path_routing, str(multi_path_routing.keys())))
     out.write(w2bs(qmem_size))
     # bridge
     out.write(w2bs(n2b_bw))
@@ -178,9 +187,10 @@ def write_pe(out, id, core, img, mem_locs, imem_locs, n2b_bw, b2n_bw, b2n_xbar_b
     for q in b2n_queues: out.write(w2bs(q))
     out.write(w2bs(len(n2b_queues)))
     for q in n2b_queues: out.write(w2bs(q))
-    if core_id.has_key(core) == False:
+    if core_id.has_key(core):
+        out.write(w2bs(core_id[core]))
+    else:
         raise Err('bad core name : %s (must be one of %s)' % (core, str(core_id.keys())))
-    out.write(w2bs(core_id[core]))
     # core-specific cfgs
     # image      
     if core in ['mips_mpi']:
@@ -490,6 +500,10 @@ def new_system_config(cfg, verbose=False):
             one_f_per_q = cfg.getboolean('routing', 'one flow per queue')
         else:
             one_f_per_q = False
+        if cfg.has_option('routing', 'multi-path routing'):
+            multi_path_routing = cfg.get('routing', 'multi-path routing')
+        else:
+            multi_path_routing = 'probability'
         node_routing = cfg.get('routing', 'node')
         if node_routing not in ['table', 'weighted']:
             raise Error('bad node routing type: %s' % node_routing)
@@ -537,6 +551,7 @@ def new_system_config(cfg, verbose=False):
         nodes = [{ 'id': id,
                    'one_q_per_f': one_q_per_f,
                    'one_f_per_q': one_f_per_q,
+                   'multi_path_routing' : multi_path_routing,
                    'core': get_core(cores, id),
                    'img': get_code(progs, id),
                    'mem_locs' : [mem_locs['d'][level][id] for level in mem_levels] if cfg.has_section('memory hierarchy') else [],

@@ -181,10 +181,13 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         shared_ptr<router> n_rt(new set_router(id, log, ran));
         uint32_t one_q_per_f = read_word(img);
         uint32_t one_f_per_q = read_word(img);
+        uint32_t multi_path_routing = read_word(img);
+        n_rt->set_multi_path_routing((router::multi_path_routing_t)multi_path_routing);
         shared_ptr<channel_alloc>
             //n_vca(new set_channel_alloc(id, one_q_per_f, one_f_per_q, log, ran));
             n_vca(new set_channel_alloc(id, one_q_per_f, one_f_per_q, t->get_statistics(),
                   log, ran));//pengju
+        n_rt->set_virtual_channel_alloc(n_vca);
         shared_ptr<bridge_channel_alloc>
             b_vca(new set_bridge_channel_alloc(id, one_q_per_f, one_f_per_q,
                                                log, ran));
