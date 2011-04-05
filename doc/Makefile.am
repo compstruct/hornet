@@ -1,1 +1,1 @@
-SUBDIRS = design
+SUBDIRS = design manual
