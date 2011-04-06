@@ -4,9 +4,13 @@
 #ifndef __RTS_H__
 #define __RTS_H__
 
-/* INTERFACE */
+/* MIPS core syscall API */
 
-/* MIPS PRIMITIVES */
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Hardware
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 /* returns the ID of the CPU on which the program is executing */
 static unsigned cpu_id() __attribute__((const));
@@ -17,8 +21,337 @@ static unsigned cpu_cycle_counter();
 /* returns n s.t. the CPU cycle counter is incremented every n real cycles */
 static unsigned cpu_cycle_counter_resolution() __attribute__((const));
 
+/* returns the ID of the current thread; in cases where the thread does not move 
+   from its starting core, thread_id() == cpu_id() */
+static unsigned thread_id();
 
-/* NETWORK INTERFACE */
+/* effects: checks whether an asertion is true, and throws an error if it is 
+   not. */
+static void     __H_assert(int);
+
+/* effects: calls exit() with the provided error code */
+static void     __H_exit(int);
+
+//------------------------ Implementation --------------------------------------
+
+inline static unsigned cpu_id() {
+    unsigned result;
+    __asm__ ("rdhwr %0, $0;" : "=r"(result));
+    return result;
+}
+
+inline static unsigned cpu_cycle_counter() {
+    unsigned result;
+    __asm__ __volatile__ ("rdhwr %0, $2;" : "=r"(result));
+    return result;
+}
+
+inline static unsigned cpu_cycle_counter_resolution() {
+    unsigned result;
+    __asm__ ("rdhwr %0, $4;" : "=r"(result));
+    return result;
+}
+
+inline static void __H_assert(int b) {
+    __asm__ __volatile__
+    ("move $a0, %0; addiu $v0, $0, 0x12; syscall;"
+     : 
+     : "r"(b)
+     : "v0");
+}
+
+inline static unsigned thread_id() {
+    int ret;
+    __asm__ __volatile__
+    ("addiu $v0, $0, 0x78; syscall; move %0, $v0;"
+     : "=r"(ret)
+     : 
+     : "v0");
+    return ret;
+}
+
+inline static void __H_exit(int code) {
+    __asm__ __volatile__
+    ("move $a0, %0; addiu $v0, $0, 0x11; syscall;"
+     : 
+     : "r"(code)
+     : "a0", "v0");
+}
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Memory Hierarchy 
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+
+/* effects: turns on the Hornet memory hierarchy.  Before this function is 
+   called, all loads and stores are magic single-cycle operations. This magic 
+   mode is convenient when performing startup operations such as file I/O, as a 
+   means of speeding up the simulation. */
+static void     __H_enable_memory_hierarchy();
+
+/* effects: loads a word directly from backing store (DRAM), bypassing the 
+   memory hierarchy (regardless of whether __H_enable_memory_hierarchy has been 
+   called.  This can be used by a master thread to check whether a set of slave 
+   threads have finished a computation.
+   returns: the loaded word. */
+static int      __H_ucLoadWord(int *);
+
+/* effects: sets a specified bit (given by its position relative to the LSB) in 
+   the word specified by the address. The bit is set in a way that bypasses the 
+   memory hierarchy, regardless of whether __H_enable_memory_hierarchy has been 
+   called.  This can be used by slave threads to announce that they have 
+   finished a task. */
+static void     __H_ucSetBit(int *, int);
+
+//------------------------ Implementation --------------------------------------
+
+inline static void __H_enable_memory_hierarchy() {
+    __asm__ __volatile__
+    ("addiu $v0, $0, 0x77; syscall;"
+     : 
+     : 
+     : "v0");
+}
+
+inline static int __H_ucLoadWord(int * addr) {
+    int ret;
+    __asm__ __volatile__
+    ("move $a0, %1; addiu $v0, $0, 0x70; syscall; move %0, $v0;"
+     : "=r"(ret)
+     : "r"(addr)
+     : "a0", "v0");
+    return ret;
+}
+inline static void __H_ucSetBit(int * addr, int position) {
+    __asm__ __volatile__
+    ("move $a0, %0; move $a1, %1; addiu $v0, $0, 0x72; syscall;"
+     : 
+     : "r"(addr), "r"(position)
+     : "a0", "a1", "v0");
+}
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Printers
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+
+#define __prefix_double_out__   unsigned long int bot_o; \
+                                unsigned long int top_o;
+#define __prefix_double_in__    unsigned long long int temp = *((unsigned long long int *) (&in)); \
+                                unsigned long int bot_i = temp; \
+                                unsigned long int top_i = temp >> 32;
+#define __suffix_double__       unsigned long long int out = bot_o | (((unsigned long long int) top_o) << 32); \
+                                union { \
+		                                double f; \
+		                                unsigned long long int i; \
+	                                } u; \
+	                                u.i = out; \
+                                return u.f;
+
+/* effects: prints various types to standard output (line-buffered) */
+static void print_int(int);
+static void print_string(const char *);
+static void print_float(float);
+static void print_double(double);
+static void print_char(char);
+
+/* effects: flush std out; 
+   Note: all 'print_' functions place their output in std out. */
+static void     __H_fflush();
+
+//------------------------ Implementation --------------------------------------
+
+inline static void print_int(int n) {
+    __asm__ __volatile__
+        ("move $a0, %0; move $v0, $0; syscall;"
+         :
+         : "r"(n)
+         : "a0", "v0" );
+}
+
+inline static void print_string(const char *s) {
+    __asm__ __volatile__
+        ("move $a0, %0; addiu $v0, $0, 4; syscall;"
+         :
+         : "r"(s)
+         : "a0", "v0" );
+}
+
+inline static void print_float(float n) {
+    __asm__ __volatile__
+        ("move $a0, %0; addiu $v0, $0, 0x06; syscall;"
+         : 
+         : "r"(n)
+         : "a0", "v0" );
+}
+
+inline static void print_double(double in) {
+    __prefix_double_in__
+    __asm__ __volatile__
+        ("move $a0, %0; move $a1, %1; addiu $v0, $0, 0x07; syscall;"
+         :
+         : "r"(bot_i), "r"(top_i) 
+         : "a0", "a1", "v0");
+}
+
+inline static void print_char(char c) {
+    __asm__ __volatile__
+        ("move $a0, %0; addiu $v0, $0, 0x01; syscall;"
+         :
+         : "r"(c)
+         : "a0",  "v0");
+}
+
+inline static void __H_fflush() {
+    __asm__ __volatile__
+    ("addiu $v0, $0, 0x09; syscall;"
+     : 
+     : 
+     : "v0");
+}
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Function intrinsics
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+
+/* effects: perform single-point (_s) and double-point (_d) precision function 
+            intrinsics. 
+   returns: the float/double result */
+
+// Single precision instrinsics
+
+static float    __H_sqrt_s(float);
+static float    __H_log_s(float);
+static float    __H_exp_s(float);
+
+// Double precision intrinsics 
+
+static double   __H_sqrt_d(double);
+static double   __H_log_d(double);
+static double   __H_exp_d(double);
+
+//------------------------ Implementation --------------------------------------
+
+inline static float __H_sqrt_s(float in) {
+    float result;
+    __asm__ __volatile__
+        ("move $a0, %1; addiu $v0, $0, 0x40; syscall; move %0, $v0;"
+         : "=r"(result)
+         : "r"(in)
+         : "a0", "v0");
+    return result;
+}
+inline static float __H_log_s(float in) {
+    float result;
+    __asm__ __volatile__
+        ("move $a0, %1; addiu $v0, $0, 0x41; syscall; move %0, $v0;"
+         : "=r"(result)
+         : "r"(in)
+         : "a0", "v0");
+    return result;
+}
+inline static float __H_exp_s(float in) {
+    float result;
+    __asm__ __volatile__
+        ("move $a0, %1; addiu $v0, $0, 0x42; syscall; move %0, $v0;"
+         : "=r"(result)
+         : "r"(in)
+         : "a0", "v0");
+    return result;
+}
+
+inline static double __H_sqrt_d(double in) {
+    __prefix_double_in__
+    __prefix_double_out__
+    __asm__ __volatile__
+        ("move $a0, %2; move $a1, %3; addiu $v0, $0, 0x50; syscall; move %0, $v0; move %1, $v1;"
+         : "=r"(bot_o), "=r"(top_o) 
+         : "r"(bot_i), "r"(top_i)
+         : "a0", "a1", "v0", "v1");
+    __suffix_double__
+}
+inline static double __H_log_d(double in) {
+    __prefix_double_in__
+    __prefix_double_out__
+    __asm__ __volatile__
+        ("move $a0, %2; move $a1, %3; addiu $v0, $0, 0x51; syscall; move %0, $v0; move %1, $v1;"
+         : "=r"(bot_o), "=r"(top_o) 
+         : "r"(bot_i), "r"(top_i)
+         : "a0", "a1", "v0", "v1");
+    __suffix_double__
+}
+inline static double __H_exp_d(double in) {
+    __prefix_double_in__
+    __prefix_double_out__
+    __asm__ __volatile__
+        ("move $a0, %2; move $a1, %3; addiu $v0, $0, 0x52; syscall; move %0, $v0; move %1, $v1;"
+         : "=r"(bot_o), "=r"(top_o) 
+         : "r"(bot_i), "r"(top_i)
+         : "a0", "a1", "v0", "v1");
+    __suffix_double__
+}
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// File I/O
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+
+/* effects: takes a filename and opens a file. 
+   returns: a handle (unique id) to the opened file.
+   NOTE: Only one file can be opened at a time right now.  In order to open 
+   multiple files in a single program, call open/close multiple times. */
+static int      __H_fopen(char *);
+
+/* effects: takes a file handle (returned from __H_fopen), a destination buffer, 
+   and a byte count, and writes the requested number of bytes from the file into 
+   the buffer. 
+   returns: the number of bytes successfully transferred. */
+static int      __H_read_line(int, char *, int);
+
+/* effects: given a file handle, closes the file. 
+   returns: 0 if the operation was sucessfull. */
+static int      __H_fclose(int);
+
+//------------------------ Implementation --------------------------------------
+
+inline static int __H_fopen(char * fname) {
+    int ret;
+    __asm__ __volatile__
+    ("move $a0, %1; addiu $v0, $0, 0x60; syscall; move %0, $v0;"
+     : "=r"(ret)
+     : "r"(fname)
+     : "a0", "v0");
+    return ret;
+}
+inline static int __H_read_line(int fid, char * dest, int count) {
+    int ret;
+    __asm__ __volatile__
+    ("move $a0, %1; move $a1, %2; move $a2, %3; addiu $v0, $0, 0x61; syscall; move %0, $v0;"
+     : "=r"(ret)
+     : "r"(fid), "r"(dest), "r"(count)
+     : "a0", "a1", "a2", "v0");
+    return ret;
+}
+inline static int __H_fclose(int fid) {    
+    int ret;
+    __asm__ __volatile__
+    ("move $a0, %1; addiu $v0, $0, 0x62; syscall; move %0, $v0;"
+     : "=r"(ret)
+     : "r"(fid)
+     : "a0", "v0");
+    return ret;
+}
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Network Interface
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 /* effects: transmits a length-byte packet starting at src on flow flow_id
  *          (if length is not divisible by 8 then the effects are undefined)
@@ -57,37 +390,7 @@ static unsigned next_packet_flow(unsigned queue);
  */
 static unsigned next_packet_length(unsigned queue);
 
-
-/* SIMULATOR-ONLY CONVENIENCE FUNCTIONS */
-
-/* effects: prints the given integer to standard output (line-buffered) */
-static void print_int(int);
-
-/* effects: prints the given string to standard output (line-buffered) */
-static void print_string(const char *);
-
-/* effects: halts the processor */
-extern void halt() __attribute__((__noreturn__));
-
-/* IMPLEMENTATION */
-
-inline static unsigned cpu_id() {
-    unsigned result;
-    __asm__ ("rdhwr %0, $0;" : "=r"(result));
-    return result;
-}
-
-inline static unsigned cpu_cycle_counter() {
-    unsigned result;
-    __asm__ __volatile__ ("rdhwr %0, $2;" : "=r"(result));
-    return result;
-}
-
-inline static unsigned cpu_cycle_counter_resolution() {
-    unsigned result;
-    __asm__ ("rdhwr %0, $4;" : "=r"(result));
-    return result;
-}
+//------------------------ Implementation --------------------------------------
 
 inline static unsigned send(unsigned flow_id, const void *src, unsigned len) {
     unsigned result;
@@ -151,121 +454,26 @@ inline static unsigned next_packet_length(unsigned queue) {
     return result;
 }
 
-inline static void print_int(int n) {
-    __asm__ __volatile__
-        ("move $a0, %0; move $v0, $0; syscall;"
-         :
-         : "r"(n)
-         : "a0", "v0" );
-}
-
-inline static void print_string(const char *s) {
-    __asm__ __volatile__
-        ("move $a0, %0; addiu $v0, $0, 4; syscall;"
-         :
-         : "r"(s)
-         : "a0", "v0" );
-}
-
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// added for blackscholes (CF ~2/5/11)
+// Dynamic Memory Management
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
-// Headers ---------------------------------------------------------------------
+/* Implementations of several dynamic memory management routines from the C 
+standard libraries. (Malloc and friends) */
 
-/* A short explanation of the data structure and algorithms. An area returned by 
-malloc() is called a slot. Each slot contains the number of bytes requested, but 
-preceeded by an extra pointer to the next the slot in memory. '_bottom' and 
-'_top' point to the first/last slot. More memory is asked for using brk() and 
-appended to top. The list of free slots is maintained to keep malloc() fast. 
-'_empty' points the the first free slot. Free slots are linked together by a 
-pointer at the start of the user visable part, so just after the next-slot 
-pointer. Free slots are merged together by free(). */
-/* CF~ 2/5/11: for blackscholes, we only setup memory once, and assume that we 
-have enough.  So we forget about keeping track of the end of the program data 
-segments. */
-//extern void *_sbrk(int);
-//extern int _brk(void *);
 static void *_bottom, *_top, *_empty;
+
 static void * memcpy(void *dst, const void *src, unsigned int len) __attribute__((unused));
 static void * malloc(unsigned int) __attribute__((unused));
 static void * realloc(void *oldp, unsigned int size) __attribute__((unused));
 static void free(void *) __attribute__((unused));
 
-/* effects: perform single-point (_s) and double-point (_d) precision function 
-            intrinsics. 
-   returns: the float/double result */
-static float    __H_sqrt_s(float);
-static float    __H_log_s(float);
-static float    __H_exp_s(float);
-static double   __H_sqrt_d(double);
-static double   __H_log_d(double);
-static double   __H_exp_d(double);
-
-/* effects: prints various types to std out */
-static void     print_float(float);
-static void     print_double(double);
-static void     print_char(char);
-
-/* effects: flush std out */
-static void     __H_fflush();
-
-/* effects: takes a filename and opens a file. 
-   returns: a handle (unique id) to the opened file. */
-static int      __H_fopen(char *);
-
-/* effects: takes a file handle (returned from __H_fopen), a destination buffer, 
-   and a byte count, and writes the requested number of bytes from the file into 
-   the buffer. 
-   returns: the number of bytes successfully transferred. */
-static int      __H_read_line(int, char *, int);
-
-/* effects: given a file handle, closes the file. 
-   returns: 0 if the operation was sucessfull. */
-static int      __H_fclose(int);
-
-/* effects: turns on the Hornet memory hierarchy.  Before this function is 
-   called, all loads and stores are magic single-cycle operations. This magic 
-   mode is important when data is being read and written directly from backing 
-   store (such as with __H_read_line calls) and memory is not coherent. */
-static void     __H_enable_memory_hierarchy();
-
-/* effects: loads a word directly from backing store (DRAM), bypassing the 
-   memory hierarchy (regardless of whether __H_enable_memory_hierarchy has been 
-   called. 
-   returns: the loaded word. */
-static int      __H_ucLoadWord(int *);
-
-/* effects: sets a specified bit (given by its position relative to the LSB) in 
-   the word specified by the address. The bit is set in a way that bypasses the 
-   memory hierarchy, regardless of whether __H_enable_memory_hierarchy has been 
-   called. */
-static void     __H_ucSetBit(int *, int);
-
-/* effects: calls exit() with the provided error code */
-static void     __H_exit(int);
-
-/* effects: checks whether an asertion is true, and throws an error if it is 
-   not.  CURRENTLY UNIMPLEMENTED (2/14/11) */
-static void     __H_assert(int);
-
-/* returns the ID of the current thread */
-static unsigned thread_id();
-
-// Helpers ---------------------------------------------------------------------
-
-#define __prefix_double_out__   unsigned long int bot_o; \
-                                unsigned long int top_o;
-#define __prefix_double_in__    unsigned long long int temp = *((unsigned long long int *) (&in)); \
-                                unsigned long int bot_i = temp; \
-                                unsigned long int top_i = temp >> 32;
-#define __suffix_double__       unsigned long long int out = bot_o | (((unsigned long long int) top_o) << 32); \
-                                union { \
-		                                double f; \
-		                                unsigned long long int i; \
-	                                } u; \
-	                                u.i = out; \
-                                return u.f;
+/* If we assume that the OS will always give us more memory, we can ignore sbrk 
+and brk */
+//extern void *_sbrk(int);
+//extern int _brk(void *);
 
 // Memory management -----------------------------------------------------------
 
@@ -276,29 +484,29 @@ static unsigned thread_id();
 #include <string.h>
 #endif
 
-  /* replace undef by define */
-  #undef   DEBUG          /* check assertions */
-  #undef   SLOWDEBUG      /* some extra test loops (requires DEBUG) */
+/* replace undef by define */
+#undef   DEBUG          /* check assertions */
+#undef   SLOWDEBUG      /* some extra test loops (requires DEBUG) */
 
-  #ifndef DEBUG
-  #define NDEBUG
-  #endif
+#ifndef DEBUG
+#define NDEBUG
+#endif
 
-  #if _EM_WSIZE == _EM_PSIZE
-  #define ptrint          int
-  #else
-  #define ptrint          long
-  #endif
+#if _EM_WSIZE == _EM_PSIZE
+#define ptrint          int
+#else
+#define ptrint          long
+#endif
 
-  #if     _EM_PSIZE == 2
-  #define BRKSIZE         1024
-  #else
-  #define BRKSIZE         4096
-  #endif
-  #define PTRSIZE         ((int) sizeof(void *))
-  #define Align(x,a)      (((x) + (a - 1)) & ~(a - 1))
-  #define NextSlot(p)     (* (void **) ((p) - PTRSIZE))
-  #define NextFree(p)     (* (void **) (p))
+#if     _EM_PSIZE == 2
+#define BRKSIZE         1024
+#else
+#define BRKSIZE         4096
+#endif
+#define PTRSIZE         ((int) sizeof(void *))
+#define Align(x,a)      (((x) + (a - 1)) & ~(a - 1))
+#define NextSlot(p)     (* (void **) ((p) - PTRSIZE))
+#define NextFree(p)     (* (void **) (p))
 
 static void * memcpy(void *dst, const void *src, unsigned int len) {
 	unsigned int i;
@@ -452,196 +660,17 @@ static void free(void *ptr) {
 	}
 }
 
-// Single precision intrinsics -------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Currently Unimplemented
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
-inline static float __H_sqrt_s(float in) {
-    float result;
-    __asm__ __volatile__
-        ("move $a0, %1; addiu $v0, $0, 0x40; syscall; move %0, $v0;"
-         : "=r"(result)
-         : "r"(in)
-         : "a0", "v0");
-    return result;
-}
-inline static float __H_log_s(float in) {
-    float result;
-    __asm__ __volatile__
-        ("move $a0, %1; addiu $v0, $0, 0x41; syscall; move %0, $v0;"
-         : "=r"(result)
-         : "r"(in)
-         : "a0", "v0");
-    return result;
-}
-inline static float __H_exp_s(float in) {
-    float result;
-    __asm__ __volatile__
-        ("move $a0, %1; addiu $v0, $0, 0x42; syscall; move %0, $v0;"
-         : "=r"(result)
-         : "r"(in)
-         : "a0", "v0");
-    return result;
-}
-
-// Double precision intrinsics -------------------------------------------------
-
-inline static double __H_sqrt_d(double in) {
-    __prefix_double_in__
-    __prefix_double_out__
-    __asm__ __volatile__
-        ("move $a0, %2; move $a1, %3; addiu $v0, $0, 0x50; syscall; move %0, $v0; move %1, $v1;"
-         : "=r"(bot_o), "=r"(top_o) 
-         : "r"(bot_i), "r"(top_i)
-         : "a0", "a1", "v0", "v1");
-    __suffix_double__
-}
-inline static double __H_log_d(double in) {
-    __prefix_double_in__
-    __prefix_double_out__
-    __asm__ __volatile__
-        ("move $a0, %2; move $a1, %3; addiu $v0, $0, 0x51; syscall; move %0, $v0; move %1, $v1;"
-         : "=r"(bot_o), "=r"(top_o) 
-         : "r"(bot_i), "r"(top_i)
-         : "a0", "a1", "v0", "v1");
-    __suffix_double__
-}
-inline static double __H_exp_d(double in) {
-    __prefix_double_in__
-    __prefix_double_out__
-    __asm__ __volatile__
-        ("move $a0, %2; move $a1, %3; addiu $v0, $0, 0x52; syscall; move %0, $v0; move %1, $v1;"
-         : "=r"(bot_o), "=r"(top_o) 
-         : "r"(bot_i), "r"(top_i)
-         : "a0", "a1", "v0", "v1");
-    __suffix_double__
-}
-
-// File IO ---------------------------------------------------------------------
-
-inline static int __H_fopen(char * fname) {
-    int ret;
-    __asm__ __volatile__
-    ("move $a0, %1; addiu $v0, $0, 0x60; syscall; move %0, $v0;"
-     : "=r"(ret)
-     : "r"(fname)
-     : "a0", "v0");
-    return ret;
-}
-inline static int __H_read_line(int fid, char * dest, int count) {
-    int ret;
-    __asm__ __volatile__
-    ("move $a0, %1; move $a1, %2; move $a2, %3; addiu $v0, $0, 0x61; syscall; move %0, $v0;"
-     : "=r"(ret)
-     : "r"(fid), "r"(dest), "r"(count)
-     : "a0", "a1", "a2", "v0");
-    return ret;
-}
-inline static int __H_fclose(int fid) {    
-    int ret;
-    __asm__ __volatile__
-    ("move $a0, %1; addiu $v0, $0, 0x62; syscall; move %0, $v0;"
-     : "=r"(ret)
-     : "r"(fid)
-     : "a0", "v0");
-    return ret;
-}
-
-// DARSIM-C --------------------------------------------------------------------
-
-inline static void __H_enable_memory_hierarchy() {
-    __asm__ __volatile__
-    ("addiu $v0, $0, 0x77; syscall;"
-     : 
-     : 
-     : "v0");
-}
-
-// Uncached loads/stores -------------------------------------------------------
-
-inline static int __H_ucLoadWord(int * addr) {
-    int ret;
-    __asm__ __volatile__
-    ("move $a0, %1; addiu $v0, $0, 0x70; syscall; move %0, $v0;"
-     : "=r"(ret)
-     : "r"(addr)
-     : "a0", "v0");
-    return ret;
-}
-inline static void __H_ucSetBit(int * addr, int position) {
-    __asm__ __volatile__
-    ("move $a0, %0; move $a1, %1; addiu $v0, $0, 0x72; syscall;"
-     : 
-     : "r"(addr), "r"(position)
-     : "a0", "a1", "v0");
-}
-
-// Printers --------------------------------------------------------------------
-
-inline static void print_float(float n) {
-    __asm__ __volatile__
-        ("move $a0, %0; addiu $v0, $0, 0x06; syscall;"
-         : 
-         : "r"(n)
-         : "a0", "v0" );
-}
-inline static void print_double(double in) {
-    __prefix_double_in__
-    __asm__ __volatile__
-        ("move $a0, %0; move $a1, %1; addiu $v0, $0, 0x07; syscall;"
-         :
-         : "r"(bot_i), "r"(top_i) 
-         : "a0", "a1", "v0");
-}
-inline static void print_char(char c) {
-    __asm__ __volatile__
-        ("move $a0, %0; addiu $v0, $0, 0x01; syscall;"
-         :
-         : "r"(c)
-         : "a0",  "v0");
-}
-
-inline static void __H_fflush() {
-    __asm__ __volatile__
-    ("addiu $v0, $0, 0x09; syscall;"
-     : 
-     : 
-     : "v0");
-}
-
-// Misc ------------------------------------------------------------------------
-
-inline static void __H_exit(int code) {
-    __asm__ __volatile__
-    ("move $a0, %0; addiu $v0, $0, 0x11; syscall;"
-     : 
-     : "r"(code)
-     : "a0", "v0");
-}
 inline static int __H_printf(const char * format, ...) {
     __asm__ __volatile__
         ("sll $0, $0, $0"); // does nothing right now
     return 0;
 }
 
-inline static void __H_assert(int b) {
-    __asm__ __volatile__
-    ("move $a0, %0; addiu $v0, $0, 0x12; syscall;"
-     : 
-     : "r"(b)
-     : "v0");
-}
-
-inline static unsigned thread_id() {
-    int ret;
-    __asm__ __volatile__
-    ("addiu $v0, $0, 0x78; syscall; move %0, $v0;"
-     : "=r"(ret)
-     : 
-     : "v0");
-    return ret;
-}
-
 //------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-
 #endif /* __RTS_H__ */
-
