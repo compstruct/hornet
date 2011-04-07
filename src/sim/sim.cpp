@@ -50,6 +50,7 @@ sim_thread::sim_thread(uint32_t new_thread_index,
       cpu(cpu_affinity), vcd(new_vcd) { }
 
 void sim_thread::operator()() {
+    if (my_tile_ids.empty()) return;
     if (cpu >= 0) {
         this_thread::bind_to_processor(cpu);
     }
@@ -57,7 +58,6 @@ void sim_thread::operator()() {
     uint64_t sync_count = 0; // count only post-negedge syncs
     while (sync_count < global_max_sync_count) {
         if (vcd) vcd->commit();
-        assert(!my_tile_ids.empty());
         for (vector<tile_id>::const_iterator ti = my_tile_ids.begin();
              ti != my_tile_ids.end(); ++ti) {
             s->tick_positive_edge_tile(*ti);
