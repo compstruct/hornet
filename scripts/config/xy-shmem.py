@@ -126,11 +126,13 @@ def write_header(out=sys.stdout):
     global width, height, num_flits_per_vc, from_cpu_bandwidth, to_cpu_bandwidth, node_link_bandwidth, num_xbar_input_per_node
     global core_name
     default_l1_locations = ''
+    default_l2_locations = ''
     default_dram_ctrl_locations = ''
     for y in range(0, height):
         for x in range(0, width):
             default_l1_locations += '%d ' % (y*width + x)
-            default_dram_ctrl_locations += '%d ' % (y*width if x < width/2 else y*width + (width-1)) 
+            default_l2_locations += '%d ' % (y*width + x)
+            default_dram_ctrl_locations += '%d ' % (x%width if y < height/2 else (height-1)*width+x%width) 
     template = string.Template('''\
 [geometry]
 height = $x
@@ -165,11 +167,18 @@ default = $core
 
 [memory hierarchy]
 1 = $l1_locs
-2 = $dc_locs''')
+2 = $l2_locs
+3 = $dc_locs
+
+[instruction memory hierarchy]
+1 = $l1_locs
+2 = $l2_locs
+3 = $dc_locs''')
     contents = template.substitute(x=width, y=height, qsize=num_flits_per_vc, 
                                    cpu2net_bw=from_cpu_bandwidth, net2cpu_bw=to_cpu_bandwidth, 
                                    link_bw=node_link_bandwidth, mux=num_xbar_input_per_node,
-                                   core=core_name, l1_locs=default_l1_locations, dc_locs=default_dram_ctrl_locations,
+                                   core=core_name, l1_locs=default_l1_locations, l2_locs=default_l2_locations,
+                                   dc_locs=default_dram_ctrl_locations,
                                    net2cpu=' '.join(['%d' % q for q in get_vcs('to_cpu')]),
                                    cpu2net=' '.join(['%d' % q for q in get_vcs('from_cpu')]),
                                    left=' '.join(['%d' % q for q in get_vcs((-1,0))]),
