@@ -91,5 +91,6 @@ AC_OUTPUT(\
     tests/Makefile \
     doc/Makefile \
     doc/design/Makefile \
+    doc/manual/Makefile \
     )
 
