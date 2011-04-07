@@ -230,7 +230,7 @@ east = $lt
 south = $up
 west = $rt
 
-[code]
+[core]
 default = injector''')
     contents = template.substitute(width=width, height=height,
                                    bw=bw, cpubw=cpubw,
