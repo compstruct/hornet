@@ -21,16 +21,15 @@ static unsigned cpu_cycle_counter();
 /* returns n s.t. the CPU cycle counter is incremented every n real cycles */
 static unsigned cpu_cycle_counter_resolution() __attribute__((const));
 
-/* returns the ID of the current thread; in cases where the thread does not move 
-   from its starting core, thread_id() == cpu_id() */
-static unsigned thread_id();
-
 /* effects: checks whether an asertion is true, and throws an error if it is 
    not. */
 static void     __H_assert(int);
 
 /* effects: calls exit() with the provided error code */
 static void     __H_exit(int);
+
+/* effects: halts the processor */
+extern void halt() __attribute__((__noreturn__));
 
 //------------------------ Implementation --------------------------------------
 
@@ -58,16 +57,6 @@ inline static void __H_assert(int b) {
      : 
      : "r"(b)
      : "v0");
-}
-
-inline static unsigned thread_id() {
-    int ret;
-    __asm__ __volatile__
-    ("addiu $v0, $0, 0x78; syscall; move %0, $v0;"
-     : "=r"(ret)
-     : 
-     : "v0");
-    return ret;
 }
 
 inline static void __H_exit(int code) {
@@ -665,6 +654,20 @@ static void free(void *ptr) {
 // Currently Unimplemented
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
+
+/* returns the ID of the current thread; in cases where the thread does not move 
+   from its starting core, thread_id() == cpu_id() */
+static unsigned thread_id();
+
+inline static unsigned thread_id() {
+    int ret;
+    __asm__ __volatile__
+    ("addiu $v0, $0, 0x78; syscall; move %0, $v0;"
+     : "=r"(ret)
+     : 
+     : "v0");
+    return ret;
+}
 
 inline static int __H_printf(const char * format, ...) {
     __asm__ __volatile__

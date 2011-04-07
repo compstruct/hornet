@@ -391,7 +391,7 @@ int bs_thread(void *tid_ptr) {
 ////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char **argv)
 {
-	unsigned id = thread_id();
+	unsigned id = cpu_id();
 
 #ifdef ENABLE_THREADS_HORNET
 	nThreads = 4;
