@@ -541,12 +541,10 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     case IC_ANDI: op3ui(&); break;
     case IC_B: branch(); break;
     case IC_BAL: branch_link(); break;
-    case IC_BC1F: unimplemented_instr(i, pc);
-    case IC_BC1FL: unimplemented_instr(i, pc);
-    case IC_BC1T: // FP
-        if (get_cp1_cf(cfr(0))) branch(); 
-        break;
-    case IC_BC1TL: unimplemented_instr(i, pc);
+    case IC_BC1F: if (!get_cp1_cf(i.get_cc())) branch(); break;
+    case IC_BC1FL: if (!get_cp1_cf(i.get_cc())) branch_link(); break;
+    case IC_BC1T: if (get_cp1_cf(i.get_cc())) branch(); break;
+    case IC_BC1TL: if (get_cp1_cf(i.get_cc())) branch_link(); break;
     case IC_BC2F: unimplemented_instr(i, pc);
     case IC_BC2FL: unimplemented_instr(i, pc);
     case IC_BC2T: unimplemented_instr(i, pc);
