@@ -44,7 +44,7 @@ public:
 
     /* read from current instruction - valid for INST_MEMORY only */
     bool is_read();
-    uint64_t address();
+    maddr_t maddr();
     uint32_t word_count();
 
     /* for now, one native core per thread */
@@ -52,7 +52,7 @@ public:
     inline void set_native_core(int core) { m_native_core = core; }
 
     /* add instructions */
-    void add_mem_inst(uint32_t alu_cost, bool write, uint64_t addr, uint32_t word_count);
+    void add_mem_inst(uint32_t alu_cost, bool write, maddr_t maddr, uint32_t word_count);
     void add_non_mem_inst(uint32_t repeats);
 
 private:
@@ -62,7 +62,7 @@ private:
         uint32_t remaining_alu_cost;
         inst_type_t type;
         bool is_read;
-        uint64_t addr;
+        maddr_t maddr;
         uint32_t word_count;
         /* stats */
         uint64_t memory_issued_time;

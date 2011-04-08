@@ -24,14 +24,8 @@
 #include "sys.hpp"
 #include "ginj.hpp"
 #include "core.hpp"
-#include "mcpu.hpp"
 #include "memtraceCore.hpp"
 #include "memtraceThread.hpp"
-#include "memtraceThreadPool.hpp"
-#include "cache.hpp"
-#include "homeCache.hpp"
-#include "awayCache.hpp"
-#include "remoteMemory.hpp"
 #include "dramController.hpp"
 
 typedef enum {
@@ -95,9 +89,8 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
             if (strcmp(word.c_str(), "Thread") == 0) {
                 uint32_t th_id, interval;
                 int home;
-                maddr_t addr, pc;
+                uint64_t addr, pc;
                 char rw;
-                uint32_t byte_count = 4; /* 4byte word is assumed */
                 try {
                     l >> hex >> th_id >> addr >> rw >> pc >> home >> interval;
                 } catch (const err &e) {
@@ -105,9 +98,14 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
                 }
 
                 /* Massaging traces */
-                /* for now, force 32bit aligned access - TODO : check with anthracite virtual address space */
+                /* for now, force 32bit-aligned, one-word, shared accesses only */
+                maddr_t maddr;
                 addr = addr - addr % 4;
+                maddr.mem_space_id = 0;
+                maddr.address = addr;
                 home = home % num_cores;
+                // TODO : support static CAT
+                uint32_t word_count = 1; /* 4byte word is assumed */
 
                 thread = pool->find(th_id);
                 if (thread == NULL) {
@@ -117,7 +115,7 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
                 if (interval > 0) {
                     thread->add_non_mem_inst(interval);
                 }
-                thread->add_mem_inst(1, (rw == 'W')? true : false, addr, home, byte_count); 
+                thread->add_mem_inst(1, (rw == 'W')? true : false, maddr, word_count); 
             }
         }
     }
@@ -164,13 +162,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     vector<shared_ptr<memtraceCore> > memtrace_cores;
     shared_ptr<memtraceThreadPool> memtrace_thread_pool(new memtraceThreadPool());
 
-    // TODO: changed from null ptr
-    // CF: changed to support common DRAM for all cores
     shared_ptr<dram> new_dram(new dram ());
-    //shared_ptr<dram> new_dram = shared_ptr<dram>();
-#ifdef WRITE_NOW
-    shared_ptr<map<uint32_t, shared_ptr<awayCache> > > awayCache_list ( new map<uint32_t, shared_ptr<awayCache> >());
-#endif
 
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
@@ -263,239 +255,35 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             break;
         }
         case CORE_MEMTRACE: {
-            memtraceCore::memtraceCore_cfg_t mc_cfgs;
-            mc_cfgs.max_threads = 2;
-            mc_cfgs.flits_per_mig = 2;
-            mc_cfgs.em_type = memtraceCore::EM_NONE;
-            mc_cfgs.ra_type = memtraceCore::RA_ONLY;
-            mc_cfgs.ra_distance_threshold = 3;
-            mc_cfgs.network_width = 8;
-            mc_cfgs.library_type = memtraceCore::LIBRARY_ONLY;
 
-#ifdef LIBRARY_COMPETITION
-            mc_cfgs.em_type = memtraceCore::EM_NONE;
-            mc_cfgs.ra_type = memtraceCore::RA_ONLY;
-            mc_cfgs.library_type = memtraceCore::LIBRARY_ONLY;
-#endif
-            core::core_cfg_t core_cfgs;
-            core_cfgs.flits_per_mem_msg_header = 1;
-            core_cfgs.bytes_per_flit = 16;
-            core_cfgs.msg_queue_size = 2;
-            core_cfgs.memory_server_process_time = 1;
-            core_cfgs.max_active_remote_mem_requests = 8;
-            core_cfgs.support_library = true;
-#ifdef LIBRARY_COMPETITION
-            core_cfgs.support_library = true;
-#endif
+            // dram controller configuration
+            // memory configuration 
 
-            shared_ptr<memtraceCore> new_core(new memtraceCore(id, t->get_time(), 
-                                                           t->get_packet_id_factory(), t->get_statistics(),
-                                                           log, ran, 
-                                                           memtrace_thread_pool,
-                                                           mc_cfgs, core_cfgs));
-            p = new_core;
-            memtrace_cores.push_back(new_core);
+            // core configuration 
 
-            remoteMemory::remoteMemory_cfg_t rm_cfgs;
-            rm_cfgs.process_time = 1;
-            shared_ptr<remoteMemory> rm(new remoteMemory(id, 1, t->get_time(), t->get_statistics(), log, ran, rm_cfgs));
-            new_core->add_remote_memory(rm);
-            shared_ptr<cache> last_local_cache = shared_ptr<cache>();
+            // construction 
 
-            uint32_t total_levels = read_word(img);
-            assert(total_levels > 0);
-            vector<uint32_t> locs;
+            // p = new_core;
+            // memtrace_cores.push_back(new_core);
 
-            /* when using the library scheme, must have at least L1 cache */
-            assert(!core_cfgs.support_library || total_levels > 1);
-
-            for (uint32_t i = 0; i < total_levels; ++i) {
-                uint32_t loc = read_word(img);
-                if (loc == id) {
-                    shared_ptr<memory> new_memory;
-                    if (i == total_levels - 1) {
-                        /* create dram controller */
-                        dramController::dramController_cfg_t dc_cfgs;
-                        if (!new_dram) {
-                            new_dram = shared_ptr<dram> (new dram ());
-                        }
-                        dc_cfgs.use_lock = true;
-                        dc_cfgs.off_chip_latency = 60;
-                        dc_cfgs.bytes_per_cycle = 1; 
-                        dc_cfgs.dram_process_time = 10;
-                        dc_cfgs.dc_process_time = 1;
-                        dc_cfgs.header_size_bytes = 8;
-#ifdef LIBRARY_COMPETITION
-                        /* DRAM Controller parameters for the library competition */
-                        dc_cfgs.use_lock = true;
-                        dc_cfgs.off_chip_latency = 60;
-                        dc_cfgs.bytes_per_cycle = 1; 
-                        dc_cfgs.dram_process_time = 10;
-                        dc_cfgs.dc_process_time = 1;
-                        dc_cfgs.header_size_bytes = 8;
-#endif
-                        shared_ptr<dramController> dc (new dramController (id, i+1, t->get_time(), 
-                                    t->get_statistics(), log, ran, new_dram, dc_cfgs));
-                        new_memory = dc;
-                        if (last_local_cache) {
-                            last_local_cache->set_home_memory(new_memory);
-                            last_local_cache->set_home_location(loc, i+1);
-                        }
-                    } else {
-                        /* create cache*/
-                        /* it's a new level of cache */
-                        cache::cache_cfg_t cache_cfgs;
-                        cache_cfgs.associativity = 2;
-                        cache_cfgs.block_size_bytes = 16;
-                        cache_cfgs.total_block = (i == 0)? 64 : 256;
-                        cache_cfgs.process_time = 1;
-                        cache_cfgs.block_per_cycle = 1;
-                        cache_cfgs.policy = cache::CACHE_RANDOM;
-#ifdef LIBRARY_COMPETITION
-                        /* L1 Cache parameters for the library competition */
-                        cache_cfgs.associativity = 2;
-                        cache_cfgs.block_size_bytes = 16;
-                        cache_cfgs.total_block = (i == 0)? 64 : 256;
-                        cache_cfgs.process_time = 1;
-                        cache_cfgs.block_per_cycle = 1;
-                        cache_cfgs.policy = cache::CACHE_LRU;
-#endif
-                        shared_ptr<cache> new_cache;
-                        if (core_cfgs.support_library) {
-                            /* When using the library scheme, use homeCache for L1 */
-                            new_cache = shared_ptr<cache>( new homeCache (id, i+1, t->get_time(), 
-                                        t->get_statistics(), log, ran, cache_cfgs));
-#ifdef WRITE_NOW
-                            static_pointer_cast<homeCache, cache>(new_cache)->set_awayCache_list(awayCache_list);
-#endif
-                        } else {
-                            new_cache = shared_ptr<cache>( new cache (id, i+1, t->get_time(), 
-                                        t->get_statistics(), log, ran, cache_cfgs));
-                        }
-                        new_memory = new_cache;
-                        if (last_local_cache) {
-                            last_local_cache->set_home_memory(new_memory);
-                            last_local_cache->set_home_location(loc, i+1);
-                        }
-                        last_local_cache = new_cache;
-                    }
-                    new_core->add_to_memory_hierarchy(i+1, new_memory);
-                } else  {
-                    if (i == 0) {
-                        rm->set_remote_home(loc, i+1);
-                    }
-                    if (last_local_cache) {
-                        last_local_cache->set_home_memory(rm);
-                        last_local_cache->set_home_location(loc, i+1);
-                    }
-                    last_local_cache = shared_ptr<cache>();
-                }
-            }
-
-            cache::cache_cfg_t cache_cfgs;
-            cache_cfgs.associativity = 2;
-            cache_cfgs.block_size_bytes = 16;
-            cache_cfgs.total_block = 64;
-            cache_cfgs.process_time = 1;
-            cache_cfgs.block_per_cycle = 1;
-            cache_cfgs.policy = cache::CACHE_RANDOM;
-#ifdef LIBRARY_COMPETITION
-            /* Away cache parameters for the library competition */
-            cache_cfgs.associativity = 2;
-            cache_cfgs.block_size_bytes = 16;
-            cache_cfgs.total_block = 64;
-            cache_cfgs.process_time = 1;
-            cache_cfgs.block_per_cycle = 1;
-            cache_cfgs.policy = cache::CACHE_LRU;
-#endif
-            if (core_cfgs.support_library) {
-                shared_ptr<awayCache> new_cache ( new awayCache (id, 1, t->get_time(), 
-                            t->get_statistics(), log, ran, cache_cfgs));
-                new_core->add_away_cache(new_cache);
-                new_cache->set_home_memory(rm);
-#ifdef WRITE_NOW
-                (*awayCache_list)[id] = new_cache;
-#endif
-            }
             break;
         }
         case CORE_CUSTOM: {
-            /* set your core configuration */
                               
+            // dram controller configuration
+            // memory configuration 
+
+            /* set your core configuration */
+
             /* create core object */
             shared_ptr<core> new_core;
             p = new_core;
 
-            /* adjust your memory subsystem here (feeling lazy and copy and paste) */
-
-            remoteMemory::remoteMemory_cfg_t rm_cfgs;
-            rm_cfgs.process_time = 1;
-            shared_ptr<remoteMemory> rm(new remoteMemory(id, 1, t->get_time(), t->get_statistics(), log, ran, rm_cfgs));
-            new_core->add_remote_memory(rm);
-            shared_ptr<cache> last_local_cache = shared_ptr<cache>();
-
-            uint32_t total_levels = read_word(img);
-            assert(total_levels > 0);
-            vector<uint32_t> locs;
-
-            for (uint32_t i = 0; i < total_levels; ++i) {
-                uint32_t loc = read_word(img);
-                if (loc == id) {
-                    shared_ptr<memory> new_memory;
-                    if (i == total_levels - 1) {
-                        /* create dram controller */
-                        dramController::dramController_cfg_t dc_cfgs;
-                        if (!new_dram) {
-                            new_dram = shared_ptr<dram> (new dram ());
-                        }
-                        dc_cfgs.use_lock = true;
-                        dc_cfgs.off_chip_latency = 50;
-                        dc_cfgs.bytes_per_cycle = 8; 
-                        dc_cfgs.dram_process_time = 10;
-                        dc_cfgs.dc_process_time = 1;
-                        dc_cfgs.header_size_bytes = 4;
-                        shared_ptr<dramController> dc (new dramController (id, i+1, t->get_time(), 
-                                    t->get_statistics(), log, ran, new_dram, dc_cfgs));
-                        new_memory = dc;
-                        if (last_local_cache) {
-                            last_local_cache->set_home_memory(new_memory);
-                            last_local_cache->set_home_location(loc, i+1);
-                        }
-                    } else {
-                        /* create cache*/
-                        /* it's a new level of cache */
-                        cache::cache_cfg_t cache_cfgs;
-                        cache_cfgs.associativity = 1;
-                        cache_cfgs.block_size_bytes = 16;
-                        cache_cfgs.total_block = (i == 0)? 64 : 256;
-                        cache_cfgs.process_time = 1;
-                        cache_cfgs.block_per_cycle = 1;
-                        cache_cfgs.policy = cache::CACHE_RANDOM;
-                        shared_ptr<cache> new_cache ( new cache (id, i+1, t->get_time(), 
-                                    t->get_statistics(), log, ran, cache_cfgs));
-                        new_memory = new_cache;
-                        if (last_local_cache) {
-                            last_local_cache->set_home_memory(new_memory);
-                            last_local_cache->set_home_location(loc, i+1);
-                        }
-                        last_local_cache = new_cache;
-                    }
-                    new_core->add_to_memory_hierarchy(i+1, new_memory);
-                } else  {
-                    if (i == 0) {
-                        rm->set_remote_home(loc, i+1);
-                    }
-                    if (last_local_cache) {
-                        last_local_cache->set_home_memory(rm);
-                        last_local_cache->set_home_location(loc, i+1);
-                    }
-                    last_local_cache = shared_ptr<cache>();
-                }
-            }
-
             break;
         }
         case CORE_MCPU: {
+            assert(false); /* Chris is my hope */
+#if 0
             // MIPS image setup ------------------------------------------------ 
             
             uint32_t mem_start = read_word(img);
@@ -558,6 +346,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                                                     rm,
                                                     mem_start, mem_size, 
                                                     m, new_dram);
+#endif
             break;
         }
         default:

@@ -20,14 +20,14 @@ void memtraceThread::add_non_mem_inst(uint32_t repeats) {
     m_insts.push_back(new_inst);
 }
 
-void memtraceThread::add_mem_inst(uint32_t alu_cost, bool write, uint64_t addr, uint32_t word_count) {
+void memtraceThread::add_mem_inst(uint32_t alu_cost, bool write, maddr_t maddr, uint32_t word_count) {
     inst_t new_inst;
     new_inst.repeats = 1;
     new_inst.alu_cost = alu_cost;
     new_inst.remaining_alu_cost = alu_cost;
     new_inst.type = INST_MEMORY;
     new_inst.is_read = !write;
-    new_inst.addr = addr;
+    new_inst.maddr = maddr;
     new_inst.word_count = word_count;
     m_insts.push_back(new_inst);
 }
@@ -71,9 +71,9 @@ bool memtraceThread::is_read() {
     return m_cur.is_read;
 }
 
-uint64_t memtraceThread::address() {
+maddr_t memtraceThread::maddr() {
     assert(m_cur.type == INST_MEMORY);
-    return m_cur.addr;
+    return m_cur.maddr;
 }
 
 uint32_t memtraceThread::word_count() {

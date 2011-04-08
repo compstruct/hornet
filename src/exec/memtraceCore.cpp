@@ -130,15 +130,12 @@ void memtraceCore::execute() {
                 /* finished execution */
                 if (cur.thread->type() == memtraceThread::INST_MEMORY) {
                     shared_ptr<memoryRequest> req = shared_ptr<memoryRequest>();
-                    maddr_t maddr;
-                    maddr.mem_space_id = 0;
-                    maddr.address = cur.thread->address();
                     if (cur.thread->is_read()) {
-                        req = shared_ptr<memoryRequest>(new memoryRequest(maddr, cur.thread->word_count()));
+                        req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), cur.thread->word_count()));
                     } else {
                         /* this core model doesn't care data */
                         shared_array<uint32_t> dummy = shared_array<uint32_t>(new uint32_t[cur.thread->word_count()]);
-                        req = shared_ptr<memoryRequest>(new memoryRequest(maddr, cur.thread->word_count(), dummy));
+                        req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), cur.thread->word_count(), dummy));
                     }
                     m_memory->request(req);
                     cur.req = req;

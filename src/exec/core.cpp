@@ -142,3 +142,12 @@ void core::tick_negative_edge() throw(err) {
     }
 }
 
+/* not used methods */
+void core::add_packet(uint64_t time, const flow_id &flow, uint32_t len) throw(err) { assert(false); }
+bool core::work_queued() throw(err) { assert(false); return false; }
+bool core::is_ready_to_offer() throw(err) { assert(false); return false; }
+void core::set_stop_darsim() throw(err) { assert(false); }
+
+uint64_t core::next_pkt_time() throw(err) {
+    return system_time;
+}
