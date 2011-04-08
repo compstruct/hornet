@@ -2,19 +2,24 @@
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
 #include "memtraceCore.hpp"
-#include "memoryRequest.hpp"
 
 memtraceCore::memtraceCore(const pe_id &id, const uint64_t &t,
                            shared_ptr<id_factory<packet_id> > pif,
                            shared_ptr<tile_statistics> st, logger &l,
                            shared_ptr<random_gen> r,
                            shared_ptr<memtraceThreadPool> pool,
-                           memtraceCore_cfg_t cfgs, core_cfg_t core_cfgs) throw(err) 
-    : core(id, t, pif, st, l, r, core_cfgs),
-      m_cfgs(cfgs),
-      m_lane_ptr(0), m_num_threads(0), m_num_natives(0), m_num_guests(0), 
-      m_threads(pool), m_do_evict(false) { 
-    for (unsigned int i = 0; i < m_cfgs.max_threads; ++i) {
+                           shared_ptr<memory> mem,
+                           bool support_migration,
+                           uint32_t msg_queue_size,
+                           uint32_t bytes_per_flit,
+                           uint32_t flits_per_context,
+                           uint32_t max_threads) throw(err) : 
+    core(id, t, pif, st, l, r, mem, ((support_migration)?2:0), msg_queue_size, bytes_per_flit),
+    m_flits_per_context(flits_per_context), m_max_threads(max_threads),
+    m_lane_ptr(0), m_num_threads(0), m_num_natives(0), m_num_guests(0), 
+    m_threads(pool), m_do_evict(false) 
+{ 
+    for (unsigned int i = 0; i < m_max_threads; ++i) {
         lane_entry_t entry;
         entry.status = LANE_EMPTY;
         m_lanes.push_back(entry);
@@ -24,25 +29,18 @@ memtraceCore::memtraceCore(const pe_id &id, const uint64_t &t,
 
 memtraceCore::~memtraceCore() throw() {}
 
-#define HIGH_PRIORITY_CHANNEL 0
-#define LOW_PRIORITY_CHANNEL 1
-
-static uint32_t distance(int src, int dst, int width) {
-    return abs(dst/width - src/width) + abs(dst%width - src%width);
-}
-
-void memtraceCore::exec_core() {
+void memtraceCore::execute() {
 
     /* update em */
     if (m_pending_mig.valid) {
-        if (core_send_queue(HIGH_PRIORITY_CHANNEL)->size() == 0 && core_send_queue(LOW_PRIORITY_CHANNEL)->size() == 0) {
+        if (send_queue(m_first_core_msg_type)->size() == 0 && send_queue(m_first_core_msg_type+1)->size() == 0) {
             LOG(log,3) << "[thread " << m_lanes[m_pending_mig.idx].thread->get_id() << " @ " << system_time
-                       << " ] has sent from " << get_id().get_numeric_id() << " to " << m_pending_mig.dst << endl;
+                << " ] has sent from " << get_id().get_numeric_id() << " to " << m_pending_mig.dst << endl;
             unload_thread(m_pending_mig.idx);
         }
         /* cancel if not sent */
-        core_send_queue(HIGH_PRIORITY_CHANNEL)->pop();
-        core_send_queue(LOW_PRIORITY_CHANNEL)->pop();
+        send_queue(m_first_core_msg_type)->pop();
+        send_queue(m_first_core_msg_type+1)->pop();
         m_pending_mig.valid = false;
     }
 
@@ -53,17 +51,19 @@ void memtraceCore::exec_core() {
         for (uint32_t i = 0; i < m_lanes.size(); ++i) {
             lane_idx_t cand = (start + i)%m_lanes.size();
             if ((m_lanes[cand].status == LANE_IDLE || m_lanes[cand].status == LANE_MIG)
-                    && m_lanes[cand].evictable) { 
-                msg_t new_msg;
-                new_msg.dst = m_lanes[cand].thread->native_core();
-                new_msg.flit_count = m_cfgs.flits_per_mig;
-                new_msg.core_msg.context = (void*)(m_lanes[cand].thread);
-                core_send_queue(HIGH_PRIORITY_CHANNEL)->push_back(new_msg);
+                && m_lanes[cand].evictable) { 
+                shared_ptr<message_t> new_msg = shared_ptr<message_t>(new message_t);
+                new_msg->src = get_id().get_numeric_id();
+                new_msg->dst = m_lanes[cand].thread->native_core();
+                new_msg->flit_count = m_flits_per_context;
+                new_msg->content = shared_ptr<void>(new uint64_t);
+                *(static_pointer_cast<uint64_t>(new_msg->content)) = (uint64_t)(m_lanes[cand].thread);
+                send_queue(m_first_core_msg_type)->push_back(new_msg);
                 m_pending_mig.valid = true;
                 m_pending_mig.idx = cand;
-                m_pending_mig.dst = new_msg.dst; 
+                m_pending_mig.dst = new_msg->dst; 
                 LOG(log,3) << "[thread " << m_lanes[cand].thread->get_id() << " @ " << system_time  
-                           << " ] is an evict candidate on " << get_id().get_numeric_id() << endl;
+                    << " ] is an evict candidate on " << get_id().get_numeric_id() << endl;
                 break;
             }
         }
@@ -73,20 +73,22 @@ void memtraceCore::exec_core() {
         for (uint32_t i = 0; i < m_lanes.size(); ++i) {
             lane_idx_t cand = (start + i)%m_lanes.size();
             if ( m_lanes[cand].status == LANE_MIG ) {
-                msg_t new_msg;
-                new_msg.dst = m_lanes[cand].thread->home();
-                new_msg.flit_count = m_cfgs.flits_per_mig;
-                new_msg.core_msg.context = (void*)(m_lanes[cand].thread);
+                shared_ptr<message_t> new_msg = shared_ptr<message_t>(new message_t);
+                new_msg->src = get_id().get_numeric_id();
+                new_msg->dst = m_lanes[cand].req->home();
+                new_msg->flit_count = m_flits_per_context;
+                new_msg->content = shared_ptr<void>(new uint64_t);
+                *(static_pointer_cast<uint64_t>(new_msg->content)) = (uint64_t)(m_lanes[cand].thread);
                 m_pending_mig.valid = true;
                 m_pending_mig.idx = cand;
-                m_pending_mig.dst = new_msg.dst; //TODO erase
-                if (new_msg.dst == (uint32_t)(m_lanes[cand].thread->native_core())) {
-                    core_send_queue(HIGH_PRIORITY_CHANNEL)->push_back(new_msg);
+                m_pending_mig.dst = new_msg->dst; //TODO erase
+                if (new_msg->dst == (uint32_t)(m_lanes[cand].thread->native_core())) {
+                    send_queue(m_first_core_msg_type)->push_back(new_msg);
                 } else {
-                    core_send_queue(LOW_PRIORITY_CHANNEL)->push_back(new_msg);
+                    send_queue(m_first_core_msg_type+1)->push_back(new_msg);
                 }
                 LOG(log,3) << "[thread " << m_lanes[cand].thread->get_id() << " @ " << system_time
-                           << " ] is a migrate candidate on " << get_id().get_numeric_id() << endl;
+                    << " ] is a migrate candidate on " << get_id().get_numeric_id() << endl;
                 break;
             }
         }
@@ -96,10 +98,10 @@ void memtraceCore::exec_core() {
     if (m_num_threads > 0) { 
         /* Cycle-wise Round Robin */
         do { 
-            m_lane_ptr = (m_lane_ptr + 1) % m_cfgs.max_threads; 
+            m_lane_ptr = (m_lane_ptr + 1) % m_max_threads; 
         } while (m_lanes[m_lane_ptr].status == LANE_EMPTY);
         lane_entry_t &cur = m_lanes[m_lane_ptr];
-       
+
         /* fetch */
         if (cur.status == LANE_IDLE && (m_pending_mig.valid == false || m_pending_mig.idx != m_lane_ptr)) {
             if (cur.thread->current_instruction_done()) {
@@ -107,8 +109,8 @@ void memtraceCore::exec_core() {
             }
             if (cur.thread->type() == memtraceThread::INST_NONE) {
                 LOG(log,2) << "[memtraceCore:" << get_id().get_numeric_id() << "] "
-                           << "finished a memtraceThread " << cur.thread->get_id()
-                           << " @ " << system_time << endl;
+                    << "finished a memtraceThread " << cur.thread->get_id()
+                    << " @ " << system_time << endl;
                 stats->finish_execution(system_time);
                 unload_thread(m_lane_ptr);
             } else {
@@ -121,104 +123,31 @@ void memtraceCore::exec_core() {
 
         /* work on ALU */
         if (cur.status == LANE_BUSY) {
-            
+
             cur.thread->execute();
 
             if (cur.thread->remaining_alu_cycle() == 0) {
                 /* finished execution */
                 if (cur.thread->type() == memtraceThread::INST_MEMORY) {
-                    // EM case (-> LANE_MIG)
-                    // RA case (request to remote, bookkeeping, -> LANE_WAIT)
-
-                    /* Request to local L1 */
-                    assert(nearest_memory() != shared_ptr<memory>());
-                    assert(cur.thread->byte_count() > 0);
-
-                    uint64_t addr = cur.thread->addr();
-                    uint32_t home = cur.thread->home();
-                    uint32_t byte_count = cur.thread->byte_count();
-                    bool read = (cur.thread->rw() == MEM_READ);
-
-                    if (home != get_id().get_numeric_id() || 
-                        (m_cfgs.em_type == EM_NONE && m_cfgs.ra_type == RA_NONE)) {
-                        /* core miss */
-                        bool do_ra = false;
-                        if (m_cfgs.em_type == EM_NONE) {
-                            do_ra = true;
-                        } else if (m_cfgs.ra_type == RA_ONLY) {
-                            do_ra = true;
-                        } else if (m_cfgs.ra_type == RA_RANDOM) {
-                            /* 50% */
-                            do_ra = (ran->random_range(2) == 0)? true : false;
-                        } else if (m_cfgs.ra_type == RA_DISTANCE) {
-                            do_ra = distance(home, get_id().get_numeric_id(), m_cfgs.network_width) < m_cfgs.ra_distance_threshold;
-                        }
-                        if (do_ra) {
-                            shared_ptr<memoryRequest> req;
-                            if (read) {
-                                req = shared_ptr<memoryRequest> (new memoryRequest(get_id().get_numeric_id(), addr, byte_count));
-                            } else {
-                                uint32_t wdata[byte_count];
-                                wdata[0] = get_id().get_numeric_id();
-                                req = shared_ptr<memoryRequest> (new memoryRequest(get_id().get_numeric_id(), addr, byte_count, wdata));
-                            }
-                            req->set_ra();
-#ifdef WRITE_NOW
-                            req->set_sender(get_id().get_numeric_id());
-#endif
-
-                            if (m_cfgs.library_type == LIBRARY_ONLY) {
-
-                                /* LIBRARY_COMPETITION */
-                                /* put additional information in req here, for the RA server to use */
-                                /* (see exec/memoryRequest.hpp) */
-                                /* example */
-                                /* req->set_first_info(888); */
-
-                                cur.mreq_id = away_cache()->request(req, home, 1);
-                                cur.mem_to_serve = away_cache();
-
-                            } else if (m_cfgs.library_type == LIBRARY_NONE) {
-                                cur.mreq_id = remote_memory()->request(req, home, 1);
-                                cur.mem_to_serve = remote_memory();
-                            }
-                            cur.req = req;
-                            cur.status = LANE_WAIT;
-                            if (stats->is_started()) {
-                                stats->issue_memory();
-                            }
-                            LOG(log,3) << "[thread " << cur.thread->get_id() << " @ " << system_time 
-                                       << " ] is making a remote access request on core " 
-                                       << get_id().get_numeric_id() << endl;
-                        } else {
-                            LOG(log,3) << "[thread " << cur.thread->get_id() << " @ " << system_time 
-                                       << " ] wants to migrate to core from "
-                                       << get_id().get_numeric_id() << " to " << home << endl;
-                            cur.thread->reset_current_instruction();
-                            cur.status = LANE_MIG;
-                        }
+                    shared_ptr<memoryRequest> req = shared_ptr<memoryRequest>();
+                    maddr_t maddr;
+                    maddr.mem_space_id = 0;
+                    maddr.address = cur.thread->address();
+                    if (cur.thread->is_read()) {
+                        req = shared_ptr<memoryRequest>(new memoryRequest(maddr, cur.thread->word_count()));
                     } else {
-                        /* core hit */
-                        shared_ptr<memoryRequest> req;
-                        if (read) {
-                            req = shared_ptr<memoryRequest> (new memoryRequest(get_id().get_numeric_id(), addr, byte_count));
-                        } else {
-                            uint32_t wdata = get_id().get_numeric_id();
-                            req = shared_ptr<memoryRequest> (new memoryRequest(get_id().get_numeric_id(), addr, byte_count, &wdata));
-                        }
-#ifdef WRITE_NOW
-                        req->set_sender(get_id().get_numeric_id());
-#endif
-                        LOG(log,3) << "[thread " << cur.thread->get_id() << " @ " << system_time 
-                            << " ] is making a memory request to the nearest memory on core " 
-                                   << get_id().get_numeric_id() << endl;
-                        cur.mreq_id = nearest_memory()->request(req);
-                        cur.req = req;
-                        cur.mem_to_serve = nearest_memory();
-                        cur.status = LANE_WAIT;
-                        if (stats->is_started()) {
-                            stats->issue_memory();
-                        }
+                        /* this core model doesn't care data */
+                        shared_array<uint32_t> dummy = shared_array<uint32_t>(new uint32_t[cur.thread->word_count()]);
+                        req = shared_ptr<memoryRequest>(new memoryRequest(maddr, cur.thread->word_count(), dummy));
+                    }
+                    m_memory->request(req);
+                    cur.req = req;
+                    cur.status = LANE_WAIT;
+                    LOG(log,3) << "[thread " << cur.thread->get_id() << " @ " << system_time 
+                        << " ] is making a memory request on core " 
+                        << get_id().get_numeric_id() << endl;
+                    if (stats->is_started()) {
+                        stats->issue_memory();
                     }
                 } else if (cur.thread->type() == memtraceThread::INST_OTHER) {
                     cur.status = LANE_IDLE;
@@ -226,13 +155,36 @@ void memtraceCore::exec_core() {
             }
         }
     }
-                
+
+    /* load incoming threads */
+    uint32_t num_arrived_natives = receive_queue(m_first_core_msg_type)->size();
+    uint32_t num_arrived_guests = receive_queue(m_first_core_msg_type+1)->size();
+
+    /* emulate one queue per each lane - can take all native contexts */
+    for (uint32_t i = 0; i < num_arrived_natives; ++i) {
+        uint64_t content = *(static_pointer_cast<uint64_t>(receive_queue(m_first_core_msg_type)->front()->content));
+        memtraceThread *new_thread = (memtraceThread*)content;
+        load_thread(new_thread);
+        receive_queue(m_first_core_msg_type)->pop();
+    } 
+    /* may take up to num_lanes - num_native_lanes */
+    uint32_t max_guests = m_max_threads - m_native_list.size();
+    for (uint32_t i = 0; i < num_arrived_guests && m_num_guests < max_guests; ++i) {
+        uint64_t content = *(static_pointer_cast<uint64_t>(receive_queue(m_first_core_msg_type+1)->front()->content));
+        memtraceThread *new_thread = (memtraceThread*)content;
+        load_thread(new_thread);
+        receive_queue(m_first_core_msg_type+1)->pop();
+    }
+    m_do_evict = (receive_queue(m_first_core_msg_type+1)->size() > 0)? true: false;
+}
+
+void memtraceCore::commit_memory_requests() {
     /* update waiting requests */
     for (vector<lane_entry_t>::iterator i = m_lanes.begin(); i != m_lanes.end(); ++i) {
         if ((*i).status == LANE_WAIT) {
-            if((*i).mem_to_serve->ready((*i).mreq_id)) {
+            if((*i).req->status() == REQ_DONE) {
                 if (stats->is_started()){
-                    if ((*i).req->rw() == MEM_READ) {
+                    if ((*i).req->is_read()) {
                         stats->receive_mem_read(system_time - (*i).thread->memory_issued_time());
                     } else {
                         stats->receive_mem_write(system_time - (*i).thread->memory_issued_time());
@@ -240,56 +192,35 @@ void memtraceCore::exec_core() {
                 }
 
                 LOG(log,2) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
-                           << " ] finished memory operation : "; 
-                if ((*i).req->rw() == MEM_READ)  {
+                    << " ] finished memory operation : "; 
+                if ((*i).req->is_read())  {
                     LOG(log,2) << " read ";
                 } else {
                     LOG(log,2) << " written ";
                 }
-                for (uint32_t j = 0; j < (*i).req->byte_count()/4; ++j) {
+                for (uint32_t j = 0; j < (*i).req->word_count(); ++j) {
                     LOG(log,2) << hex << (*i).req->data()[j] << dec;
                 }
-                LOG(log,2) <<  " on addr " << hex << (*i).req->addr() << dec << endl; 
+                LOG(log,2) <<  " on addr " << hex << (*i).req->maddr().address << dec << endl; 
 #if 0
                 cerr << "[core " << get_id().get_numeric_id() << " @ " << system_time << " ] finished memory operation : "; 
-                if ((*i).req->rw() == MEM_READ)  {
+                if ((*i).req->is_read())  {
                     cerr << " read ";
                 } else {
                     cerr << " written ";
                 }
-                for (uint32_t j = 0; j < (*i).req->byte_count()/4; ++j) {
+                for (uint32_t j = 0; j < (*i).req->word_count(); ++j) {
                     cerr << hex << (*i).req->data()[j] << dec;
                 }
-                cerr <<  " on addr " << hex << (*i).req->addr() << dec << endl; 
+                cerr <<  " on addr " << hex << (*i).req->address() << dec << endl; 
 #endif
                 (*i).status = LANE_IDLE;
-                /* memtraceThread doesn't care for values, so release it */
-                (*i).mem_to_serve->finish((*i).mreq_id);
             }
-
+        } else if ((*i).req->status() == REQ_MIGRATE) {
+            (*i).thread->reset_current_instruction();
+            (*i).status = LANE_MIG;
         }
     }
-
-    /* load incoming threads */
-    uint32_t num_arrived_natives = core_receive_queue(HIGH_PRIORITY_CHANNEL)->size();
-    uint32_t num_arrived_guests = core_receive_queue(LOW_PRIORITY_CHANNEL)->size();
-
-    /* emulate one queue per each lane - can take all native contexts */
-    for (uint32_t i = 0; i < num_arrived_natives; ++i) {
-        memtraceThread *new_thread;
-        new_thread = (memtraceThread*)core_receive_queue(HIGH_PRIORITY_CHANNEL)->front().core_msg.context;
-        load_thread(new_thread);
-        core_receive_queue(HIGH_PRIORITY_CHANNEL)->pop();
-    } 
-    /* may take up to num_lanes - num_native_lanes */
-    uint32_t max_guests = m_cfgs.max_threads - m_native_list.size();
-    for (uint32_t i = 0; i < num_arrived_guests && m_num_guests < max_guests; ++i) {
-        memtraceThread *new_thread;
-        new_thread = (memtraceThread*)core_receive_queue(LOW_PRIORITY_CHANNEL)->front().core_msg.context;
-        load_thread(new_thread);
-        core_receive_queue(LOW_PRIORITY_CHANNEL)->pop();
-    }
-    m_do_evict = (core_receive_queue(LOW_PRIORITY_CHANNEL)->size() > 0)? true: false;
 }
 
 uint64_t memtraceCore::next_pkt_time() throw(err) { 
@@ -306,7 +237,7 @@ bool memtraceCore::is_drained() const throw() {
 }
 
 void memtraceCore::load_thread(memtraceThread* thread) {
-    assert(m_num_threads < m_cfgs.max_threads);
+    assert(m_num_threads < m_max_threads);
     for (lane_idx_t i = 0; i < m_lanes.size(); ++i) {
         if (m_lanes[i].status == LANE_EMPTY) {
             m_lanes[i].status = LANE_IDLE;
@@ -319,7 +250,7 @@ void memtraceCore::load_thread(memtraceThread* thread) {
                 ++m_num_guests;
             }
             LOG(log,2) << "[thread " << thread->get_id() << " @ " << system_time
-                       << " ] is loaded on " << get_id().get_numeric_id() << endl;
+                << " ] is loaded on " << get_id().get_numeric_id() << endl;
             break;
         }
     }
@@ -335,7 +266,7 @@ void memtraceCore::unload_thread(lane_idx_t idx) {
         --m_num_guests;
     }
     LOG(log,2) << "[thread " << m_lanes[idx].thread->get_id() << " @ " << system_time 
-               << " ] is unloaded on " << get_id().get_numeric_id() << endl;
+        << " ] is unloaded on " << get_id().get_numeric_id() << endl;
 }
 
 void memtraceCore::spawn(memtraceThread* thread) {

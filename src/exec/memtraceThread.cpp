@@ -3,9 +3,7 @@
 
 #include "memtraceThread.hpp"
 
-memtraceThread::memtraceThread(mth_id_t id, const uint64_t &t, logger &l) 
-    :m_id(id), system_time(t), log(l) 
-{
+memtraceThread::memtraceThread(mth_id_t id, const uint64_t &t, logger &l) : m_id(id), system_time(t), log(l) {
     m_cur.type = INST_NONE;
     m_cur.repeats = 0;
 }
@@ -22,16 +20,15 @@ void memtraceThread::add_non_mem_inst(uint32_t repeats) {
     m_insts.push_back(new_inst);
 }
 
-void memtraceThread::add_mem_inst(uint32_t alu_cost, bool write, maddr_t addr, int home, uint32_t byte_count) {
+void memtraceThread::add_mem_inst(uint32_t alu_cost, bool write, uint64_t addr, uint32_t word_count) {
     inst_t new_inst;
     new_inst.repeats = 1;
     new_inst.alu_cost = alu_cost;
     new_inst.remaining_alu_cost = alu_cost;
     new_inst.type = INST_MEMORY;
-    new_inst.rw = (write)? MEM_WRITE : MEM_READ;
+    new_inst.is_read = !write;
     new_inst.addr = addr;
-    new_inst.home = home;
-    new_inst.byte_count = byte_count;
+    new_inst.word_count = word_count;
     m_insts.push_back(new_inst);
 }
 
@@ -69,26 +66,74 @@ uint32_t memtraceThread::remaining_alu_cycle() {
     return (m_cur.type == INST_NONE)? 0 : m_cur.remaining_alu_cost; 
 }
 
-mreq_type_t memtraceThread::rw() { 
+bool memtraceThread::is_read() { 
     assert(m_cur.type == INST_MEMORY);
-    return m_cur.rw;
+    return m_cur.is_read;
 }
 
-maddr_t memtraceThread::addr() {
+uint64_t memtraceThread::address() {
     assert(m_cur.type == INST_MEMORY);
     return m_cur.addr;
 }
 
-uint32_t memtraceThread::byte_count() {
+uint32_t memtraceThread::word_count() {
     assert(m_cur.type == INST_MEMORY);
-    return m_cur.byte_count;
-}
-
-int memtraceThread::home() {
-    assert(m_cur.type == INST_MEMORY);
-    return m_cur.home;
+    return m_cur.word_count;
 }
 
 bool memtraceThread::finished() {
     return (m_insts.empty() && m_cur.type == INST_NONE);
 }
+
+memtraceThreadPool::memtraceThreadPool() {}
+
+memtraceThreadPool::~memtraceThreadPool() {
+    map<mth_id_t, memtraceThread*>::iterator i;
+    for (i = m_threads.begin(); i != m_threads.end(); ++i) {
+        delete i->second;
+    }
+    m_threads.clear();
+}
+
+void memtraceThreadPool::add_thread(memtraceThread* p) {
+    unique_lock<recursive_mutex> lock(memtraceThreadPool_mutex);
+    assert(m_threads.count(p->get_id()) == 0);
+    m_threads[p->get_id()] = p;
+}
+
+memtraceThread* memtraceThreadPool::find(mth_id_t id) {
+    /* if a thread may be added or removed during simulation, */
+    /* it must be protected by a lock (which means slow) */
+    if (m_threads.count(id) > 0) {
+        return m_threads[id];
+    } else {
+        return NULL;
+    }
+}
+
+memtraceThread* memtraceThreadPool::thread_at(uint32_t n) {
+    /* if a thread may be added or removed during simulation, */
+    /* it must be protected by a lock (which means slow) */
+    assert(m_threads.size() > n);
+    map<mth_id_t, memtraceThread*>::iterator i = m_threads.begin();
+    for (; n > 0; ++i, --n) ;
+    return i->second;
+}
+
+unsigned int memtraceThreadPool::size() {
+    unique_lock<recursive_mutex> lock(memtraceThreadPool_mutex);
+    return m_threads.size();
+}
+
+bool memtraceThreadPool::empty() {
+    unique_lock<recursive_mutex> lock(memtraceThreadPool_mutex);
+    map<mth_id_t, memtraceThread*>::iterator i;
+    for (i = m_threads.begin(); i != m_threads.end(); ++i) {
+        if (!(i->second)->finished()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+

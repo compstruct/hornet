@@ -43,17 +43,16 @@ public:
     inline uint64_t memory_issued_time() { return m_cur.memory_issued_time; }
 
     /* read from current instruction - valid for INST_MEMORY only */
-    mreq_type_t rw();
-    maddr_t addr();
-    uint32_t byte_count();
-    int home();
+    bool is_read();
+    uint64_t address();
+    uint32_t word_count();
 
     /* for now, one native core per thread */
     inline int native_core() { return m_native_core; }
     inline void set_native_core(int core) { m_native_core = core; }
 
     /* add instructions */
-    void add_mem_inst(uint32_t alu_cost, bool write, maddr_t addr, int home, uint32_t byte_count);
+    void add_mem_inst(uint32_t alu_cost, bool write, uint64_t addr, uint32_t word_count);
     void add_non_mem_inst(uint32_t repeats);
 
 private:
@@ -62,10 +61,9 @@ private:
         uint32_t alu_cost;
         uint32_t remaining_alu_cost;
         inst_type_t type;
-        mreq_type_t rw;
-        maddr_t addr;
-        int home;
-        uint32_t byte_count;
+        bool is_read;
+        uint64_t addr;
+        uint32_t word_count;
         /* stats */
         uint64_t memory_issued_time;
     } inst_t;
@@ -78,6 +76,26 @@ private:
     vector<inst_t> m_insts;
 
     int m_native_core;
+};
+
+class memtraceThreadPool {
+public:
+    memtraceThreadPool();
+    ~memtraceThreadPool();
+
+    void add_thread(memtraceThread* p);
+    memtraceThread* find(mth_id_t id);
+    memtraceThread* thread_at(uint32_t n);
+    unsigned int size();
+
+    bool empty();
+
+private:
+    /* memtraceThreadPool class has the following restrictions for the performance reason */
+    /* 1. no thread is added to the pool during simulation */
+    /* 2. no thread is removed from the pool during simulation */
+    map<mth_id_t, memtraceThread*> m_threads;
+    mutable recursive_mutex memtraceThreadPool_mutex;
 };
 
 #endif

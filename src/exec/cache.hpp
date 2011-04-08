@@ -4,99 +4,152 @@
 #ifndef __CACHE_HPP__
 #define __CACHE_HPP__
 
-#include "memory.hpp"
+#include <boost/shared_ptr.hpp>
+#include <boost/shared_array.hpp>
+#include "statistics.hpp"
 #include "logger.hpp"
 #include "random.hpp"
-#include <boost/shared_ptr.hpp>
-#include <map>
+#include "memory.hpp"
 
 using namespace std;
 using namespace boost;
 
-class cache : public memory {
+typedef enum {
+    REPLACE_RANDOM = 0,
+    REPLACE_LRU
+} replacementPolicy_t;
+
+typedef struct {
+    bool valid;
+    bool dirty;
+    bool reserved;
+    maddr_t first_maddr;
+    shared_array<uint32_t> data;
+    shared_ptr<void> coherence_info;
+    uint64_t last_access_time;
+} cacheLine_t;
+
+typedef enum {
+    CACHE_REQ_READ = 0,
+    CACHE_REQ_WRITE,     /* cache only returns a pointer to write to, not writes data itself */
+    CACHE_REQ_ADD_LINE,  /* cache only returns a pointer to write to, not writes data itself */
+    CACHE_REQ_INVALIDATE /* also work for flush back requests */
+} cacheReqType_t;
+
+typedef enum {
+
+    CACHE_NEW = 0,
+
+    /* cache is working */
+    CACHE_WAIT,
+
+    /* a cache hit for a read or write, or an invalidate is done (the requester may need to check the dirty bit) */
+    /* or a new line is added to the cache */
+    CACHE_HIT,
+
+    /* a cache miss. if it need to evict a line to bring in the requested line, the information of victim is available */
+    /* or a new line couldn't be added because the cache is full */
+    /* or could not invalidate because the line does not exist */
+    CACHE_MISS
+
+} cacheReqStatus_t;
+
+class cacheRequest {
 public:
-    typedef enum {
-        CACHE_RANDOM,
-        CACHE_LRU
-    } cache_policy_t;
 
-    typedef struct {
-        uint32_t associativity;
-        uint32_t block_size_bytes;
-        uint32_t total_block;
-        uint32_t process_time;
-        uint32_t block_per_cycle;
-        cache_policy_t policy;
-    } cache_cfg_t;
+    /* Because cache does not know about the cache coherence protocol, it can't do writes by itself */
+    /* The requester can and must write into the returned cache line on a write hit */
+    cacheRequest(maddr_t maddr, cacheReqType_t request_type, shared_ptr<void> coherence_info_to_set = shared_ptr<void>());
+    ~cacheRequest();
 
-    cache(const uint32_t numeric_id, const uint32_t level, const uint64_t &system_time,
-          shared_ptr<tile_statistics> stats, logger &log, shared_ptr<random_gen> ran,
-          cache_cfg_t cfgs);
-    virtual ~cache();
+    inline cacheReqStatus_t status() { return m_status; }
 
-    virtual mreq_id_t request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t target_level);
-    virtual bool ready(mreq_id_t id);
-    virtual shared_ptr<memoryRequest> get_req(mreq_id_t id);
-    virtual bool finish(mreq_id_t id);
+    /* cache_line() is valid only at the cycle when status() becomes CACHE_HIT or CACHE_MISS */
+    inline cacheLine_t* cache_line() { return m_cache_line; }
 
-    virtual void initiate();
-    virtual void update();
-    virtual void process();
+    inline bool need_invalidate() { assert(status()==CACHE_MISS); return m_need_to_invalidate; }
+    inline maddr_t maddr_to_invalidate() { return m_maddr_to_invalidate; }
 
-    void set_home_memory(shared_ptr<memory> home);
-    inline void set_home_location(uint32_t location, uint32_t level) { m_home_location = location; m_home_level = level; }
-
-protected:
-    typedef enum {
-        REQ_INIT,    /* just requested */
-        REQ_BUSY,    /* working on cache logic */
-        REQ_WAIT, 
-        REQ_DONE
-    } req_status_t;
-
-    typedef struct {
-        req_status_t status;
-        uint32_t     remaining_process_time;
-        shared_ptr<memoryRequest> req;
-    } in_req_entry_t;
-
-    typedef struct {
-        bool valid;         /* entry is being used */
-        bool ready;         /* data has come */
-        bool doomed;        /* will be evicted (write_back issued) */
-        bool on_the_fly;    /* data is coming (a request sent) */
-        int tid;
-        uint64_t tag;
-        uint32_t *data;
-        uint64_t last_access;
-        bool dirty;
-    } cache_line_t;
+    friend class cache;
 
 private:
-    const static bool DEBUG_CACHE = false;
+    cacheReqType_t m_request_type;
+    maddr_t m_maddr;
+    cacheReqStatus_t m_status;
+    cacheLine_t* m_cache_line;
+    bool m_need_to_invalidate;
+    maddr_t m_maddr_to_invalidate;
+    shared_ptr<void> m_coherence_info_to_set;
 
-protected:
-    inline uint64_t get_tag(maddr_t addr) { return (addr&m_tag_mask)>>m_tag_pos; }
-    inline uint64_t get_index(maddr_t addr) { return (addr&m_index_mask)>>m_index_pos; }
-    inline uint64_t get_offset(maddr_t addr) { return (addr&m_offset_mask); }
+};
 
-    cache_line_t* cache_line(maddr_t addr, uint32_t tid);
+class cache {
+public:
+    cache(uint32_t numeric_id, const uint64_t &system_time, 
+          shared_ptr<tile_statistics> stats, logger &log, shared_ptr<random_gen> ran, 
+          uint32_t words_per_line, uint32_t total_lines, uint32_t associativity,
+          replacementPolicy_t replacement_policy, 
+          uint32_t hit_test_latency, uint32_t num_read_ports, uint32_t num_write_ports);
+    ~cache();
 
-protected:
-    cache_cfg_t m_cfgs;
-    shared_ptr<memory> m_home;
-    uint32_t m_home_location;
-    uint32_t m_home_level;
+    void tick_positive_edge();
+    void tick_negative_edge();
 
-    map<mreq_id_t, in_req_entry_t> m_in_req_table;
-    map<mreq_id_t, shared_ptr<memoryRequest> > m_out_req_table;
-    map<uint64_t, cache_line_t*>  m_cache;
+    void request(shared_ptr<cacheRequest> req);
+
+private:
+    typedef enum {
+        ENTRY_PORT = 0,
+        ENTRY_HIT_TEST,
+        ENTRY_DONE
+    } entryStatus_t;
+
+    typedef struct {
+        entryStatus_t status;
+        shared_ptr<cacheRequest> request;
+        uint32_t remaining_hit_test_cycles;
+    } entry_t;
+
+    typedef struct {
+        uint32_t index;
+        uint32_t way;
+    } linePosition_t;
+
+    typedef vector<shared_ptr<entry_t> > entryQueue;
+    typedef map<uint64_t /*address*/, entryQueue> entryTable;
+
+    inline uint32_t get_index(maddr_t maddr) { return (uint32_t)((maddr.address&m_index_mask)>>m_index_pos); }
+    inline uint32_t get_offset(maddr_t maddr) { return (uint32_t)(maddr.address&m_offset_mask); }
+    inline maddr_t get_first_maddr(maddr_t maddr) { maddr.address -= get_offset(maddr); return maddr; }
+    cacheLine_t* cache_line(maddr_t maddr); 
+
+    uint32_t m_id;
+    const uint64_t &system_time;
+    shared_ptr<tile_statistics> stats;
+    logger &log;
+    shared_ptr<random_gen> ran;
+
+    uint32_t m_words_per_line;
+    uint32_t m_total_lines;
+    uint32_t m_associativity;
+    replacementPolicy_t m_replacement_policy;
+    uint32_t m_hit_test_latency;
 
     uint64_t m_offset_mask;
     uint64_t m_index_mask;
     uint32_t m_index_pos;
-    uint64_t m_tag_mask;
-    uint32_t m_tag_pos;
+
+    entryQueue m_entries_waiting_for_read_ports;
+    entryQueue m_entries_waiting_for_write_ports;
+    /* NOTE: we assume an infinite cache request table. */
+    /* Although the table size is indeterministic, the finite number of read & write ports helps making it reasonable */
+    map<uint32_t/*mem space id*/, entryTable> m_entry_tables;
+    map<uint32_t/*index*/, cacheLine_t* > m_cache;
+    uint32_t m_number_of_free_read_ports;
+    uint32_t m_number_of_free_write_ports;
+
+    /* for the performance's sake, store lines to purge at the negative tick (rather than iterating through the cache) */
+    vector<linePosition_t> m_lines_to_purge;
 
 };
 

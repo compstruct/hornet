@@ -4,43 +4,26 @@
 #ifndef __MEMTRACE_CORE_HPP__
 #define __MEMTRACE_CORE_HPP__
 
-#include <boost/shared_ptr.hpp>
-#include "id_factory.hpp"
-#include "logger.hpp"
-#include "statistics.hpp"
-#include "random.hpp"
 #include "core.hpp"
-#include "memory.hpp"
-#include "awayCache.hpp"
 #include "memtraceThread.hpp"
-#include "memtraceThreadPool.hpp"
 
 class memtraceCore : public core {
-public:
-    typedef enum { EM_NONE, EM_ENC }  em_type_t; /* TODO (Later) : more em schemes (swapInf, seapHS) */
-    typedef enum { RA_NONE, RA_ONLY, RA_RANDOM, RA_DISTANCE } ra_type_t; /* TODO (Later) : EM/RA hybrid */
-    typedef enum { LIBRARY_NONE, LIBRARY_ONLY } library_type_t;
-    typedef struct {
-        uint32_t    max_threads;
-        uint32_t    flits_per_mig;
-        em_type_t   em_type;
-        ra_type_t   ra_type;
-        library_type_t library_type;
-        uint32_t    ra_distance_threshold;
-        uint32_t    network_width;
-    } memtraceCore_cfg_t;
-
 public:
     memtraceCore(const pe_id &id, const uint64_t &system_time,
                  shared_ptr<id_factory<packet_id> > packet_id_factory,
                  shared_ptr<tile_statistics> stats, logger &log,
                  shared_ptr<random_gen> ran,
                  shared_ptr<memtraceThreadPool> pool,
-                 /* TODO (Later) progress marker */
-                 memtraceCore_cfg_t cfgs, core_cfg_t core_cfgs) throw(err);
+                 shared_ptr<memory> mem,
+                 bool support_migration,
+                 uint32_t msg_queue_size,
+                 uint32_t bytes_per_flit,
+                 uint32_t flits_per_context,
+                 uint32_t max_threads) throw(err);
     virtual ~memtraceCore() throw();
 
-    virtual void exec_core();
+    virtual void execute();
+    virtual void commit_memory_requests();
 
     virtual uint64_t next_pkt_time() throw(err);
     virtual bool is_drained() const throw();
@@ -51,7 +34,8 @@ private:
     map<uint32_t, flow_id> flow_ids;
 
     /* Configurations */
-    memtraceCore_cfg_t m_cfgs;
+    uint32_t m_flits_per_context;
+    uint32_t m_max_threads;
 
     /* Execution lanes */
     typedef enum {
@@ -66,9 +50,7 @@ private:
         lane_status_t status;
         bool evictable;
         memtraceThread* thread;
-        mreq_id_t mreq_id;
         shared_ptr<memoryRequest> req;
-        shared_ptr<memory> mem_to_serve;
         uint64_t last_memory_issued;
     } lane_entry_t;
 
@@ -98,14 +80,11 @@ private:
     /* Native contexts */
     set<mth_id_t> m_native_list;
 
-    /* Memory message queue */
-
     /* Running state */
     bool m_do_evict;
     pending_mig_t m_pending_mig;
 
 };
 
-/* TODO (Phase 4) : design memtraceCore stats */
-
 #endif
+

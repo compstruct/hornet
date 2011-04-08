@@ -4,18 +4,70 @@
 #ifndef __DRAM_CONTROLLER_HPP__
 #define __DRAM_CONTROLLER_HPP__
 
-#include "instr.hpp"
-#include "mem.hpp"
-#include "endian.hpp"
-#include "memory.hpp"
+#include <boost/shared_ptr.hpp>
+#include <boost/shared_array.hpp>
+#include "statistics.hpp"
 #include "logger.hpp"
 #include "random.hpp"
-#include <boost/shared_ptr.hpp>
-#include <boost/cstdint.hpp>
+#include "memory.hpp"
 
+#define WORDS_IN_DRAM_BLOCK 256 /* must be a power of 2 */
+#define DRAM_INDEX_MASK (256-WORDS_IN_DRAM_BLOCK) /* must be a power of 2 */
+
+using namespace std;
 using namespace boost;
 
-#define DRAM_BLOCK_SIZE 256 /* in bytes, must be a multiple of 4 */
+typedef enum {
+    /* Normal mode */
+    DRAM_REQ_READ = 0,
+    DRAM_REQ_WRITE,
+
+    /* Indirect mode */
+
+    /* In indirect mode, word_count is only used for the performance model.*/
+    /* Actual data is written & read in a shared_ptr<void> pointer.        */
+    /* The first address becomes the only unique key for the data.         */
+
+    /* USE WITH CAUTION                                                    */
+    /* NOTE : Overlaps of indirect data is ignored.                        */
+    /* NOTE : Data is not copied. Better use it only for one cycle         */
+
+    DRAM_REQ_READ_INDIRECT,
+    DRAM_REQ_WRITE_INDIRECT
+} dramReqType_t;
+
+typedef enum {
+    DRAM_NEW = 0,
+    DRAM_WAIT,
+    DRAM_DONE
+} dramReqStatus_t;
+
+class dramRequest {
+public:
+    /* read */
+    dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count);
+    /* normal mode - write */
+    dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_array<uint32_t> wdata);
+    /* dummy mode - write */
+    dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_ptr<void> wdata);
+
+    inline dramReqStatus_t status() { return m_status; }
+    inline const shared_array<uint32_t> read() { assert(m_request_type == DRAM_REQ_READ); return m_data; }
+    inline const shared_ptr<void> read_indirect() { assert(m_request_type == DRAM_REQ_READ_INDIRECT); return m_indirect_data; }
+
+    friend class dramController;
+
+private:
+    inline bool is_indirect() { return (m_request_type == DRAM_REQ_READ_INDIRECT || m_request_type == DRAM_REQ_WRITE_INDIRECT); }
+    inline bool is_read() { return (m_request_type == DRAM_REQ_READ || m_request_type == DRAM_REQ_READ_INDIRECT); }
+    dramReqType_t m_request_type;
+    maddr_t m_maddr;
+    uint32_t m_word_count;
+    dramReqStatus_t m_status;
+    shared_array<uint32_t> m_data;
+    shared_ptr<void> m_indirect_data;;
+
+};
 
 class dram {
 public:
@@ -25,75 +77,70 @@ public:
     friend class dramController;
 
 private:
-    map<uint32_t, map<uint64_t, uint32_t* > > space;
-    mutable recursive_mutex dram_mutex;;
+    typedef map<uint64_t/*index*/, shared_array<uint32_t> > memSpace;
+    typedef map<uint64_t/*address*/, shared_ptr<void> > indirectMemSpace;
+
+    map<uint32_t/*mem space id*/, memSpace> m_memory;
+    map<uint32_t/*mem space id*/, indirectMemSpace> m_indirect_memory;
+    mutable recursive_mutex dram_mutex;
+
 };
 
-class dramController : public memory {
+class dramController {
 public:
-    typedef struct {
-        bool use_lock;
-        uint32_t off_chip_latency;
-        uint32_t bytes_per_cycle;
-        uint32_t dram_process_time;
-        uint32_t dc_process_time;
-        uint32_t header_size_bytes;
-    } dramController_cfg_t;
+    dramController(uint32_t numeric_id, const uint64_t &system_time,
+                   shared_ptr<tile_statistics> stats, logger &log, shared_ptr<random_gen> ran,
+                   shared_ptr<dram> connected_dram,
+                   uint32_t dram_controller_latency, uint32_t offchip_oneway_latency, uint32_t dram_latency,
+                   uint32_t msg_header_size_in_words, uint32_t max_requests_in_flight, uint32_t bandwidth_in_words_per_cycle,
+                   bool use_lock); 
+    ~dramController();
 
-    dramController(const uint32_t numeric_id, const uint32_t level, const uint64_t &system_time,
-          shared_ptr<tile_statistics> stats, logger &log, shared_ptr<random_gen> ran,
-          shared_ptr<dram> dram,
-          dramController_cfg_t cfgs);
-    virtual ~dramController();
+    void tick_positive_edge();
+    void tick_negative_edge();
 
-    virtual mreq_id_t request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t target_level);
-    virtual bool ready(mreq_id_t id);
-    virtual shared_ptr<memoryRequest> get_req(mreq_id_t id);
-    virtual bool finish(mreq_id_t id);
+    void request(shared_ptr<dramRequest> req);
 
-    virtual void initiate();
-    virtual void update();
-    virtual void process();
-
-    virtual void mem_read_instant(  int proposed_tid,   void * destination,     maddr_t start,      size_t count, bool endianc);  
-    virtual void mem_write_instant( int proposed_tid,   shared_ptr<mem> source, uint32_t mem_start, uint32_t mem_size);
-    virtual void mem_write_instant( int proposed_tid,   void * source,          uint32_t mem_start, uint32_t mem_size, bool endianc);
 private:
+    void dram_access(shared_ptr<dramRequest> req);
+    void dram_access_safe(shared_ptr<dramRequest> req);
+
     typedef enum {
-        REQ_INIT,
-        REQ_DC_PROCESS,
-        REQ_TO_DRAM,
-        REQ_DRAM_PROCESS,
-        REQ_FROM_DRAM,
-        REQ_DONE
-    } req_status_t;
+        ENTRY_PORT = 0,
+        ENTRY_LATENCY,
+        ENTRY_BANDWIDTH,
+        ENTRY_DONE
+    } entryStatus_t;
 
     typedef struct {
-        uint32_t byte_count;
-        uint64_t time_to_arrive;
-    } on_the_fly_t;
+        entryStatus_t status;
+        shared_ptr<dramRequest> request;
+        uint32_t port;
+        uint32_t remaining_latency_cycles;
+        uint32_t remaining_words_to_transfer;
+    } entry_t;
 
-    typedef struct {
-        req_status_t status;
-        uint32_t remaining_process_time;
-        shared_ptr<memoryRequest> req;
-        uint32_t bytes_to_send;
-        vector<on_the_fly_t> packets;
-    } in_req_entry_t;
-    
-private:
-    void mem_access(shared_ptr<memoryRequest> req);
-    //void mem_access_tester(shared_ptr<memoryRequest> req);
-    void mem_access_safe(shared_ptr<memoryRequest> req);
+    typedef vector<shared_ptr<entry_t> > entryQueue;
 
-private:
+    uint32_t m_id;
+    const uint64_t &system_time;
+    shared_ptr<tile_statistics> stats;
+    logger &log;
+    shared_ptr<random_gen> ran;
+
     shared_ptr<dram> m_dram;
-    dramController_cfg_t m_cfgs;
-    map<mreq_id_t, in_req_entry_t> m_in_req_table;
 
-    uint32_t m_channel_width;
-    uint32_t m_to_dram_in_transit;
-    uint32_t m_from_dram_in_transit;
+    bool m_use_lock;
+    /* simple latency model */
+    uint32_t m_total_latency;
+    uint32_t m_msg_header_size_in_words;
+    uint32_t m_number_of_free_ports;
+    uint32_t m_bandwidth_in_words_per_cycle;
+
+    entryQueue m_entry_queue;
+    entryQueue m_entries_waiting_for_ports;
+
 };
 
 #endif
+
