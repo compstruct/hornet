@@ -9,14 +9,15 @@
 #include "statistics.hpp"
 #include "logger.hpp"
 #include "random.hpp"
-#include "memory.hpp"
+#include "memory_types.hpp"
 
 using namespace std;
 using namespace boost;
 
+/* do not change order */
 typedef enum {
-    REPLACE_RANDOM = 0,
-    REPLACE_LRU
+    REPLACE_LRU = 0,
+    REPLACE_RANDOM = 1
 } replacementPolicy_t;
 
 typedef struct {

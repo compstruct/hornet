@@ -9,7 +9,7 @@
 #include "statistics.hpp"
 #include "logger.hpp"
 #include "random.hpp"
-#include "memory.hpp"
+#include "memory_types.hpp"
 
 #define WORDS_IN_DRAM_BLOCK 256 /* must be a power of 2 */
 #define DRAM_INDEX_MASK (256-WORDS_IN_DRAM_BLOCK) /* must be a power of 2 */

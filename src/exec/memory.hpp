@@ -9,20 +9,12 @@
 #include "statistics.hpp"
 #include "logger.hpp"
 #include "random.hpp"
+#include "dramController.hpp"
+
+#include "memory_types.hpp"
 
 using namespace std;
 using namespace boost;
-
-typedef struct {
-    uint32_t mem_space_id;
-    uint64_t address;
-} maddr_t;
-
-typedef enum {
-    REQ_WAIT = 0,
-    REQ_DONE,
-    REQ_MIGRATE
-} memReqStatus_t;
 
 class memoryRequest {
 public:
@@ -38,8 +30,6 @@ public:
     inline bool is_read() { return m_is_read; }
     inline uint32_t home() { return m_home; }
     inline uint32_t word_count() { return m_word_count; }
-
-    friend class memory;
 
 private:
 
@@ -66,12 +56,22 @@ public:
     virtual void tick_negative_edge() = 0;
 
     virtual uint32_t number_of_mem_msg_types() = 0;
+
+    void add_local_dram_controller(shared_ptr<dram> connected_dram, 
+                                   uint32_t dram_controller_latency, uint32_t offchip_oneway_latency, uint32_t dram_latency,
+                                   uint32_t msg_header_size_in_words, uint32_t max_requests_in_flight, 
+                                   uint32_t bandwidth_in_words_per_cycle, bool use_lock);
+    void set_remote_dram_controller(uint32_t location);
+
 protected:
     uint32_t m_id;
     const uint64_t &system_time;
     shared_ptr<tile_statistics> stats;
     logger &log;
     shared_ptr<random_gen> ran;
+
+    dramController* m_dram_controller;
+    uint32_t m_dram_controller_location;
 
 };
 

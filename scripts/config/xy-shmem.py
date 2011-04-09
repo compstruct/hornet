@@ -86,29 +86,16 @@ def show_route((flow, prev, cur, rest)):
                 (flow, node_id(prev), node_id(cur), ' '.join(ns)))
 
 def write_route(src, dst, out):
-    global do_em, do_ra
     base_flow = ((src << 8) | dst) << 8
     src_coord = node_coords(src)
     dst_coord = node_coords(dst)
     routes = []
     current_set = 0
     # memory messages
-    for flow_prefix in [0, 1]:
+    for flow_prefix in range(num_vc_sets):
         flow = base_flow | (flow_prefix << 24)
         routes = routes + make_xy_routes(flow, src_coord, dst_coord, current_set)
         current_set += 1
-    # ra messages
-    if do_ra:
-        for flow_prefix in [2, 3]:
-            flow = base_flow | (flow_prefix << 24)
-            routes = routes + make_xy_routes(flow, src_coord, dst_coord, current_set)
-            current_set += 1
-    # em messages
-    if do_em:
-        for flow_prefix in [4, 5]:
-            flow = base_flow | (flow_prefix << 24)
-            routes = routes + make_xy_routes(flow, src_coord, dst_coord, current_set)
-            current_set += 1
     print >>out, '# flow %02x -> %02x using xy routing' % (src, dst)
     for r in routes:
         print >>out, show_route(r)
@@ -124,15 +111,7 @@ def write_routes(out=sys.stdout):
 
 def write_header(out=sys.stdout):
     global width, height, num_flits_per_vc, from_cpu_bandwidth, to_cpu_bandwidth, node_link_bandwidth, num_xbar_input_per_node
-    global core_name
-    default_l1_locations = ''
-    default_l2_locations = ''
-    default_dram_ctrl_locations = ''
-    for y in range(0, height):
-        for x in range(0, width):
-            default_l1_locations += '%d ' % (y*width + x)
-            default_l2_locations += '%d ' % (y*width + x)
-            default_dram_ctrl_locations += '%d ' % (x%width if y < height/2 else (height-1)*width+x%width) 
+    global core_name, memory_name
     template = string.Template('''\
 [geometry]
 height = $x
@@ -152,6 +131,7 @@ north = $link_bw/$mux
 east = $link_bw/$mux
 south = $link_bw/$mux
 west = $link_bw/$mux
+bytes per flit = 8
 
 [queues]
 cpu = $cpu2net
@@ -162,34 +142,80 @@ south = $up
 west = $right
 
 [core]
-
-default = $core
-
-[memory hierarchy]
-1 = $l1_locs
-2 = $l2_locs
-3 = $dc_locs
-
-[instruction memory hierarchy]
-1 = $l1_locs
-2 = $l2_locs
-3 = $dc_locs''')
+default = $core''')
     contents = template.substitute(x=width, y=height, qsize=num_flits_per_vc, 
                                    cpu2net_bw=from_cpu_bandwidth, net2cpu_bw=to_cpu_bandwidth, 
                                    link_bw=node_link_bandwidth, mux=num_xbar_input_per_node,
-                                   core=core_name, l1_locs=default_l1_locations, l2_locs=default_l2_locations,
-                                   dc_locs=default_dram_ctrl_locations,
+                                   core=core_name, 
                                    net2cpu=' '.join(['%d' % q for q in get_vcs('to_cpu')]),
                                    cpu2net=' '.join(['%d' % q for q in get_vcs('from_cpu')]),
                                    left=' '.join(['%d' % q for q in get_vcs((-1,0))]),
                                    right=' '.join(['%d' % q for q in get_vcs((1,0))]),
                                    up=' '.join(['%d' % q for q in get_vcs((0,-1))]),
                                    down=' '.join(['%d' % q for q in get_vcs((0,1))]))
+    # core specific defaults
+    if core_name == 'memtraceCore':
+        contents = contents + '''\
+
+
+[core::memtraceCore]
+execution migration mode = never
+message queue size = 4
+migration context size in bytes = 128
+maximum active threads per core = 2'''
+
+    # memory defaults
+    memory_fullname = {
+        'privateSharedMSI':'private-shared MSI'
+    }
+    if memory_fullname.has_key(memory_name) is False:
+        print 'Err - memory %s is not supported. must be one of %s'%(memory_name, str(memory_fullname.keys()))
+        exit(-1)
+
+    memoryTemplate = string.Template('''\
+
+
+[memory]
+architecture = $memory_name
+dram controller location = top and bottom
+core address translation = stripe
+core address translation latency = 1
+core address translation allocation unit in bytes = 4096
+core address synch delay = 0
+dram controller latency = 2
+one-way offchip latency = 150
+dram latency = 50
+dram message header size in words = 4
+maximum requests in flight per dram controller = 4
+bandwidth in words per dram controller = 4''')
+    contents = contents + memoryTemplate.substitute(memory_name=memory_fullname[memory_name])
+
+    # memory specific defaults
+    if memory_name in ['privateSharedMSI']:
+        contents = contents + '''\
+
+
+[memory::private-shared MSI]
+words per cache line = 4
+total lines in L1 = 32
+associativity in L1 = 2 
+hit test latency in L1 = 2
+read ports in L1 = 2
+write ports in L1 = 1
+replacement policy in L1 = LRU
+total lines in L2 = 128
+associativity in L2 = 4 
+hit test latency in L2 = 4
+read ports in L2 = 2
+write ports in L2 = 1
+replacement policy in L2 = LRU'''
+
+
     print >>out, contents
     
 def main(argv):
     # configurable parameters
-    global width, height, num_vc_sets, num_vcs_per_set, num_flits_per_vc, do_em, do_ra, core_name
+    global width, height, num_vc_sets, num_vcs_per_set, num_flits_per_vc, core_name, memory_name
     # hidden parameters
     global to_cpu_bandwidth, from_cpu_bandwidth, node_link_bandwidth, num_xbar_input_per_node
     # automatically built on parameters 
@@ -200,20 +226,19 @@ def main(argv):
     # defaults
     width = 8
     height = 8
-    num_vc_sets = 2       # 1 for memory requests and 1 for memory replies
+    num_vc_sets = 5       
     num_vcs_per_set = 1
     num_flits_per_vc = 4
-    do_em = False
-    do_ra = False
     output_filename = 'output.cfg'
     to_cpu_bandwidth = 16
     from_cpu_bandwidth = 16
     node_link_bandwidth = 1
     num_xbar_input_per_node = 1 # using -to-1 mux
     core_name = 'memtraceCore'
+    memory_name = 'privateSharedMSI'
 
     try:
-        opts, args = getopt.getopt(argv,"x:y:v:q:c:o:er") 
+        opts, args = getopt.getopt(argv,"x:y:v:q:c:o:n:m:") 
     except getopt.GetoptError:
         print 'Options'
         print '  -x <arg> network width(8)'
@@ -221,8 +246,8 @@ def main(argv):
         print '  -v <arg> number of VCs per set(1)'
         print '  -q <arg> maximum number of flits per VC(4)'
         print '  -c <arg> core type (memtraceCore)'
-        print '  -e support EM'
-        print '  -r support RA'
+        print '  -m <arg> memory type (privateSharedMSI)'
+        print '  -n <arg> number of VC sets'
         print '  -o <arg> output filename(output.cfg)'
         sys.exit(2)
     
@@ -235,22 +260,18 @@ def main(argv):
             num_vcs_per_set = int(a)
         elif o == '-q':
             num_flits_per_vc = int(a)
-        elif o == '-e':
-            do_em = True;
         elif o == '-c':
             core_name = a
-        elif o == '-r':
-            do_ra = True;
+        elif o == '-m':
+            memory_name = a
+        elif o == '-n':
+            num_vc_sets = int(a)
         elif o == '-o':
             output_filename = a
         else:
             print 'Wrong arguments'
             sys.exit(2)
         
-    if do_em:
-        num_vc_sets += 2
-    if do_ra:
-        num_vc_sets += 2
     num_vcs_per_link = num_vc_sets * num_vcs_per_set
     # for now, limit the total number of vcs to 32
     assert(num_vcs_per_link < 32)

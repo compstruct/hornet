@@ -9,13 +9,13 @@ memtraceCore::memtraceCore(const pe_id &id, const uint64_t &t,
                            shared_ptr<random_gen> r,
                            shared_ptr<memtraceThreadPool> pool,
                            shared_ptr<memory> mem,
-                           bool support_migration,
+                           emType_t em_type,
                            uint32_t msg_queue_size,
                            uint32_t bytes_per_flit,
                            uint32_t flits_per_context,
                            uint32_t max_threads) throw(err) : 
-    core(id, t, pif, st, l, r, mem, ((support_migration)?2:0), msg_queue_size, bytes_per_flit),
-    m_flits_per_context(flits_per_context), m_max_threads(max_threads),
+    core(id, t, pif, st, l, r, mem, ((em_type==EM_NEVER)?0:2), msg_queue_size, bytes_per_flit),
+    m_em_type(em_type), m_flits_per_context(flits_per_context), m_max_threads(max_threads),
     m_lane_ptr(0), m_num_threads(0), m_num_natives(0), m_num_guests(0), 
     m_threads(pool), m_do_evict(false) 
 { 

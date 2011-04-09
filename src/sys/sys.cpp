@@ -24,18 +24,20 @@
 #include "sys.hpp"
 #include "ginj.hpp"
 #include "core.hpp"
+#include "memory_types.hpp"
+#include "memory.hpp"
 #include "memtraceCore.hpp"
 #include "memtraceThread.hpp"
 #include "dramController.hpp"
+#include "privateSharedMSI.hpp"
+#include "cat.hpp"
 
 typedef enum {
     CORE_MIPS_MPI = 0,
     CORE_INJECTOR= 1,
     CORE_MEMTRACE= 2,
-    CORE_CUSTOM = 3,
-    CORE_MCPU = 4,
-    NUM_PES
-} core_type_t;
+    CORE_MCPU = 3
+} sys_core_type_t;
 
 static uint32_t read_word(shared_ptr<ifstream> in) throw(err) {
     uint32_t word = 0xdeadbeef;
@@ -129,6 +131,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     : sys_time(new_sys_time), stats(new system_statistics()), log(new_log),
       sys_rand(new random_gen(-1, seed++)), test_flags(new_test_flags) {
     uint32_t num_nodes = read_word(img);
+    uint32_t network_width = read_word(img);
     LOG(log,2) << "creating system with " << num_nodes << " node"
                << (num_nodes == 1 ? "" : "s") << "..." << endl;
     shared_ptr<flow_rename_table> flow_renames =
@@ -166,6 +169,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
+        uint32_t bytes_per_flit = read_word(img);
         if (id < 0 || id >= num_nodes) throw err_bad_mem_img();
         if (nodes[id]) throw err_bad_mem_img();
         shared_ptr<tile> t = tiles[id];
@@ -218,7 +222,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                 vca->add_queue(qi->second);
         }
         uint32_t core_type_word = read_word(img);
-        core_type_t core_type = static_cast<core_type_t>(core_type_word);
+        sys_core_type_t core_type = static_cast<sys_core_type_t>(core_type_word);
         shared_ptr<pe> p;
 
         switch (core_type) {
@@ -255,35 +259,175 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             break;
         }
         case CORE_MEMTRACE: {
+            /* memtraceCore-specific cfgs*/
+            uint32_t em_type_word = read_word(img);
+            emType_t em_type = static_cast<emType_t>(em_type_word);
+            uint32_t msg_queue_size = read_word(img);
+            uint32_t mig_size_in_bytes = read_word(img);
+            uint32_t max_threads = read_word(img);
 
-            // dram controller configuration
-            // memory configuration 
+            /* memory type */
+            uint32_t memory_type_word = read_word(img);
+            memoryType_t mem_type = static_cast<memoryType_t>(memory_type_word);
 
-            // core configuration 
+            /* dram controller location */
+            uint32_t dram_location_word = read_word(img);
+            dramLocationType_t dram_location = static_cast<dramLocationType_t>(dram_location_word);
 
-            // construction 
+            /* cat type */
+            uint32_t cat_type_word = read_word(img);
+            catType_t cat_type = static_cast<catType_t>(cat_type_word);
 
-            // p = new_core;
-            // memtrace_cores.push_back(new_core);
+            /* cat latency */
+            uint32_t cat_latency = read_word(img);
 
-            break;
-        }
-        case CORE_CUSTOM: {
-                              
-            // dram controller configuration
-            // memory configuration 
+            /* cat allocation unit */
+            uint32_t cat_allocation_unit_in_bytes = read_word(img);
 
-            /* set your core configuration */
+            /* cat synch delay */
+            uint32_t cat_synch_delay = read_word(img);
 
-            /* create core object */
-            shared_ptr<core> new_core;
+            shared_ptr<cat> new_cat = shared_ptr<cat>();
+            switch(cat_type) {
+            case CAT_STRIPE:
+                new_cat = shared_ptr<catStripe>(new catStripe(num_nodes, t->get_time(), cat_latency, cat_allocation_unit_in_bytes));
+                break;
+            case CAT_STATIC:
+                new_cat = shared_ptr<catStatic>(new catStatic(num_nodes, t->get_time(),
+                                                              cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay));
+                break;
+            case CAT_FIRST_TOUCH:
+                new_cat = shared_ptr<catFirstTouch>(new catFirstTouch(num_nodes, t->get_time(),
+                                                                      cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay));
+                break;
+            }
+
+            /* dram controller */
+            uint32_t dram_controller_latency = read_word(img);
+            uint32_t offchip_oneway_latency = read_word(img);
+            uint32_t dram_latency = read_word(img);
+            uint32_t msg_header_size_in_words = read_word(img);
+            uint32_t max_requests_in_flight = read_word(img);
+            uint32_t bandwidth_in_words_per_cycle = read_word(img);
+
+            /* cache configurations */
+            uint32_t words_per_cache_line = 0;
+            uint32_t l1_total_lines = 0;
+            uint32_t l1_associativity = 0;
+            uint32_t l1_hit_test_latency = 0;
+            uint32_t l1_read_ports = 0;
+            uint32_t l1_write_ports = 0;
+            replacementPolicy_t l1_policy = REPLACE_LRU;
+            uint32_t l2_total_lines = 0;
+            uint32_t l2_associativity = 0;
+            uint32_t l2_hit_test_latency = 0;
+            uint32_t l2_read_ports = 0;
+            uint32_t l2_write_ports = 0;
+            replacementPolicy_t l2_policy = REPLACE_LRU;
+
+            switch (mem_type) {
+            case MEM_PRIVATE_SHARED_MSI:
+            case MEM_PRIVATE_SHARED_LCC:
+            case MEM_PRIVATE_SHARED_MESI:
+            case MEM_SHARED_SHARED_RA:
+            case MEM_PRIVATE_PRIVATE_MOESI:
+                words_per_cache_line = read_word(img);
+                l1_total_lines = read_word(img);
+                l1_associativity = read_word(img);
+                l1_hit_test_latency = read_word(img);
+                l1_read_ports = read_word(img);
+                l1_write_ports = read_word(img);
+                uint32_t l1_policy_word = read_word(img);
+                l1_policy = static_cast<replacementPolicy_t>(l1_policy_word);
+                l2_total_lines = read_word(img);
+                l2_associativity = read_word(img);
+                l2_hit_test_latency = read_word(img);
+                l2_read_ports = read_word(img);
+                l2_write_ports = read_word(img);
+                uint32_t l2_policy_word = read_word(img);
+                l2_policy = static_cast<replacementPolicy_t>(l2_policy_word);
+                break;
+            }
+
+            /* memory construction */
+            shared_ptr<memory> mem = shared_ptr<memory>();
+            switch (mem_type) {
+            case MEM_PRIVATE_SHARED_MSI:
+                {
+                    privateSharedMSI::privateSharedMSICfg_t cfg = { em_type, bytes_per_flit, words_per_cache_line,
+                        l1_total_lines, l1_associativity, l1_hit_test_latency, l1_read_ports, l1_write_ports, l1_policy,
+                        l2_total_lines, l2_associativity, l2_hit_test_latency, l2_read_ports, l2_write_ports, l2_policy };
+                    mem = shared_ptr<memory>(new privateSharedMSI(id, t->get_time(), t->get_statistics(), log, ran, new_cat, cfg));
+                }
+                break;
+            case MEM_PRIVATE_SHARED_LCC:
+            case MEM_PRIVATE_SHARED_MESI:
+            case MEM_SHARED_SHARED_RA:
+            case MEM_PRIVATE_PRIVATE_MOESI:
+                assert(false); /* not implemented yet */
+                break;
+            }
+
+            /* dram controller set up */
+            uint32_t location = 0;
+            if (dram_location == TOP_AND_BOTTOM_TO_DRAM) {
+                if (id/network_width == 0 || id/network_width == (num_nodes-1)/network_width) {
+                    location = id;
+                } else {
+                    if (id < num_nodes/2) {
+                        location = id%network_width;
+                    } else {
+                        location = num_nodes - network_width + id%network_width;
+                    }
+                }
+            } else if (dram_location == BOUNDARY_TO_DRAM) {
+                if (id/network_width == 0 || id/network_width == (num_nodes-1)/network_width
+                    || id%network_width == 0 || id%network_width == network_width -1 ) {
+                    location = id;
+                } else if (id < num_nodes/2) {
+                    uint32_t min_dist = min( id/network_width, min(id%network_width, network_width - id%network_width) );
+                    if (id/network_width == min_dist) {
+                        location = id%network_width;
+                    } else if (id%network_width == min_dist) {
+                        location = id/network_width;
+                    } else {
+                        location = id/network_width + network_width - 1;
+                    }
+                } else {
+                    uint32_t min_dist = min( num_nodes/network_width - id/network_width, 
+                                             min(id%network_width, network_width - id%network_width) );
+                    if (num_nodes/network_width - id/network_width == min_dist) {
+                        location = num_nodes - network_width + id%network_width;
+                    } else if (id%network_width == min_dist) {
+                        location = id/network_width;
+                    } else {
+                        location = id/network_width + network_width - 1;
+                    }
+                }
+            }
+
+            if (location != (uint32_t)id) {
+                mem->set_remote_dram_controller(dram_location);
+            } else {
+                mem->add_local_dram_controller(new_dram, dram_controller_latency, offchip_oneway_latency, dram_latency,
+                                               msg_header_size_in_words, max_requests_in_flight, bandwidth_in_words_per_cycle,
+                                               true /* use lock */);
+            }
+
+            shared_ptr<memtraceCore> new_core = 
+                shared_ptr<memtraceCore>(new memtraceCore(pe_id(id), t->get_time(), t->get_packet_id_factory(),
+                                                          t->get_statistics(), log, ran, memtrace_thread_pool, mem,
+                                                          em_type, msg_queue_size, bytes_per_flit, 
+                                                          (mig_size_in_bytes + bytes_per_flit - 1)/bytes_per_flit, /* flit/context */
+                                                          max_threads));
+
             p = new_core;
+            memtrace_cores.push_back(new_core);
 
             break;
         }
         case CORE_MCPU: {
-            assert(false); /* Chris is my hope */
-#if 0
+
             // MIPS image setup ------------------------------------------------ 
             
             uint32_t mem_start = read_word(img);
@@ -292,9 +436,12 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             shared_ptr<mem> m(new mem(id, mem_start, mem_size, log));
             read_mem(m->ptr(mem_start), mem_size, img);
 
-            uint32_t cpu_entry_point = read_word(img);
-            uint32_t cpu_stack_pointer = read_word(img);
+            uint32_t __attribute__((unused)) cpu_entry_point = read_word(img);
+            uint32_t __attribute__((unused)) cpu_stack_pointer = read_word(img);
 
+            assert(false); /* Chris is my hope */
+
+#if 0
             // Core config setup -----------------------------------------------
 
             core::core_cfg_t core_cfgs;

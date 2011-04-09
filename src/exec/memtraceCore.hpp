@@ -15,7 +15,7 @@ public:
                  shared_ptr<random_gen> ran,
                  shared_ptr<memtraceThreadPool> pool,
                  shared_ptr<memory> mem,
-                 bool support_migration,
+                 emType_t em_type,
                  uint32_t msg_queue_size,
                  uint32_t bytes_per_flit,
                  uint32_t flits_per_context,
@@ -34,6 +34,7 @@ private:
     map<uint32_t, flow_id> flow_ids;
 
     /* Configurations */
+    emType_t m_em_type;
     uint32_t m_flits_per_context;
     uint32_t m_max_threads;
 

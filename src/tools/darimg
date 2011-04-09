@@ -153,14 +153,15 @@ def write_header(out, verbose=False):
     out.write(file_magic)
     out.write(w2bs(file_version))
 
-def write_pe(out, id, core, img, mem_locs, imem_locs, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_size,
-             n2b_queues, b2n_queues, one_q_per_f, one_f_per_q, multi_path_routing, verbose=False):
+def write_pe(out, id, core, img, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_size,
+             n2b_queues, b2n_queues, bytes_per_flit, one_q_per_f, one_f_per_q, 
+             core_cfgs, memory_cfgs,
+             multi_path_routing, verbose=False):
     core_id = {
         'mips_mpi':0,
         'injector':1,
         'memtraceCore':2,
-        'customCore':3,
-        'mcpu':4
+        'mcpu':3
     }
     multi_path_routing_id = {
         'probability':0,
@@ -171,6 +172,7 @@ def write_pe(out, id, core, img, mem_locs, imem_locs, n2b_bw, b2n_bw, b2n_xbar_b
         print 'writing PE %d' % id
     # node
     out.write(w2bs(id))
+    out.write(w2bs(bytes_per_flit))
     out.write(w2bs(1 if one_q_per_f else 0))
     out.write(w2bs(1 if one_f_per_q else 0))
     if multi_path_routing_id.has_key(multi_path_routing):
@@ -191,9 +193,17 @@ def write_pe(out, id, core, img, mem_locs, imem_locs, n2b_bw, b2n_bw, b2n_xbar_b
         out.write(w2bs(core_id[core]))
     else:
         raise Err('bad core name : %s (must be one of %s)' % (core, str(core_id.keys())))
-    # core-specific cfgs
-    # image      
-    if core in ['mips_mpi']:
+
+    # core specific configurations 
+    for cfg in core_cfgs:
+        out.write(w2bs(cfg))
+
+    # memory specific configurations
+    for cfg in memory_cfgs:
+        out.write(w2bs(cfg))
+
+    # mips data
+    if core == 'mips_mpi':
         assert(img is not None)
         file, format, entry, all_sections = \
                 read_section_headers(img, verbose=verbose)
@@ -202,14 +212,7 @@ def write_pe(out, id, core, img, mem_locs, imem_locs, n2b_bw, b2n_bw, b2n_xbar_b
         addr_past_end = sections[-1]['lma'] + sections[-1]['size']
         size = ((addr_past_end - start) & 0xfffff000) + 0x1000 + 0x4000
         write_mem_image(out, file, start, size, entry, sections, verbose=verbose)
-    # memory hierarchy
-    if core in ['memtraceCore', 'customCore']:
-        out.write(w2bs(len(mem_locs)))
-        for loc in mem_locs:
-            out.write(w2bs(loc))
-    # customCore-specific cfgs
-    if core in ['mcpu']:
-        # mips data
+    if core == 'mcpu':
         file, format, entry, all_sections = \
                 read_section_headers(img, verbose=verbose)
         sections = sort_sections(all_sections, verbose=verbose)
@@ -217,17 +220,6 @@ def write_pe(out, id, core, img, mem_locs, imem_locs, n2b_bw, b2n_bw, b2n_xbar_b
         addr_past_end = sections[-1]['lma'] + sections[-1]['size']
         size = ((addr_past_end - start) & 0xfffff000) + 0x1000 + 0x4000
         write_mem_image(out, file, start, size, entry, sections, verbose=verbose)
-        # memory hierarchy (I$)
-        out.write(w2bs(len(imem_locs))) # levels in the hierarchy
-        for iloc in imem_locs:
-            out.write(w2bs(iloc)) 
-        # memory hierarchy (D$)
-        out.write(w2bs(len(mem_locs))) # levels in the hierarchy
-        for loc in mem_locs:
-            out.write(w2bs(loc)) 
-    if core in ['customCore']:
-        # add your customCore-specific configurations
-        None
 
 def write_cxn(out, src, src_port, dst, dst_port, bw, xbar_bw, queues,
               verbose=False):
@@ -294,11 +286,12 @@ def write_route(out, (route_type, route), verbose=False):
         write_node_route(route)
 
 def write_complete_image(out, cfg, verbose=False):
-    settings, pes, cxns, routes = new_system_config(cfg, verbose=verbose)
+    network_width, settings, pes, cxns, routes = new_system_config(cfg, verbose=verbose)
     write_header(out, verbose=verbose)
     if verbose:
         print ('writing %d PE%s...' % (len(pes), '' if len(pes) == 1 else 's'))
     out.write(w2bs(len(pes)))
+    out.write(w2bs(network_width))
     for pe_cfg in pes:
         write_pe(out=out, verbose=verbose, **pe_cfg)
     if verbose:
@@ -318,7 +311,188 @@ def write_complete_image(out, cfg, verbose=False):
     for route in routes:
         write_route(out, route, verbose=verbose)
 
+def get_core_cfgs(cfg, core):
 
+    ret = []
+
+    # memtraceCore
+    if core == 'memtraceCore':
+        section = 'core::memtraceCore'
+        # em mode
+        option_id = {
+            'never':0,
+            'distance':1,
+            'always':2}
+        if cfg.has_option(section, 'execution migration mode'):
+            option = cfg.get(section, 'execution migration mode')  
+            if option_id.has_key(option):
+                ret.append(option_id[option])
+            else:
+                raise Err('bad execution migration mode name : %s (must be one of %s)' % (option, str(option_id.keys())))
+        else:
+            ret.append(option_id['never'])
+        # message queue size
+        if cfg.has_option(section, 'message queue size'):
+            ret.append(int(cfg.get(section, 'message queue size')))
+        else:
+            ret.append(4)
+        # migration context size in bytes
+        if cfg.has_option(section, 'migration context size in bytes'):
+            ret.append(int(cfg.get(section, 'migration context size in bytes')))
+        else:
+            ret.append(128)
+        # maximum active thread per core 
+        if cfg.has_option(section, 'maximum active threads per core'):
+            ret.append(int(cfg.get(section, 'maximum active threads per core')))
+        else:
+            ret.append(2)
+
+    return ret
+
+def get_memory_cfgs(cfg, core):
+    memory_id = {'private-shared MSI':0, 
+                 'private-shared LCC':1,
+                 'private-shared MESI': 2,
+                 'shared-shared RA':3,
+                 'private-private MOESI':4}
+    ret = []
+    if core in ['mips_mpi', 'injector']:
+        # need no memory configurations
+        return ret
+
+    # architecture
+    if cfg.has_option('memory', 'architecture'):
+        memory_arch = cfg.get('memory', 'architecture')
+        if memory_id.has_key(memory_arch) == False:
+            raise Err('bad memory architecture name : %s (must be one of %s)' % (memory_arch, str(memory_id.keys())))
+    else:
+        memory_arch = 'private-shared MSI'
+    ret.append(memory_id[memory_arch])
+
+    # dram controller location
+    option_id = {
+        'top and bottom':0,
+        'boundary':1
+    }
+    if cfg.has_option('memory', 'dram controller location'):
+        option = cfg.get('memory', 'dram controller location')
+        if (option_id.has_key(option)):
+            ret.append(option_id[option])
+        else:
+            raise Err('bad dram controller location name : %s (must be one of %s)' % (option, str(option_id.keys())))
+    else:
+        ret.append(option_id['top and bottom'])
+
+    # core address translation 
+    option_id = {
+        'stripe':0,
+        'static':1,
+        'first touch':2
+    }
+    if cfg.has_option('memory', 'core address translation'):
+        option = cfg.get('memory', 'core address translation')
+        if (option_id.has_key(option)):
+            ret.append(option_id[option])
+        else:
+            raise Err('bad core address translation name : %s (must be one of %s)' % (option, str(option_id.keys())))
+    else:
+        ret.append(option_id['stripe'])
+
+    # core address translation latency 
+    if cfg.has_option('memory', 'core address translation latency'):
+        ret.append(int(cfg.get('memory', 'core address translation latency')))
+    else:
+        ret.append(1)
+
+    # core address translation allocation unit
+    if cfg.has_option('memory', 'core address translation allocation unit in bytes'):
+        ret.append(int(cfg.get('memory', 'core address translation allocation unit in bytes')))
+    else:
+        ret.append(4096)
+
+    # core address translation synch delay
+    if cfg.has_option('memory', 'core address translation synch delay'):
+        ret.append(int(cfg.get('memory', 'core address translation synch delay')))
+    else:
+        ret.append(0)
+
+    # dram controller latency
+    if cfg.has_option('memory', 'dram controller latency'):
+        ret.append(int(cfg.get('memory', 'dram controller latency')))
+    else:
+        ret.append(2)
+
+    # one-way offchip latency 
+    if cfg.has_option('memory', 'one-way offchip latency'):
+        ret.append(int(cfg.get('memory', 'one-way offchip latency')))
+    else:
+        ret.append(150)
+
+    # dram latency
+    if cfg.has_option('memory', 'dram latency'):
+        ret.append(int(cfg.get('memory', 'dram latency')))
+    else:
+        ret.append(50)
+
+    # dram message header size in words
+    if cfg.has_option('memory', 'dram message header size in words'):
+        ret.append(int(cfg.get('memory', 'dram message header size in words')))
+    else:
+        ret.append(4)
+
+    # maximum requests in flight per dram controller
+    if cfg.has_option('memory', 'maximum requests in flight per dram controller'):
+        ret.append(int(cfg.get('memory', 'maximum requests in flight per dram controller')))
+    else:
+        ret.append(4)
+
+    # bandwidth in words per dram controller 
+    if cfg.has_option('memory', 'bandwidth in words per dram controller'):
+        ret.append(int(cfg.get('memory', 'bandwidth in words per dram controller')))
+    else:
+        ret.append(4)
+
+    # cache configuration (L1L2)
+    if memory_arch in ['private-shared MSI', 'private-shared LCC', 'private-shared MESI',  \
+                       'shared-shared RA', 'private-private MOESI']:
+        section = 'memory::' + memory_arch
+        if cfg.has_option(section, 'words per cache line'):
+            ret.append(int(cfg.get(section, 'words per cache line')))
+        else:
+            ret.append(4)
+        for cache_name in ['L1', 'L2']:
+            if cfg.has_option(section, 'total lines in ' + cache_name):
+                ret.append(int(cfg.get(section, 'total lines in ' + cache_name)))
+            else:
+                ret.append(32)
+            if cfg.has_option(section, 'associativity in ' + cache_name):
+                ret.append(int(cfg.get(section, 'associativity in ' + cache_name)))
+            else:
+                ret.append(2)
+            if cfg.has_option(section, 'hit test latency in ' + cache_name):
+                ret.append(int(cfg.get(section, 'hit test latency in ' + cache_name)))
+            else:
+                ret.append(2)
+            if cfg.has_option(section, 'read ports in ' + cache_name):
+                ret.append(int(cfg.get(section, 'read ports in ' + cache_name)))
+            else:
+                ret.append(2)
+            if cfg.has_option(section, 'write ports in ' + cache_name):
+                ret.append(int(cfg.get(section, 'write ports in ' + cache_name)))
+            else:
+                ret.append(1)
+            option_id = {
+                'LRU':0,
+                'random':1}
+            if cfg.has_option(section, 'replacement policy in ' + cache_name):
+                option = cfg.get(section, 'replacement policy in ' + cache_name)
+                if (option_id.has_key(option)):
+                    ret.append(option_id[option])
+                else:
+                    raise Err('bad cache replacement policy name : %s (must be one of %s)' % (option, str(option_id.keys())))
+            else:
+                ret.append(option_id['LRU'])
+    return ret
 
 def new_system_config(cfg, verbose=False):
     def get_links(w, h, n):
@@ -531,38 +705,35 @@ def new_system_config(cfg, verbose=False):
                                                else None)
         else :
             progs = ({}, None)
-        mem_locs = dict()
         
-        ## memory hierarchy i/d$ split
-        if cfg.has_section('memory hierarchy') :
-            mem_locs['d'] = dict([(p_nat(n), map(int, v.split())) for n, v in cfg.items('memory hierarchy')])
-            mem_levels = mem_locs['d'].keys()
-            mem_levels.sort()
-        if cfg.has_section('instruction memory hierarchy') :
-            mem_locs['i'] = dict([(p_nat(n), map(int, v.split())) for n, v in cfg.items('instruction memory hierarchy')])
-            imem_levels = mem_locs['i'].keys()
-            imem_levels.sort()
-        ## -- end
-
         node_ids = range(0, w * h)
         cpu_qs = get_qs('cpu')
         if get_bw('net')[1] is not None:
             raise Err('from-net bandwidth cannot have crossbar input limit')
-        nodes = [{ 'id': id,
-                   'one_q_per_f': one_q_per_f,
-                   'one_f_per_q': one_f_per_q,
-                   'multi_path_routing' : multi_path_routing,
-                   'core': get_core(cores, id),
-                   'img': get_code(progs, id),
-                   'mem_locs' : [mem_locs['d'][level][id] for level in mem_levels] if cfg.has_section('memory hierarchy') else [],
-                   'imem_locs' : [mem_locs['i'][level][id] for level in imem_levels] if cfg.has_section('instruction memory hierarchy') else [],
-                   'n2b_bw': get_bw('net')[0],
-                   'b2n_bw': get_bw('cpu')[0],
-                   'b2n_xbar_bw': get_bw('cpu')[1],
-                   'qmem_size': p_nat(cfg.get('node', 'queue size')),
-                   'n2b_queues': get_qs('net'),
-                   'b2n_queues': get_qs('cpu') }
-                 for id in node_ids]
+
+        bytes_per_flit = int(cfg.get('bandwidth', 'bytes per flit')) if cfg.has_option('bandwidth', 'bytes per flit') else 8
+
+
+        nodes = []
+        for id in node_ids:
+            core_cfgs = get_core_cfgs(cfg, get_core(cores, id))
+            memory_cfgs = get_memory_cfgs(cfg, get_core(cores, id))
+            nodes.append({ 'id': id,
+                         'one_q_per_f': one_q_per_f,
+                         'one_f_per_q': one_f_per_q,
+                         'multi_path_routing' : multi_path_routing,
+                         'core': get_core(cores, id),
+                         'img': get_code(progs, id),
+                         'n2b_bw': get_bw('net')[0],
+                         'b2n_bw': get_bw('cpu')[0],
+                         'b2n_xbar_bw': get_bw('cpu')[1],
+                         'qmem_size': p_nat(cfg.get('node', 'queue size')),
+                         'n2b_queues': get_qs('net'),
+                         'b2n_queues': get_qs('cpu'),
+                         'bytes_per_flit': bytes_per_flit,
+                         'core_cfgs': core_cfgs,
+                         'memory_cfgs': memory_cfgs})
+
         links = [{ 'src': src,
                    'src_port': src_port,
                    'dst': dst,
@@ -593,7 +764,7 @@ def new_system_config(cfg, verbose=False):
             raise Err('bad queue routing type: %s' % queue_routing)
     except ConfigParser.Error, e:
         raise Err('bad config: %s' % e)
-    return settings, nodes, links, routes
+    return w, settings, nodes, links, routes
 
 def main():
     out_file = 'output.img'
