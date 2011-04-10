@@ -8,7 +8,10 @@ catRequest::catRequest(maddr_t maddr, uint32_t sender) : m_status(CAT_NEW), m_ma
 catRequest::~catRequest() {}
 
 cat::cat(uint32_t num_nodes, const uint64_t &t, uint32_t latency, uint32_t allocation_unit_in_bytes) : 
-    m_num_nodes(num_nodes), system_time(t), m_latency(latency), m_allocation_unit_in_bytes(allocation_unit_in_bytes) {}
+    m_num_nodes(num_nodes), system_time(t), m_latency(latency), m_allocation_unit_in_bytes(allocation_unit_in_bytes)
+{
+    assert(m_allocation_unit_in_bytes > 0);
+}
 
 cat::~cat() {}
 

@@ -20,5 +20,7 @@ libdarexec_la_SOURCES = memory_types.hpp \
                         memtraceThread.hpp memtraceThread.cpp \
                         threadStats.hpp threadStats.cpp \
                         memtraceThreadStats.hpp memtraceThreadStats.cpp \
-                        privateSharedMSI.hpp privateSharedMSI.cpp 
+                        privateSharedMSI.hpp privateSharedMSI.cpp \
+                        memStats.hpp memStats.cpp \
+                        privateSharedMSIStats.hpp privateSharedMSIStats.cpp
 

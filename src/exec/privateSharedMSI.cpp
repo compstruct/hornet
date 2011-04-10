@@ -9,8 +9,10 @@
 
 privateSharedMSI::privateSharedMSI(uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, logger &l, 
                  shared_ptr<random_gen> r, shared_ptr<cat> a_cat, privateSharedMSICfg_t cfg) :
-    memory(id, t, st, l, r), m_cfg(cfg), m_l1(NULL), m_l2(NULL), m_cat(a_cat)
+    memory(id, t, st, l, r), m_cfg(cfg), m_l1(NULL), m_l2(NULL), m_cat(a_cat), m_stats(shared_ptr<privateSharedMSIStatsPerTile>())
 {
+    assert(m_cfg.bytes_per_flit > 0);
+    assert(m_cfg.words_per_cache_line > 0);
     /* create caches */
     assert(m_cfg.lines_in_l1 > 0);
     assert(m_cfg.lines_in_l2 > 0);

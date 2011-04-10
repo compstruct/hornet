@@ -79,14 +79,15 @@ void threadStats::print_stats(ostream &out) {
         char str[1024];
         if (st->check_if_completed()) {
             sprintf(str, "[Thread %4d completed] cycles: %ld reads: %ld writes: %ld AML: %.4f AMRL: %.4f AMWL: %.4f "
-                    "migration rate: %.2f eviction rate: every %.2f cycles",
-                    id, cycles, reads, writes, aml, amrl, amwl, migrations*100.0/mem, 
-                    (evictions != 0)? (cycles-penalties)/evictions : 0.0f);
+                    "migration-rate%%: %.4f cycles-per-eviction: %.4f",
+                    id, cycles, reads, writes, aml, amrl, amwl, 
+                    (mem > 0)? migrations*100.0/mem : 0, 
+                    (cycles-penalties)/evictions);
         } else if (st->check_if_spawned()) {
             sprintf(str, "[Thread %4d running] cycles: %ld reads: %ld writes: %ld AML: %.4f AMRL: %.4f AMWL: %.4f "
-                    "migration rate: %.2f eviction rate: every %.2f cycles",
-                    id, cycles, reads, writes, aml, amrl, amwl, migrations*100.0/mem, 
-                    (evictions != 0)? (cycles-penalties)/evictions : 0.0f);
+                    "migration-rate%%: %.4f cycles-per-eviction: %.4f",
+                    id, cycles, reads, writes, aml, amrl, amwl, (mem > 0)? migrations*100.0/mem : 0, 
+                    (cycles-penalties)/evictions);
         }
 
         out << str << endl;
@@ -95,18 +96,25 @@ void threadStats::print_stats(ostream &out) {
     out << endl;
     char str[1024];
     if (completed) {
-        sprintf(str, "[Summary - completed] PCT: %ld reads: %ld writes: %ld AML: %.4f AMRL: %.4f AMWL: %.4f "
-                "migration rate: %.2f eviction rate: every %.2f cycles",
+        sprintf(str, "[Summary: Thread completed] PCT: %ld reads: %ld writes: %ld AML: %.4f AMRL: %.4f AMWL: %.4f "
+                "migration-rate%%: %.4f cycles-per-eviction: %.4f",
                 parallel_completion_time, total_reads, total_writes,
-                total_latency/total_mem, total_read_latency/total_reads, total_write_latency/total_writes,
-                total_migrations*100.0/total_mem, (total_evictions != 0)? (total_cycles-total_penalties)/total_evictions : 0.0f);
+                total_latency/total_mem, 
+                total_read_latency/total_reads,
+                total_write_latency/total_writes,
+                (total_mem > 0)? total_migrations*100.0/total_mem : 0, 
+                (total_cycles-total_penalties)/total_evictions);
     } else {
-        sprintf(str, "[Summary - running] PCT: N/A reads: %ld writes: %ld AML: %.4f AMRL: %.4f AMWL: %.4f "
-                "migration rate: %.2f eviction rate: every %.2f cycles",
+        sprintf(str, "[Summary: Thread running] PCT: N/A reads: %ld writes: %ld AML: %.4f AMRL: %.4f AMWL: %.4f "
+                "migration-rate%%: %.4f cycles-per-eviction: %.4f",
                 total_reads, total_writes, 
-                total_latency/total_mem, total_read_latency/total_reads, total_write_latency/total_writes,
-                total_migrations*100.0/total_mem, (total_evictions != 0)? (total_cycles-total_penalties)/total_evictions : 0.0f);
+                total_latency/total_mem, 
+                total_read_latency/total_reads,
+                total_write_latency/total_writes,
+                (total_mem > 0)? total_migrations*100.0/total_mem : 0, 
+                (total_cycles-total_penalties)/total_evictions);
     }
     out << str << endl;
 
+    out << endl;
 }

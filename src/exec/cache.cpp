@@ -21,6 +21,10 @@ cache::cache(uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, log
     m_associativity(associativity), m_replacement_policy(replacement_policy), m_hit_test_latency(hit_test_latency),
     m_number_of_free_read_ports(num_read_ports), m_number_of_free_write_ports(num_write_ports)
 { 
+    assert(m_associativity > 0);
+    assert(m_words_per_line > 0);
+    assert(m_number_of_free_read_ports > 0);
+    assert(m_number_of_free_write_ports > 0);
     int log2 = 0;
     for (uint32_t i = m_words_per_line * 4; i > 1; i = i/2) {
         assert(i%2 == 0); /*  must be a power of 2 */

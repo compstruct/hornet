@@ -38,7 +38,10 @@ dramController::dramController(uint32_t id, const uint64_t &t,
     m_total_latency(dram_controller_latency + 2*offchip_oneway_latency + dram_latency),
     m_msg_header_size_in_words(msg_header_size_in_words),
     m_number_of_free_ports(max_requests_in_flight), m_bandwidth_in_words_per_cycle(bandwidth_in_words_per_cycle)
-{}
+{
+    assert(m_bandwidth_in_words_per_cycle > 0);
+    assert(m_number_of_free_ports > 0);
+}
 
 dramController::~dramController() {}
 
@@ -49,7 +52,7 @@ void dramController::request(shared_ptr<dramRequest> req) {
     new_entry->request = req;
     if (m_number_of_free_ports > 0) {
         --m_number_of_free_ports;
-        new_entry->remaining_words_to_transfer = req->m_word_count;
+        new_entry->remaining_words_to_transfer = req->m_word_count + 2 * m_msg_header_size_in_words;
         if (m_total_latency > 0) {
             new_entry->status = ENTRY_LATENCY;
             new_entry->remaining_latency_cycles = m_total_latency;

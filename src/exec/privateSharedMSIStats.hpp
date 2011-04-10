@@ -11,9 +11,29 @@ public:
     privateSharedMSIStatsPerTile(uint32_t id, const uint64_t &system_time);
     virtual ~privateSharedMSIStatsPerTile();
 
-    /* add privateSharedMSI-specific statistics */
+    void did_read_l1(bool hit);
+    void did_write_l1(bool hit);
+    void did_read_l2(bool hit);
+    void did_write_l2(bool hit);
+
+    /* only for read sharer invalidation */
+    void did_invalidate_sharers(uint32_t num_sharers, uint64_t latency);
+    void did_read_cat(bool hit);
 
     friend class privateSharedMSIStats;
+
+private:
+
+    running_stats m_l1_read_hits;
+    running_stats m_l1_write_hits;
+    running_stats m_l2_read_hits;
+    running_stats m_l2_write_hits;
+
+    running_stats m_invalidated_sharers;
+    running_stats m_invalidate_penalties;
+
+    running_stats m_directory_hits;
+
 };
 
 class privateSharedMSIStats : public memStats {

@@ -171,6 +171,8 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     vector<shared_ptr<memtraceCore> > memtrace_cores;
     shared_ptr<memtraceThreadPool> memtrace_thread_pool(new memtraceThreadPool());
 
+    shared_ptr<privateSharedMSIStats> private_shared_msi_stats = shared_ptr<privateSharedMSIStats>();
+
     shared_ptr<dram> new_dram(new dram ());
 
     for (unsigned i = 0; i < num_nodes; ++i) {
@@ -360,10 +362,24 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             switch (mem_type) {
             case MEM_PRIVATE_SHARED_MSI:
                 {
+                    if (private_shared_msi_stats == shared_ptr<privateSharedMSIStats>()) {
+                        private_shared_msi_stats = 
+                            shared_ptr<privateSharedMSIStats>(new privateSharedMSIStats(t->get_time()));
+                        stats->add_aux_statistics(private_shared_msi_stats);
+                    }
                     privateSharedMSI::privateSharedMSICfg_t cfg = { em_type, bytes_per_flit, words_per_cache_line,
                         l1_total_lines, l1_associativity, l1_hit_test_latency, l1_read_ports, l1_write_ports, l1_policy,
                         l2_total_lines, l2_associativity, l2_hit_test_latency, l2_read_ports, l2_write_ports, l2_policy };
-                    mem = shared_ptr<memory>(new privateSharedMSI(id, t->get_time(), t->get_statistics(), log, ran, new_cat, cfg));
+                    shared_ptr<privateSharedMSI> new_mem = 
+                        shared_ptr<privateSharedMSI>(new privateSharedMSI(id, t->get_time(), 
+                                                                          t->get_statistics(), log, ran, new_cat, cfg));
+                    shared_ptr<privateSharedMSIStatsPerTile> per_tile_stats = 
+                        shared_ptr<privateSharedMSIStatsPerTile>(new privateSharedMSIStatsPerTile(id, t->get_time()));
+                    new_mem->set_per_tile_stats(per_tile_stats);
+
+                    private_shared_msi_stats->add_per_tile_stats(per_tile_stats);
+
+                    mem = new_mem;
                 }
                 break;
             case MEM_PRIVATE_SHARED_LCC:

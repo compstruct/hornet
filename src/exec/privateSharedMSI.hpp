@@ -8,8 +8,8 @@
 #include "memory.hpp"
 #include "cache.hpp"
 #include "cat.hpp"
+#include "privateSharedMSIStats.hpp"
 
-// TODO : CAT and EM 
 
 class privateSharedMSI : public memory {
 public:
@@ -42,6 +42,11 @@ public:
     virtual void request(shared_ptr<memoryRequest> req);
     virtual void tick_positive_edge();
     virtual void tick_negative_edge();
+
+    /* set stats */
+    inline void set_per_tile_stats(shared_ptr<privateSharedMSIStatsPerTile> stats) { m_stats = stats; }
+    inline bool stats_enabled() { return (m_stats != shared_ptr<privateSharedMSIStatsPerTile>()); }
+    inline shared_ptr<privateSharedMSIStatsPerTile> stats() { return m_stats; }
 
 private:
     typedef enum {
@@ -125,6 +130,7 @@ private:
     coherenceMsgTable m_directory_coherence_req_table;
     coherenceMsgTable m_coherence_reply_table;
 
+    shared_ptr<privateSharedMSIStatsPerTile> m_stats;
 };
 
 #endif

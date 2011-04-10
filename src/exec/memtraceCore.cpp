@@ -21,6 +21,9 @@ memtraceCore::memtraceCore(const pe_id &id, const uint64_t &t,
     m_lane_ptr(0), m_num_threads(0), m_num_natives(0), m_num_guests(0), 
     m_threads(pool), m_do_evict(false) 
 { 
+    assert(m_flits_per_context > 0);
+    assert(m_max_threads > 0);
+
     for (unsigned int i = 0; i < m_max_threads; ++i) {
         lane_entry_t entry;
         entry.status = LANE_EMPTY;
