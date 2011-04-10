@@ -68,6 +68,8 @@ private:
     void load_thread(memtraceThread* thread);
     void unload_thread(lane_idx_t idx);
 
+    bool support_em() { return (m_em_type != EM_NEVER); }
+
 private:
     vector<lane_entry_t> m_lanes;
     lane_idx_t m_lane_ptr;

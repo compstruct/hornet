@@ -63,7 +63,7 @@ flow_id flow_rename_table::operator[](flow_id f) const throw () {
 }
 
 running_stats::running_stats() throw () :
-    minimum(-log(0)), maximum(log(0)), mean(0), var_numer(0), weight_sum(0) {
+    minimum(-log(0)), maximum(log(0)), mean(0), var_numer(0), weight_sum(0), num_samples(0) {
 }
 
 void running_stats::reset() throw () {
@@ -75,6 +75,7 @@ void running_stats::reset() throw () {
 }
 
 void running_stats::add(double sample, double weight) throw () {
+    ++num_samples;
     if (!isnan(sample) && !isnan(weight)) { // NaN -> invalid sample
         if (sample < minimum)
             minimum = sample;
@@ -177,8 +178,7 @@ tile_statistics::tile_statistics(const uint64_t &sys_time,
             total_received_flits(0), total_offered_packets(0),
             total_sent_packets(0), total_received_packets(0), 
             vqwr_flits(), total_vqwr_flits(0), vqwr_bridge(), vqwr_port(),  
-            vqrd_flits(), total_vqrd_flits(0), vqrd_bridge(), vqrd_port(),
-            total_remote_accesses(0), total_memory_accesses(0) { }
+            vqrd_flits(), total_vqrd_flits(0), vqrd_bridge(), vqrd_port() {}
 
 bool tile_statistics::is_started() throw() {
     return system_time >= start_time;
@@ -444,6 +444,10 @@ void tile_statistics::add_egress(node_id src, node_id dst, uint64_t bandwidth) t
     egress_bandwidth[cid] += bandwidth;
 }
 
+aux_statistics::aux_statistics(const uint64_t &t) : system_time(t) {}
+
+aux_statistics::~aux_statistics() {}
+
 system_statistics::system_statistics() throw () { }
 
 uint64_t system_statistics::get_received_packet_count() const throw () {
@@ -551,14 +555,6 @@ ostream &operator<<(ostream &out, const system_statistics &s) {
     link_switch_counter_t link_switches;
     map<flow_id, reorder_buffer> reorder_buffers;
     flow_stats_t flow_reorder_stats;
-    
-    /* exeecution statistics */
-    running_stats total_mem_lat_stats;
-    running_stats total_mem_read_lat_stats;
-    running_stats total_mem_write_lat_stats;
-    running_stats total_completion_times;
-    uint64_t total_remote_accesses = 0;
-    uint64_t total_memory_accesses = 0;
 
     // combine per-tile statistics
     for (system_statistics::tile_stats_t::const_iterator tsi =
@@ -609,13 +605,6 @@ ostream &operator<<(ostream &out, const system_statistics &s) {
         combine_left(vqrd_bridge, ts-> vqrd_bridge);
         combine_left(vqwr_port, ts-> vqwr_port);
         combine_left(vqrd_port, ts-> vqrd_port);
-        /* execution statistics */
-        combine_left(total_mem_lat_stats, ts->mem_lat_stats);
-        combine_left(total_mem_read_lat_stats, ts->mem_read_lat_stats);
-        combine_left(total_mem_write_lat_stats, ts->mem_write_lat_stats);
-        combine_left(total_completion_times, ts->execution_finish_times);
-        combine_left(total_remote_accesses, ts->total_remote_accesses);
-        combine_left(total_memory_accesses, ts->total_memory_accesses);
     }
 
 
@@ -856,64 +845,48 @@ ostream &operator<<(ostream &out, const system_statistics &s) {
             << " dyn: "   << setprecision(5) << link_power.dynamic_p
             << " static: " << setprecision(5) << link_power.static_p << endl;
     }
-   out << endl;
-   
-   out << "total power : " << (total_router_power + total_link_power)
-       << " routers power : " << total_router_power 
-       << " links power : " << total_link_power << endl;
+    out << endl;
 
-   out << endl;
+    out << "total power : " << (total_router_power + total_link_power)
+        << " routers power : " << total_router_power 
+        << " links power : " << total_link_power << endl;
 
-   if (total_completion_times.get_mean() > 0) {
-       out << "Parallel Completion Time : " << total_completion_times.get_max() << " cycles" << endl;
-       out << "  Fastest thread completion time : " << total_completion_times.get_min() << " cycles" << endl;
-       out << "  Average thread completion time : " << total_completion_times.get_mean() << " cycles" << endl;
-       out << endl;
-   }
+    out << endl;
 
-   if (total_mem_lat_stats.get_mean() > 0) {
-       out << "Average memory latency : " << total_mem_lat_stats.get_mean() 
-           << " cycles +/- " << total_mem_lat_stats.get_std_dev() << endl;
-       out << "  average memory latency - READ : " << total_mem_read_lat_stats.get_mean() 
-           << " cycles +/- " << total_mem_read_lat_stats.get_std_dev() << endl;
-       out << "  average memory latency - WRITE : " << total_mem_write_lat_stats.get_mean() 
-           << " cycles +/- " << total_mem_write_lat_stats.get_std_dev() << endl;
-       out << endl;
-   }
-
-   if (total_memory_accesses > 0) {
-       out << "Remote Access Rate : " << ((double)total_remote_accesses)/((double)total_memory_accesses)*100.0 << "%" << endl;
-       out << "  ( " << total_remote_accesses << " / " << total_memory_accesses << " ) " << endl;
-       out << endl;
-   }
+    const system_statistics::aux_stats_t &aux_stats = s.aux_stats;
+    system_statistics::aux_stats_t::const_iterator it_aux_stats;
+    for (it_aux_stats = aux_stats.begin(); it_aux_stats != aux_stats.end(); ++it_aux_stats) {
+        (*it_aux_stats)->print_stats(out);
+    }
 
     /*
-    bool have_out_of_order = false;
-    out << endl;
-    out << "out-of-order packet counts and reorder buffer sizes "
-        << "(in # flits):" << endl;
-    for (flow_stats_t::iterator fsi = flow_reorder_stats.begin();
-         fsi != flow_reorder_stats.end(); ++fsi) {
-        const flow_id &fid = fsi->first;
-        assert(reorder_buffers.find(fid) != reorder_buffers.end());
-        const reorder_buffer &rob = reorder_buffers[fid];
-        if (rob.get_out_of_order_count() > 0) {
-            have_out_of_order = true;
-            const running_stats &rs = fsi->second;
-            double frac = (static_cast<double>(rob.get_out_of_order_count()) /
-                           static_cast<double>(rob.get_received_count()));
-            out << "    flow " << fid << ": "
-                << dec << setprecision(0) << rob.get_out_of_order_count()
-                << " of " << rob.get_received_count() << " packet"
-                << (rob.get_received_count() == 1 ? "" : "s")
-                << " (" << (frac * 100) << "%)" << "; buffer max. "
-                << rs.get_max() << setprecision(2) << ", mean "
-                << rs.get_mean() << " +/- " << rs.get_std_dev() << endl;
-        }
-    }
-    if (!have_out_of_order) {
-        out << "    all packets arrived in correct order" << endl;
-    }
-    */
+       bool have_out_of_order = false;
+       out << endl;
+       out << "out-of-order packet counts and reorder buffer sizes "
+       << "(in # flits):" << endl;
+       for (flow_stats_t::iterator fsi = flow_reorder_stats.begin();
+       fsi != flow_reorder_stats.end(); ++fsi) {
+       const flow_id &fid = fsi->first;
+       assert(reorder_buffers.find(fid) != reorder_buffers.end());
+       const reorder_buffer &rob = reorder_buffers[fid];
+       if (rob.get_out_of_order_count() > 0) {
+       have_out_of_order = true;
+       const running_stats &rs = fsi->second;
+       double frac = (static_cast<double>(rob.get_out_of_order_count()) /
+       static_cast<double>(rob.get_received_count()));
+       out << "    flow " << fid << ": "
+       << dec << setprecision(0) << rob.get_out_of_order_count()
+       << " of " << rob.get_received_count() << " packet"
+       << (rob.get_received_count() == 1 ? "" : "s")
+       << " (" << (frac * 100) << "%)" << "; buffer max. "
+       << rs.get_max() << setprecision(2) << ", mean "
+       << rs.get_mean() << " +/- " << rs.get_std_dev() << endl;
+       }
+       }
+       if (!have_out_of_order) {
+       out << "    all packets arrived in correct order" << endl;
+       }
+     */
+
     return out;
 }

@@ -48,12 +48,14 @@ public:
     double get_mean() const throw();
     double get_std_dev() const throw();
     void combine_with(const running_stats &other_stats) throw();
+    inline uint64_t sample_count()  {return num_samples;}
 private:
     double minimum;
     double maximum;
     double mean;
     double var_numer;
     double weight_sum;
+    uint64_t num_samples;
 };
 
 class reorder_buffer {
@@ -111,13 +113,6 @@ public:
     void vq_rd(const virtual_queue_node_id &vq_id, const ingress_id &ig_id) throw();
     inline uint64_t get_system_time() const throw();
     inline uint64_t get_start_time() const throw();
-
-    /* execution statistics */
-    inline void finish_execution(uint64_t time) { execution_finish_times.add(time, 1); }
-    inline void issue_memory() { ++total_memory_accesses; }
-    inline void issue_remote_access() { ++total_remote_accesses; }
-    inline void receive_mem_read(uint64_t latency) { mem_read_lat_stats.add(latency, 1); mem_lat_stats.add(latency, 1); }
-    inline void receive_mem_write(uint64_t latency) { mem_write_lat_stats.add(latency, 1); mem_lat_stats.add(latency, 1); }
 
 public:
     friend ostream &operator<<(ostream &, const system_statistics &);
@@ -191,15 +186,6 @@ private:
     vq_node_counter_t vqrd_bridge;
     vq_node_counter_t vqrd_port;
 
-    /* execution statistics */
-    running_stats mem_lat_stats;
-    running_stats mem_read_lat_stats;
-    running_stats mem_write_lat_stats;
-    running_stats execution_finish_times;
-    uint64_t total_remote_accesses;
-    uint64_t total_memory_accesses;
-    
-
 private:
     typedef struct {
         char v_offered;
@@ -209,6 +195,21 @@ private:
     typedef map<flow_id, vcd_flow_hooks_t> vcd_flows_t;
     vcd_flows_t vcd_flows;
 };
+
+
+class aux_statistics {
+public:
+    aux_statistics(const uint64_t &system_time);
+    virtual ~aux_statistics();
+
+    friend ostream &operator<<(ostream &, const system_statistics &);
+
+protected:
+    virtual void print_stats(ostream &out) = 0;
+
+    const uint64_t &system_time;
+};
+
 
 class system_statistics {
 public:
@@ -220,11 +221,15 @@ public:
     void end_sim() throw();
     inline uint64_t  get_stats_time(uint32_t index) const throw();
     shared_ptr<tile_statistics> get_tile_stats(uint32_t index) const throw();
+    inline void add_aux_statistics(shared_ptr<aux_statistics> stats) { aux_stats.push_back(stats); }
 public:
     friend ostream &operator<<(ostream &, const system_statistics &);
 private:
     typedef map<uint32_t, shared_ptr<tile_statistics> > tile_stats_t;
+    typedef vector<shared_ptr<aux_statistics> > aux_stats_t;
+
     tile_stats_t tile_stats;
+    aux_stats_t aux_stats;
 };
 
 inline uint64_t tile_statistics::get_system_time() const throw() {

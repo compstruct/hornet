@@ -5,6 +5,8 @@
 
 #define COHERENCE_INFO_SPACE UINT32_MAX
 
+#define DBG_PRINT
+
 privateSharedMSI::privateSharedMSI(uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, logger &l, 
                  shared_ptr<random_gen> r, shared_ptr<cat> a_cat, privateSharedMSICfg_t cfg) :
     memory(id, t, st, l, r), m_cfg(cfg), m_l1(NULL), m_l2(NULL), m_cat(a_cat)
@@ -29,7 +31,8 @@ privateSharedMSI::~privateSharedMSI() {
 uint32_t privateSharedMSI::number_of_mem_msg_types() { return NUM_MSG_TYPES; }
 
 void privateSharedMSI::request(shared_ptr<memoryRequest> req) {
-
+    set_req_status(req, REQ_DONE);
+    
 }
 
 void privateSharedMSI::tick_positive_edge() {

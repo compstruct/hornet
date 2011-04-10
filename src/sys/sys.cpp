@@ -23,14 +23,10 @@
 #include "id_factory.hpp"
 #include "sys.hpp"
 #include "ginj.hpp"
-#include "core.hpp"
-#include "memory_types.hpp"
-#include "memory.hpp"
+/* cores */
 #include "memtraceCore.hpp"
-#include "memtraceThread.hpp"
-#include "dramController.hpp"
+/* memories */
 #include "privateSharedMSI.hpp"
-#include "cat.hpp"
 
 typedef enum {
     CORE_MIPS_MPI = 0,
@@ -74,10 +70,13 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
 }
 
 static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_ptr<memtraceThreadPool> pool, int num_cores, 
-        const uint64_t &system_time, logger &log) {
+                                    const uint64_t &system_time, logger &log, shared_ptr<system_statistics> sys_stats) 
+{
     if (!files) {
         return;
     }
+    shared_ptr<memtraceThreadStats> memth_stats = 
+        shared_ptr<memtraceThreadStats>(new memtraceThreadStats(system_time));
     for (vector<string>::const_iterator fi = files->begin(); fi != files->end(); ++fi) {
         ifstream input(fi->c_str());
         if (input.fail()) throw err_parse(*fi, "cannot open file");
@@ -112,6 +111,10 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
                 thread = pool->find(th_id);
                 if (thread == NULL) {
                     thread = new memtraceThread(th_id, system_time, log);
+                    shared_ptr<memtraceThreadStatsPerThread> per_thread_stats=
+                        shared_ptr<memtraceThreadStatsPerThread>(new memtraceThreadStatsPerThread(th_id, system_time));
+                    thread->set_per_thread_stats(per_thread_stats);
+                    memth_stats->add_per_thread_stats(per_thread_stats);
                     pool->add_thread(thread);
                 }
                 if (interval > 0) {
@@ -120,6 +123,9 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
                 thread->add_mem_inst(1, (rw == 'W')? true : false, maddr, word_count); 
             }
         }
+    }
+    if (pool->size() > 0) {
+        sys_stats->add_aux_statistics(memth_stats);
     }
 }
 
@@ -636,7 +642,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     event_parser ep(events_files, injectors, flow_starts);
 
     /* populate memtrace thread pool from traces */
-    create_memtrace_threads(memtrace_files, memtrace_thread_pool, memtrace_cores.size(), sys_time, log);
+    create_memtrace_threads(memtrace_files, memtrace_thread_pool, memtrace_cores.size(), sys_time, log, stats);
 
     /* spawn threads */
     for (unsigned int i = 0; i < memtrace_thread_pool->size() && memtrace_cores.size() > 0; ++i) {

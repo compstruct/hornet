@@ -31,6 +31,8 @@ public:
     inline uint32_t home() { return m_home; }
     inline uint32_t word_count() { return m_word_count; }
 
+    friend class memory;
+
 private:
 
     memReqStatus_t m_status;
@@ -64,6 +66,8 @@ public:
     void set_remote_dram_controller(uint32_t location);
 
 protected:
+    inline void set_req_status(shared_ptr<memoryRequest> req, memReqStatus_t status) { req->m_status = status; }
+
     uint32_t m_id;
     const uint64_t &system_time;
     shared_ptr<tile_statistics> stats;

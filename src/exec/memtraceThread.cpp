@@ -3,7 +3,9 @@
 
 #include "memtraceThread.hpp"
 
-memtraceThread::memtraceThread(mth_id_t id, const uint64_t &t, logger &l) : m_id(id), system_time(t), log(l) {
+memtraceThread::memtraceThread(mth_id_t id, const uint64_t &t, logger &l) : 
+    m_id(id), system_time(t), log(l), m_stats(shared_ptr<memtraceThreadStatsPerThread>())
+{
     m_cur.type = INST_NONE;
     m_cur.repeats = 0;
 }

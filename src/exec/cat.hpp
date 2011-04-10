@@ -33,11 +33,9 @@ public:
     inline catReqStatus_t status() { return m_status; }
     inline uint32_t core() { return m_core; }
 
-    friend class catStripe;
-    friend class catStatic;
-    friend class catFirstTouch;
+    friend class cat;
 
-protected:
+private:
     catReqStatus_t m_status;
     maddr_t m_maddr;
     uint32_t m_sender;
@@ -56,6 +54,11 @@ public:
     virtual void tick_negative_edge() = 0;
 
 protected:
+    inline void set_req_status(shared_ptr<catRequest> req, catReqStatus_t status) { req->m_status = status; }
+    inline void set_req_core(shared_ptr<catRequest> req, uint32_t core) { req->m_core = core; }
+    inline maddr_t req_maddr(shared_ptr<catRequest> req) { return req->m_maddr; }
+    inline uint32_t req_sender(shared_ptr<catRequest> req) { return req->m_sender; }
+
     uint32_t m_num_nodes;
     const uint64_t &system_time;
     uint32_t m_latency;

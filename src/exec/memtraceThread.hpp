@@ -7,6 +7,7 @@
 #include <boost/shared_ptr.hpp>
 #include "memory.hpp"
 #include "logger.hpp"
+#include "memtraceThreadStats.hpp"
 
 typedef uint32_t mth_id_t;
 
@@ -55,6 +56,11 @@ public:
     void add_mem_inst(uint32_t alu_cost, bool write, maddr_t maddr, uint32_t word_count);
     void add_non_mem_inst(uint32_t repeats);
 
+    /* set stats */
+    inline void set_per_thread_stats(shared_ptr<memtraceThreadStatsPerThread> stats) { m_stats = stats; }
+    inline bool stats_enabled() { return (m_stats != shared_ptr<memtraceThreadStatsPerThread>()); }
+    inline shared_ptr<memtraceThreadStatsPerThread> stats() { return m_stats; }
+
 private:
     typedef struct {
         uint32_t repeats;
@@ -71,6 +77,7 @@ private:
     mth_id_t m_id;
     const uint64_t &system_time;
     logger &log;
+    shared_ptr<memtraceThreadStatsPerThread> m_stats;
 
     inst_t m_cur;
     vector<inst_t> m_insts;
