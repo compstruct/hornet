@@ -115,6 +115,7 @@ private:
         shared_ptr<memoryRequest> mem_request;
         shared_ptr<cacheRequest> cache_request;
         shared_ptr<catRequest> cat_request;
+        uint64_t requested_time;
     } memReqTableEntry_t;
 
     typedef vector<memReqTableEntry_t> memReqTable;

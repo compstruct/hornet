@@ -34,7 +34,8 @@ typedef struct {
 } maddr_t;
 
 typedef enum {
-    REQ_WAIT = 0,
+    REQ_NEW = 0,
+    REQ_WAIT,
     REQ_DONE,
     REQ_MIGRATE
 } memReqStatus_t;

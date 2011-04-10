@@ -33,16 +33,33 @@ privateSharedMSI::~privateSharedMSI() {
 uint32_t privateSharedMSI::number_of_mem_msg_types() { return NUM_MSG_TYPES; }
 
 void privateSharedMSI::request(shared_ptr<memoryRequest> req) {
-    set_req_status(req, REQ_DONE);
+
+    /* set status to wait */
+    set_req_status(req, REQ_WAIT);
+
+    /* make a cache request */
+    maddr_t maddr =  req->maddr();
+    cacheReqType_t cache_req_type = (req->is_read())? CACHE_REQ_READ : CACHE_REQ_WRITE;
+    shared_ptr<cacheRequest> cache_req = shared_ptr<cacheRequest>(new cacheRequest(maddr, cache_req_type));
+    m_l1->request(cache_req);
+
+    /* make a CAT request */
+    shared_ptr<catRequest> cat_req = shared_ptr<catRequest>(new catRequest(maddr, m_id));
+    m_cat->request(cat_req);
+
+    /* make an entry */
+    memReqTableEntry_t new_entry = {req, cache_req, cat_req, system_time};
+    m_mem_req_table.push_back(new_entry);
     
 }
 
 void privateSharedMSI::tick_positive_edge() {
 
-    // TODO
+    /* dealing with incoming messages */
 
     m_l1->tick_positive_edge();
     m_l2->tick_positive_edge();
+    m_cat->tick_positive_edge();
     if(m_dram_controller) {
         m_dram_controller->tick_positive_edge();
     }
@@ -50,13 +67,30 @@ void privateSharedMSI::tick_positive_edge() {
 
 void privateSharedMSI::tick_negative_edge() {
 
-    m_l1->tick_positive_edge();
-    m_l2->tick_positive_edge();
+    m_l1->tick_negative_edge();
+    m_l2->tick_negative_edge();
+    m_cat->tick_negative_edge();
     if(m_dram_controller) {
-        m_dram_controller->tick_positive_edge();
+        m_dram_controller->tick_negative_edge();
     }
 
-    // TODO
+    /* update results from l1 */
+    memReqTable::iterator it_mem_req;
+    for (it_mem_req = m_mem_req_table.begin(); it_mem_req != m_mem_req_table.end(); ++it_mem_req) {
+        if (it_mem_req->cache_request->status() == CACHE_WAIT) {
+            continue;
+        } else if (it_mem_req->cache_request->status() == CACHE_MISS) {
+            if (!it_mem_req->mem_request->is_read()) {
+                // TODO : write on the cache line 
+            }
+            set_req_status(it_mem_req->mem_request, REQ_DONE);
+        } else if (it_mem_req->cache_request->status() == CACHE_HIT) {
+            if (!it_mem_req->mem_request->is_read()) {
+                // TODO : write on the cache line 
+            }
+            set_req_status(it_mem_req->mem_request, REQ_DONE);
+        }
+    }
 
 }
 

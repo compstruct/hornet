@@ -80,16 +80,16 @@ void cache::request(shared_ptr<cacheRequest> req) {
 }
     
 void cache::tick_positive_edge() {
-
     map<uint32_t, entryTable>::iterator it_space;
     for (it_space = m_entry_tables.begin(); it_space != m_entry_tables.end(); ++it_space) {
-        uint32_t current_space __attribute__((unused)) = it_space->first;
         entryTable &current_table = it_space->second;
         entryTable::iterator it_addr;
         for (it_addr = current_table.begin(); it_addr != current_table.end(); ++it_addr) {
-            uint64_t current_addr __attribute__((unused)) = it_addr->first;
             entryQueue &current_queue = it_addr->second;
             /* NOTE : Only one request it served for the same line (Do NOT change this behavior) */
+            if (current_queue.empty()) {
+                continue;
+            }
             shared_ptr<entry_t> current_entry = current_queue.front();
             shared_ptr<cacheRequest> current_request = current_entry->request;
             if (current_entry->status == ENTRY_DONE) {
@@ -101,6 +101,7 @@ void cache::tick_positive_edge() {
                     m_cache[index] = new cacheLine_t[m_associativity];
                     for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
                         m_cache[index][it_way].valid = false;
+                        m_cache[index][it_way].reserved = false;
                     }
                 } 
                 bool hit = false;
@@ -204,6 +205,7 @@ void cache::tick_positive_edge() {
                     ++m_number_of_free_read_ports;
                 }
                 /* remove from the queue */
+                //DEBUG TODO
                 current_queue.erase(current_queue.begin());
             }
         }
@@ -216,14 +218,15 @@ void cache::tick_negative_edge() {
     /* advance hit testing */
     map<uint32_t, entryTable>::iterator it_space;
     for (it_space = m_entry_tables.begin(); it_space != m_entry_tables.end(); ++it_space) {
-        uint32_t current_space __attribute__((unused)) = it_space->first;
         entryTable &current_table = it_space->second;
         entryTable::iterator it_addr;
         for (it_addr = current_table.begin(); it_addr != current_table.end(); ++it_addr) {
-            uint64_t current_addr __attribute__((unused)) = it_addr->first;
             entryQueue &current_queue = it_addr->second;
+            if (current_queue.empty()) {
+                continue;
+            }
             shared_ptr<entry_t> current_entry = current_queue.front();
-            if (current_entry->status == ENTRY_HIT_TEST) {
+            if (current_entry->status == ENTRY_HIT_TEST) { /*invalid?*/
                 if (--(current_entry->remaining_hit_test_cycles) == 0) {
                     current_entry->status = ENTRY_DONE;
                 }
@@ -268,7 +271,6 @@ void cache::tick_negative_edge() {
         m_cache[it->index][it->way].valid = false;
     }
     m_lines_to_purge.clear();
-
 }
 
 

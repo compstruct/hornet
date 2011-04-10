@@ -226,6 +226,7 @@ void memtraceCore::commit_memory_requests() {
                     LOG(log,2) << hex << (*i).req->data()[j] << dec;
                 }
                 LOG(log,2) <<  " on addr " << hex << (*i).req->maddr().address << dec << endl; 
+#ifdef DBG_PRINT
 #if 0
                 cerr << "[core " << get_id().get_numeric_id() << " @ " << system_time << " ] finished memory operation : "; 
                 if ((*i).req->is_read())  {
@@ -233,10 +234,13 @@ void memtraceCore::commit_memory_requests() {
                 } else {
                     cerr << " written ";
                 }
+#if 0
                 for (uint32_t j = 0; j < (*i).req->word_count(); ++j) {
                     cerr << hex << (*i).req->data()[j] << dec;
                 }
-                cerr <<  " on addr " << hex << (*i).req->address() << dec << endl; 
+#endif
+                cerr <<  " on addr " << hex << (*i).req->maddr().address << dec << endl; 
+#endif
 #endif
                 (*i).status = LANE_IDLE;
             }

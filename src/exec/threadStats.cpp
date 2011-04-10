@@ -33,7 +33,6 @@ void threadStats::print_stats(ostream &out) {
     uint64_t total_mem = 0;
     double total_read_latency = 0.0;
     double total_write_latency = 0.0;
-    double total_latency = 0.0;
     uint64_t total_migrations = 0;
     uint64_t total_evictions = 0;
     double total_penalties = 0.0;
@@ -68,7 +67,6 @@ void threadStats::print_stats(ostream &out) {
         double aml = (amrl*reads + amwl*writes) / mem;
         total_read_latency += amrl * reads;
         total_write_latency += amwl * writes;
-        total_latency += total_read_latency + total_write_latency;
         uint64_t migrations = st->m_migration_penalties.sample_count();
         uint64_t evictions = st->m_eviction_penalties.sample_count();
         double penalties = st->m_migration_penalties.get_mean() * migrations + st->m_eviction_penalties.get_mean() * evictions;
@@ -99,7 +97,7 @@ void threadStats::print_stats(ostream &out) {
         sprintf(str, "[Summary: Thread completed] PCT: %ld reads: %ld writes: %ld AML: %.4f AMRL: %.4f AMWL: %.4f "
                 "migration-rate%%: %.4f cycles-per-eviction: %.4f",
                 parallel_completion_time, total_reads, total_writes,
-                total_latency/total_mem, 
+                (total_read_latency + total_write_latency)/total_mem, 
                 total_read_latency/total_reads,
                 total_write_latency/total_writes,
                 (total_mem > 0)? total_migrations*100.0/total_mem : 0, 
@@ -108,7 +106,7 @@ void threadStats::print_stats(ostream &out) {
         sprintf(str, "[Summary: Thread running] PCT: N/A reads: %ld writes: %ld AML: %.4f AMRL: %.4f AMWL: %.4f "
                 "migration-rate%%: %.4f cycles-per-eviction: %.4f",
                 total_reads, total_writes, 
-                total_latency/total_mem, 
+                (total_read_latency + total_write_latency)/total_mem, 
                 total_read_latency/total_reads,
                 total_write_latency/total_writes,
                 (total_mem > 0)? total_migrations*100.0/total_mem : 0, 

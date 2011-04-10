@@ -8,12 +8,12 @@
 /*****************/
 
 memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count) :
-    m_status(REQ_WAIT), m_is_read(true), m_maddr(maddr), m_word_count(word_count),
+    m_status(REQ_NEW), m_is_read(true), m_maddr(maddr), m_word_count(word_count),
     m_data(shared_array<uint32_t>()) 
 {}
 
 memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count, shared_array<uint32_t> wdata) :
-    m_status(REQ_WAIT), m_is_read(false), m_maddr(maddr), m_word_count(word_count),m_data(wdata) 
+    m_status(REQ_NEW), m_is_read(false), m_maddr(maddr), m_word_count(word_count),m_data(wdata) 
 {}
 
 memoryRequest::~memoryRequest() {}

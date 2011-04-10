@@ -27,7 +27,7 @@ typedef enum {
 
 class catRequest {
 public:
-    catRequest(maddr_t maddr, uint32_t sender = 0);
+    catRequest(maddr_t maddr, uint32_t sender);
     ~catRequest();
 
     inline catReqStatus_t status() { return m_status; }

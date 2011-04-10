@@ -30,7 +30,6 @@ void memStats::print_stats(ostream &out) {
     uint64_t total_mem = 0;
     double total_read_latency = 0.0;
     double total_write_latency = 0.0;
-    double total_latency = 0.0;
 
     perTileStats_t::iterator it;
     for (it = m_per_tile_stats.begin(); it != m_per_tile_stats.end(); ++it) {
@@ -47,7 +46,6 @@ void memStats::print_stats(ostream &out) {
         double aml = (amrl*reads + amwl*writes) / mem;
         total_read_latency += amrl * reads;
         total_write_latency += amwl * writes;
-        total_latency += total_read_latency + total_write_latency;
 
         char str[1024];
         sprintf(str, "[Memory %4d ] accesses: %ld reads: %ld writes: %ld AML: %.4f AMRL: %.4f AMWL: %.4f",
@@ -60,7 +58,7 @@ void memStats::print_stats(ostream &out) {
     char str[1024];
     sprintf(str, "[Summary: Memory ] accesses: %ld reads: %ld writes: %ld AML: %.4f AMRL: %.4f AMWL: %.4f",
             total_mem, total_reads, total_writes,
-            total_latency/total_mem, 
+            (total_read_latency + total_write_latency)/total_mem, 
             total_read_latency/total_reads, 
             total_write_latency/total_writes);
     out << str << endl;
