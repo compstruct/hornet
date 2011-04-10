@@ -53,7 +53,7 @@ void threadStats::print_stats(ostream &out) {
         } else {
             cycles = 0;
         }
-        if (completed) {
+        if (completed && cycles > parallel_completion_time) {
             parallel_completion_time = cycles;
         }
         total_cycles += cycles;

@@ -13,8 +13,8 @@ public:
 
     inline bool check_if_spawned() { return m_spawned; }
     inline bool check_if_completed() { return m_completed; }
-    inline void did_spawn() { m_spawned = true; m_spawned_time = system_time; cerr << "spanw " << system_time << endl;}
-    inline void did_complete() { m_completed = true; m_completion_time = system_time; cerr << "compl " << system_time << endl;}
+    inline void did_spawn() { m_spawned = true; m_spawned_time = system_time; }
+    inline void did_complete() { m_completed = true; m_completion_time = system_time; }
     inline void did_finish_read(uint64_t latency) { m_read_latencies.add(latency, 1); }
     inline void did_finish_write(uint64_t latency) { m_write_latencies.add(latency, 1); }
     inline void did_begin_migration() { m_mig_start_time = system_time; }
