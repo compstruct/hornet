@@ -1,5 +1,5 @@
 AC_PREREQ(2.61)
-AC_INIT([dar], [0.06])
+AC_INIT([hornet], [0.1])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADER([src/common/dconfig.h])
