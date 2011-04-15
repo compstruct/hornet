@@ -9,7 +9,7 @@ AM_CXXFLAGS = -Wall -Werror
 
 noinst_LTLIBRARIES = libdarexec.la
 
-libdarexec_la_SOURCES = memory_types.hpp \
+libdarexec_la_SOURCES = memory_types.hpp memory_types.cpp \
                         messages.hpp messages.cpp \
                         memory.hpp memory.cpp  \
                         cat.hpp cat.cpp \

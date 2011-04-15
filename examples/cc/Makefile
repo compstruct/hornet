@@ -1,7 +1,7 @@
 DARIMG=darimg
 DARSIM=darsim
 
-PROG=privateSharedMSI.img
+PROG = privateSharedMSI.img
 
 .PHONY: all
 all: $(PROG)
@@ -9,9 +9,11 @@ all: $(PROG)
 %.img: %.cfg 
 	$(DARIMG) -o $@ $<
 
+%.out: %.trace
+	$(DARSIM) $(PROG) --concurrency 1 --memory-traces $< > $@
+
 .PHONY: run
-run: $(PROG)
-	$(DARSIM) $(PROG) --concurrency 1 --memory-traces test.trace > $<.out
+run: $(PROG) test_serialize.out test_hit.out test_share.out
 
 .PHONY: clean
 clean:

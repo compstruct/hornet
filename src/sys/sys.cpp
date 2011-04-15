@@ -102,7 +102,7 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
                 /* for now, force 32bit-aligned, one-word, shared accesses only */
                 maddr_t maddr;
                 addr = addr - addr % 4;
-                maddr.mem_space_id = 0;
+                maddr.space = 0;
                 maddr.address = addr;
                 home = home % num_cores;
                 // TODO : support static CAT
@@ -295,17 +295,21 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             /* cat synch delay */
             uint32_t cat_synch_delay = read_word(img);
 
+            /* cat number of ports 0:infinite */
+            uint32_t cat_num_ports = read_word(img);
+
             shared_ptr<cat> new_cat = shared_ptr<cat>();
             switch(cat_type) {
             case CAT_STRIPE:
-                new_cat = shared_ptr<catStripe>(new catStripe(num_nodes, t->get_time(), cat_latency, cat_allocation_unit_in_bytes));
+                new_cat = shared_ptr<catStripe>(new catStripe(num_nodes, t->get_time(), cat_num_ports, 
+                                                              cat_latency, cat_allocation_unit_in_bytes));
                 break;
             case CAT_STATIC:
-                new_cat = shared_ptr<catStatic>(new catStatic(num_nodes, t->get_time(),
+                new_cat = shared_ptr<catStatic>(new catStatic(num_nodes, t->get_time(), cat_num_ports, 
                                                               cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay));
                 break;
             case CAT_FIRST_TOUCH:
-                new_cat = shared_ptr<catFirstTouch>(new catFirstTouch(num_nodes, t->get_time(),
+                new_cat = shared_ptr<catFirstTouch>(new catFirstTouch(num_nodes, t->get_time(), cat_num_ports, 
                                                                       cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay));
                 break;
             }
@@ -315,11 +319,15 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             uint32_t offchip_oneway_latency = read_word(img);
             uint32_t dram_latency = read_word(img);
             uint32_t msg_header_size_in_words = read_word(img);
-            uint32_t max_requests_in_flight = read_word(img);
+            uint32_t dc_max_requests_in_flight = read_word(img);
             uint32_t bandwidth_in_words_per_cycle = read_word(img);
 
             /* cache configurations */
             uint32_t words_per_cache_line = 0;
+            uint32_t max_local_cache_requests_in_flight = 0;
+            uint32_t max_remote_cache_requests_in_flight = 0;
+            uint32_t max_local_directory_requests_in_flight = 0;
+            uint32_t max_remote_directory_requests_in_flight = 0;
             uint32_t l1_total_lines = 0;
             uint32_t l1_associativity = 0;
             uint32_t l1_hit_test_latency = 0;
@@ -340,6 +348,10 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             case MEM_SHARED_SHARED_RA:
             case MEM_PRIVATE_PRIVATE_MOESI:
                 words_per_cache_line = read_word(img);
+                max_local_cache_requests_in_flight = read_word(img);
+                max_remote_cache_requests_in_flight = read_word(img);
+                max_local_directory_requests_in_flight = read_word(img);
+                max_remote_directory_requests_in_flight = read_word(img);
                 l1_total_lines = read_word(img);
                 l1_associativity = read_word(img);
                 l1_hit_test_latency = read_word(img);
@@ -362,14 +374,20 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             switch (mem_type) {
             case MEM_PRIVATE_SHARED_MSI:
                 {
+                    assert(em_type == EM_NEVER);
                     if (private_shared_msi_stats == shared_ptr<privateSharedMSIStats>()) {
                         private_shared_msi_stats = 
                             shared_ptr<privateSharedMSIStats>(new privateSharedMSIStats(t->get_time()));
                         stats->add_aux_statistics(private_shared_msi_stats);
                     }
-                    privateSharedMSI::privateSharedMSICfg_t cfg = { em_type, bytes_per_flit, words_per_cache_line,
-                        l1_total_lines, l1_associativity, l1_hit_test_latency, l1_read_ports, l1_write_ports, l1_policy,
-                        l2_total_lines, l2_associativity, l2_hit_test_latency, l2_read_ports, l2_write_ports, l2_policy };
+                    privateSharedMSI::privateSharedMSICfg_t cfg = { num_nodes, 
+                        bytes_per_flit, words_per_cache_line,
+                        max_local_cache_requests_in_flight, max_remote_cache_requests_in_flight,
+                        max_local_directory_requests_in_flight, max_remote_directory_requests_in_flight,
+                        l1_total_lines, l1_associativity, l1_hit_test_latency, l1_read_ports, 
+                        l1_write_ports, l1_policy,
+                        l2_total_lines, l2_associativity, l2_hit_test_latency, l2_read_ports, 
+                        l2_write_ports, l2_policy };
                     shared_ptr<privateSharedMSI> new_mem = 
                         shared_ptr<privateSharedMSI>(new privateSharedMSI(id, t->get_time(), 
                                                                           t->get_statistics(), log, ran, new_cat, cfg));
@@ -429,10 +447,10 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             }
 
             if (location != (uint32_t)id) {
-                mem->set_remote_dram_controller(dram_location);
+                mem->set_remote_dram_controller(location);
             } else {
                 mem->add_local_dram_controller(new_dram, dram_controller_latency, offchip_oneway_latency, dram_latency,
-                                               msg_header_size_in_words, max_requests_in_flight, bandwidth_in_words_per_cycle,
+                                               msg_header_size_in_words, dc_max_requests_in_flight, bandwidth_in_words_per_cycle,
                                                true /* use lock */);
             }
 
@@ -662,7 +680,8 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
     /* spawn threads */
     for (unsigned int i = 0; i < memtrace_thread_pool->size() && memtrace_cores.size() > 0; ++i) {
-        unsigned int idx = i % memtrace_cores.size();
+        uint32_t mth_id = memtrace_thread_pool->thread_at(i)->get_id();
+        unsigned int idx = mth_id % memtrace_cores.size();
         memtrace_cores[idx]->spawn(memtrace_thread_pool->thread_at(i));
     }
 

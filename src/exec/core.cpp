@@ -17,6 +17,8 @@ core::core(const pe_id &id, const uint64_t &t, shared_ptr<id_factory<packet_id> 
         m_in_msg_queues[i] = shared_ptr<messageQueue> (new messageQueue(i, m_msg_queue_size));
         m_out_msg_queues[i] = shared_ptr<messageQueue> (new messageQueue(i, m_msg_queue_size));
     }
+    m_memory->set_core_send_queues(m_out_msg_queues);
+    m_memory->set_core_receive_queues(m_in_msg_queues);
 }
 
 core::~core() throw() { }

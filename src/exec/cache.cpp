@@ -3,28 +3,37 @@
 
 #include "cache.hpp"
 
-static bool maddr_equal(maddr_t a, maddr_t b) {
-    return (a.mem_space_id == b.mem_space_id) && (a.address == b.address);
-}
+#define DEBUG
 
-cacheRequest::cacheRequest(maddr_t maddr, cacheReqType_t request_type, shared_ptr<void> info_to_set) : 
-    m_request_type(request_type), m_maddr(maddr), 
-    m_status(CACHE_NEW), m_cache_line(NULL), m_need_to_invalidate(false), m_coherence_info_to_set(info_to_set) {}
+#ifdef DEBUG
+#define mh_cerr cerr
+#else
+#define mh_cerr LOG(log,4)
+#endif
+
+cacheRequest::cacheRequest(maddr_t maddr, cacheReqType_t request_type, uint32_t word_count,
+                           shared_array<uint32_t> data_to_write, shared_ptr<void> coherence_info_to_write) :
+    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count),
+    m_status(CACHE_REQ_NEW), m_line_copy(shared_ptr<cacheLine>()), 
+    m_victim_line_copy(shared_ptr<cacheLine>()),
+    m_coherence_info_to_write(coherence_info_to_write), m_data_to_write(data_to_write) 
+{}
 
 cacheRequest::~cacheRequest() {}
 
-
 cache::cache(uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, logger &l, shared_ptr<random_gen> r, 
              uint32_t words_per_line, uint32_t total_lines, uint32_t associativity, replacementPolicy_t replacement_policy,
-             uint32_t hit_test_latency, uint32_t num_read_ports, uint32_t num_write_ports) : 
+             uint32_t hit_test_latency, uint32_t num_read_ports,  uint32_t num_write_ports) : 
     m_id(id), system_time(t), stats(st), log(l), ran(r), m_words_per_line(words_per_line), m_total_lines(total_lines),
     m_associativity(associativity), m_replacement_policy(replacement_policy), m_hit_test_latency(hit_test_latency),
-    m_number_of_free_read_ports(num_read_ports), m_number_of_free_write_ports(num_write_ports)
+    m_available_read_ports(num_read_ports), m_available_write_ports(num_write_ports),
+    m_helper_copy_coherence_info(NULL), m_helper_will_return_line(NULL), m_helper_is_hit(NULL), m_helper_reserve_empty_line(NULL),
+    m_helper_can_evict_line(NULL)
 { 
     assert(m_associativity > 0);
     assert(m_words_per_line > 0);
-    assert(m_number_of_free_read_ports > 0);
-    assert(m_number_of_free_write_ports > 0);
+    assert(m_available_read_ports > 0);
+    assert(m_available_write_ports > 0);
     int log2 = 0;
     for (uint32_t i = m_words_per_line * 4; i > 1; i = i/2) {
         assert(i%2 == 0); /*  must be a power of 2 */
@@ -35,178 +44,206 @@ cache::cache(uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, log
     m_index_mask = (m_total_lines / m_associativity - 1) << m_index_pos;
 }
 
-cache::~cache() {
-    map<uint32_t, cacheLine_t*>::iterator it_idx;
-    for (it_idx = m_cache.begin(); it_idx != m_cache.end(); ++it_idx) {
-        delete[] it_idx->second;
+cache::~cache() {}
+
+shared_ptr<cacheLine> cache::copy_cache_line(const cacheLine &line) {
+    shared_ptr<cacheLine> copy(new cacheLine);
+
+    /* shallow copy */
+    (*copy) = line;
+    if (line.data) {
+        copy->data = shared_array<uint32_t>(new uint32_t[m_words_per_line]);
+        for (uint32_t i = 0; i < m_words_per_line; ++i) {
+            copy->data[i] = line.data[i];
+        }
     }
+    
+    /* deep copy */
+    if (line.coherence_info) {
+        assert(m_helper_copy_coherence_info);
+        copy->coherence_info = m_helper_copy_coherence_info(line.coherence_info);
+    }
+
+    return copy;
 }
 
 void cache::request(shared_ptr<cacheRequest> req) {
-    req->m_status = CACHE_WAIT;
-    shared_ptr<entry_t> new_entry = shared_ptr<entry_t>(new entry_t);
-    new_entry->status = ENTRY_PORT;
-    new_entry->request = req;
-    if (req->m_request_type == CACHE_REQ_WRITE || req->m_request_type == CACHE_REQ_ADD_LINE) {
-        if (m_number_of_free_write_ports > 0) {
-            --m_number_of_free_write_ports;
-            if (m_hit_test_latency > 0) {
-                new_entry->status = ENTRY_HIT_TEST;
-                new_entry->remaining_hit_test_cycles = m_hit_test_latency;
-            } else {
-                new_entry->status = ENTRY_DONE;
-            }
-            maddr_t first_maddr = get_first_maddr(req->m_maddr);
-            m_entry_tables[first_maddr.mem_space_id][first_maddr.address].push_back(new_entry);
-        } else {
-            m_entries_waiting_for_write_ports.push_back(new_entry);
-        }
-    } else {
-        if (m_number_of_free_read_ports > 0) {
-            --m_number_of_free_read_ports;
-            new_entry->status = ENTRY_HIT_TEST;
-            if (m_hit_test_latency > 0) {
-                new_entry->status = ENTRY_HIT_TEST;
-                new_entry->remaining_hit_test_cycles = m_hit_test_latency;
-            } else {
-                new_entry->status = ENTRY_DONE;
-            }
-            maddr_t first_maddr = get_first_maddr(req->m_maddr);
-            m_entry_tables[first_maddr.mem_space_id][first_maddr.address].push_back(new_entry);
-        } else {
-            m_entries_waiting_for_read_ports.push_back(new_entry);
-        }
+
+    reqEntry new_entry;
+    new_entry.request = req;
+
+    switch (req->m_request_type) {
+    case CACHE_REQ_READ:
+    case CACHE_REQ_COHERENCE_READ:
+    case CACHE_REQ_INVALIDATE:
+    case CACHE_REQ_COHERENCE_INVALIDATE:
+        assert(read_port_available());
+        --m_available_read_ports;
+        break;
+    case CACHE_REQ_WRITE:
+    case CACHE_REQ_COHERENCE_WRITE:
+        assert(write_port_available());
+        --m_available_write_ports;
+        break;
     }
+    if (m_hit_test_latency > 0) {
+        new_entry.status = ENTRY_HIT_TEST;
+        new_entry.remaining_hit_test_cycles = m_hit_test_latency;
+    } else {
+        new_entry.status = ENTRY_DONE;
+    }
+
+    maddr_t start_maddr = get_start_maddr_in_line(req->m_maddr);
+    m_req_table[start_maddr].push_back(new_entry);
+
+    return;
+
 }
     
 void cache::tick_positive_edge() {
-    map<uint32_t, entryTable>::iterator it_space;
-    for (it_space = m_entry_tables.begin(); it_space != m_entry_tables.end(); ++it_space) {
-        entryTable &current_table = it_space->second;
-        entryTable::iterator it_addr;
-        for (it_addr = current_table.begin(); it_addr != current_table.end(); ++it_addr) {
-            entryQueue &current_queue = it_addr->second;
-            /* NOTE : Only one request it served for the same line (Do NOT change this behavior) */
-            if (current_queue.empty()) {
-                continue;
-            }
-            shared_ptr<entry_t> current_entry = current_queue.front();
-            shared_ptr<cacheRequest> current_request = current_entry->request;
-            if (current_entry->status == ENTRY_DONE) {
-                /* when hit testing is done */
-                uint32_t index = get_index(current_request->m_maddr);
-                maddr_t first_maddr = get_first_maddr(current_request->m_maddr);
-                if (m_cache.count(index) == 0) {
-                    /* prepare lines for the given index if not ready */
-                    m_cache[index] = new cacheLine_t[m_associativity];
-                    for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
-                        m_cache[index][it_way].valid = false;
-                        m_cache[index][it_way].reserved = false;
-                    }
-                } 
-                bool hit = false;
-                bool has_empty_line = false;
-                uint32_t any_empty_way = 0;
-
-                vector<uint32_t/*way*/> evict_candidates;
-                uint64_t lru = UINT64_MAX;
-                uint32_t lru_way = 0;
-
+    for (reqTable::iterator it_q = m_req_table.begin(); it_q != m_req_table.end(); ++it_q) {
+        reqQueue &q = it_q->second;
+        reqEntry &head = q.front();;
+        shared_ptr<cacheRequest> req = head.request;
+        if (head.status == ENTRY_DONE) {
+            uint32_t idx = get_index(req->m_maddr);
+            maddr_t start_maddr = get_start_maddr_in_line(req->m_maddr);
+            if (m_cache.count(idx) == 0) {
+                m_cache[idx] = new cacheLine[m_associativity];
                 for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
-                    cacheLine_t &line = m_cache[index][it_way];
-                    if (!line.valid) {
-                        if (!line.reserved) {
-                            /* empty line */
-                            has_empty_line = true;
-                            any_empty_way = it_way;
+                    m_cache[idx][it_way].empty = true;
+                }
+            }
+            vector<uint32_t> evictables;
+            vector<uint32_t> empties;
+            uint64_t lru_time = UINT64_MAX;
+            uint32_t lru_way = 0;
+            for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
+                cacheLine &line = m_cache[idx][it_way];
+                if (!line.empty && start_maddr == line.start_maddr) {
+
+                    bool coherence_hit = 
+                        /* either it's not a coherence access */
+                        req->m_request_type == CACHE_REQ_READ ||
+                        req->m_request_type == CACHE_REQ_WRITE ||
+                        req->m_request_type == CACHE_REQ_INVALIDATE ||
+                        /* or it doesn't have a helper */
+                        !m_helper_is_hit ||
+                        /* or the cache line doesn't have a coherence info */
+                        !line.coherence_info ||
+                        /* or the helper says it's a hit */
+                        (*m_helper_is_hit)(req,line);
+
+                    if (coherence_hit) {
+                        req->m_status = CACHE_REQ_HIT;
+                        switch (req->m_request_type) {
+                        case CACHE_REQ_WRITE:
+                        case CACHE_REQ_COHERENCE_WRITE:
+                            {
+                                assert(!req->m_data_to_write);
+                                uint32_t offset = get_offset(req->m_maddr);
+                                for (uint32_t i = 0; i < req->m_word_count; ++i) {
+                                    line.data[offset + i] = req->m_data_to_write[i];
+                                }
+                                if (req->m_coherence_info_to_write) {
+                                    line.coherence_info = req->m_coherence_info_to_write;
+                                }
+                                line.dirty = true;
+                                ++m_available_write_ports;
+                                break;
+                            }
+                        case CACHE_REQ_INVALIDATE:
+                        case CACHE_REQ_COHERENCE_INVALIDATE:
+                            {
+                                maddr_t not_used = { 0, 0 };
+                                m_lines_to_invalidate.insert(make_tuple(idx, it_way, false, not_used));
+                                ++m_available_read_ports;
+                                break;
+                            }
+                        case CACHE_REQ_READ:
+                        case CACHE_REQ_COHERENCE_READ:
+                            ++m_available_read_ports;
+                            /* nothing to do with read - we are returning the whole line */
+                            break;
                         }
-                    } else if (maddr_equal(first_maddr, line.first_maddr)) {
-                        /* cache hit */
-                        current_request->m_status = CACHE_HIT;
-                        current_request->m_cache_line = &line;
-                        line.last_access_time = system_time;
-                        if (current_request->m_request_type  == CACHE_REQ_INVALIDATE) {
-                            linePosition_t pos = {index, it_way};
-                            m_lines_to_purge.push_back(pos);
-                        } else if (current_request->m_request_type == CACHE_REQ_WRITE) {
-                            line.dirty = true;
-                        } else if (current_request->m_request_type == CACHE_REQ_ADD_LINE) {
-                            /* ADD_LINE resets dirty & coherence states */
-                            line.dirty = false;
-                            line.coherence_info = current_request->m_coherence_info_to_set;
-                        }
-                        hit = true;
-                        break;
-                    } else if (!has_empty_line && line.last_access_time < lru) {
-                        evict_candidates.push_back(it_way);
-                        lru = line.last_access_time;
+                    } else {
+                        req->m_status = CACHE_REQ_MISS;
+                    }
+
+
+                    line.last_access_time = system_time;
+                    if (m_helper_will_return_line) {
+                        (*m_helper_will_return_line)(line);
+                    }
+
+                    req->m_line_copy = copy_cache_line(line);
+
+                    break;
+
+                } else if (line.empty) {
+                    empties.push_back(it_way);
+                } else {
+                    evictables.push_back(it_way);
+                    if (line.last_access_time < lru_time) {
+                        lru_time = line.last_access_time;
                         lru_way = it_way;
                     }
                 }
-                if (!hit) {
-                    uint32_t way_to_evict = 0;
-                    if (!evict_candidates.empty()) {
-                        switch (m_replacement_policy) {
-                        case REPLACE_RANDOM:
-                            way_to_evict = evict_candidates[ran->random_range(evict_candidates.size())];
-                            break;
-                        case REPLACE_LRU:
-                            way_to_evict = lru_way;
-                            break;
-                        } 
+            }
+            if (!req->m_line_copy) {
+                /* no entry */
+                if (req->m_request_type == CACHE_REQ_INVALIDATE || req->m_request_type == CACHE_REQ_COHERENCE_INVALIDATE) {
+                    req->m_status = CACHE_REQ_HIT;
+                } else if (!empties.empty()) {
+                    req->m_status = CACHE_REQ_MISS;
+                    if (m_helper_reserve_empty_line) {
+                        cacheLine &line = m_cache[idx][*empties.begin()];
+                        line.start_maddr = start_maddr;
+                        /* Here's a somewhat non-combinational fifo arbitration, but it's okay becaues requests would be */
+                        /* randomly serialized... */
+                        line.empty = false;
+                        (*m_helper_reserve_empty_line)(line);
                     }
-                    switch(current_request->m_request_type) {
-                    case CACHE_REQ_READ:
-                    case CACHE_REQ_WRITE:
-                        if (!has_empty_line) {
-                            if (!evict_candidates.empty()) {
-                                current_request->m_status = CACHE_MISS;
-                                current_request->m_need_to_invalidate = true;
-                                current_request->m_maddr_to_invalidate = m_cache[index][way_to_evict].first_maddr;
-                                m_cache[index][way_to_evict].reserved = true;
-                            } else {
-                                continue; /* wait for another cycle to find a space */
-                            }
-                        } else {
-                            current_request->m_status = CACHE_MISS;
-                            m_cache[index][any_empty_way].reserved = true;
-                        }
-                        break;
-                    case CACHE_REQ_ADD_LINE:
-                        if (has_empty_line) {
-                            current_request->m_status = CACHE_HIT;
-                            m_cache[index][any_empty_way].valid = true;
-                            m_cache[index][any_empty_way].dirty = false;
-                            m_cache[index][any_empty_way].reserved = false;
-                            m_cache[index][any_empty_way].last_access_time = system_time;
-                            m_cache[index][any_empty_way].first_maddr = first_maddr;
-                            m_cache[index][any_empty_way].data = shared_array<uint32_t>(new uint32_t[m_words_per_line]);
-                            m_cache[index][any_empty_way].coherence_info = current_request->m_coherence_info_to_set;
-                        } else {
-                            if (!evict_candidates.empty()) {
-                                current_request->m_status = CACHE_MISS;
-                                current_request->m_need_to_invalidate = true;
-                                current_request->m_maddr_to_invalidate = m_cache[index][way_to_evict].first_maddr;
-                                m_cache[index][way_to_evict].reserved = true;
-                            } else {
-                                continue; /* wait for another cycle to find a space */
-                            }
-                        }
-                        break;
-                    case CACHE_REQ_INVALIDATE:
-                        current_request->m_status = CACHE_MISS;
-                        break;
-                    }
-                }
-                /* release the port */
-                if (current_request->m_request_type == CACHE_REQ_WRITE || current_request->m_request_type == CACHE_REQ_ADD_LINE) {
-                    ++m_number_of_free_write_ports;
                 } else {
-                    ++m_number_of_free_read_ports;
+                    req->m_status = CACHE_REQ_MISS;
+                    uint32_t victim_way = 0;
+                    switch (m_replacement_policy) {
+                    case REPLACE_RANDOM:
+                        victim_way = evictables[ran->random_range(evictables.size())];
+                        break;
+                    case REPLACE_LRU:
+                        victim_way = lru_way;
+                        break;
+                    }
+                    cacheLine &line = m_cache[idx][victim_way];
+
+                    if (!m_helper_can_evict_line || !line.coherence_info || !(*m_helper_can_evict_line)(line)) {
+                        m_lines_to_invalidate.insert(make_tuple(idx, victim_way, true, start_maddr));
+                    }
+                    if (m_helper_will_return_line) {
+                        (*m_helper_will_return_line)(m_cache[idx][victim_way]);
+                    }
+                    req->m_victim_line_copy = copy_cache_line(m_cache[idx][victim_way]);
+                }       
+                switch (req->m_request_type) {
+                case CACHE_REQ_WRITE:
+                case CACHE_REQ_COHERENCE_WRITE:
+                    ++m_available_write_ports;
+                    break;
+                case CACHE_REQ_INVALIDATE:
+                case CACHE_REQ_COHERENCE_INVALIDATE:
+                    ++m_available_read_ports;
+                    break;
+                case CACHE_REQ_READ:
+                case CACHE_REQ_COHERENCE_READ:
+                    ++m_available_read_ports;
+                    break;
                 }
-                /* remove from the queue */
-                //DEBUG TODO
-                current_queue.erase(current_queue.begin());
+
+            }
+            q.erase(q.begin());
+            if (q.size() == 0) {
+                m_req_table.erase(it_q);
             }
         }
     }
@@ -215,62 +252,29 @@ void cache::tick_positive_edge() {
 
 void cache::tick_negative_edge() {
 
+    for (set<tuple<uint32_t, uint32_t, bool, maddr_t> >::iterator it = m_lines_to_invalidate.begin(); 
+         it != m_lines_to_invalidate.end(); ++it) 
+    {
+        if (it->get<2>()) {
+            /* reserving case */
+            cacheLine &line = m_cache[it->get<0>()][it->get<1>()];
+            line.start_maddr = it->get<3>();
+            if (!m_helper_reserve_empty_line) {
+                (*m_helper_reserve_empty_line)(line);
+            }
+        } else {
+            /* invalidate only case */
+            m_cache[it->get<0>()][it->get<1>()].empty = true;
+        }
+    }
     /* advance hit testing */
-    map<uint32_t, entryTable>::iterator it_space;
-    for (it_space = m_entry_tables.begin(); it_space != m_entry_tables.end(); ++it_space) {
-        entryTable &current_table = it_space->second;
-        entryTable::iterator it_addr;
-        for (it_addr = current_table.begin(); it_addr != current_table.end(); ++it_addr) {
-            entryQueue &current_queue = it_addr->second;
-            if (current_queue.empty()) {
-                continue;
-            }
-            shared_ptr<entry_t> current_entry = current_queue.front();
-            if (current_entry->status == ENTRY_HIT_TEST) { /*invalid?*/
-                if (--(current_entry->remaining_hit_test_cycles) == 0) {
-                    current_entry->status = ENTRY_DONE;
-                }
+    for (reqTable::iterator it_q = m_req_table.begin(); it_q != m_req_table.end(); ++it_q) {
+        reqEntry &head = it_q->second.front();
+        if (head.status == ENTRY_HIT_TEST) {
+            if (--(head.remaining_hit_test_cycles) == 0) {
+                head.status = ENTRY_DONE;
             }
         }
     }
 
-    /* read port serialization */
-    while(m_number_of_free_read_ports > 0 && !m_entries_waiting_for_read_ports.empty()) {
-        shared_ptr<entry_t> entry = m_entries_waiting_for_read_ports.front();
-        --m_number_of_free_read_ports;
-        entry->status = ENTRY_HIT_TEST;
-        if (m_hit_test_latency > 0) {
-            entry->status = ENTRY_HIT_TEST;
-            entry->remaining_hit_test_cycles = m_hit_test_latency;
-        } else {
-            entry->status = ENTRY_DONE;
-        }
-        maddr_t first_maddr = get_first_maddr(entry->request->m_maddr);
-        m_entry_tables[first_maddr.mem_space_id][first_maddr.address].push_back(entry);
-        m_entries_waiting_for_read_ports.erase(m_entries_waiting_for_read_ports.begin());
-    }
-
-    /* write port serialization */
-    while(m_number_of_free_write_ports > 0 && !m_entries_waiting_for_write_ports.empty()) {
-        shared_ptr<entry_t> entry = m_entries_waiting_for_write_ports.front();
-        --m_number_of_free_write_ports;
-        if (m_hit_test_latency > 0) {
-            entry->status = ENTRY_HIT_TEST;
-            entry->remaining_hit_test_cycles = m_hit_test_latency;
-        } else {
-            entry->status = ENTRY_DONE;
-        }
-        maddr_t first_maddr = get_first_maddr(entry->request->m_maddr);
-        m_entry_tables[first_maddr.mem_space_id][first_maddr.address].push_back(entry);
-        m_entries_waiting_for_write_ports.erase(m_entries_waiting_for_write_ports.begin());
-    }
-
-    /* purge zombies */
-    vector<linePosition_t>::iterator it;
-    for (it = m_lines_to_purge.begin(); it != m_lines_to_purge.end(); ++it) {
-        m_cache[it->index][it->way].valid = false;
-    }
-    m_lines_to_purge.clear();
 }
-
-

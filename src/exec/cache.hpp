@@ -14,78 +14,86 @@
 using namespace std;
 using namespace boost;
 
-/* do not change order */
+/* do not change the order */
 typedef enum {
     REPLACE_LRU = 0,
     REPLACE_RANDOM = 1
 } replacementPolicy_t;
 
 typedef struct {
-    bool valid;
+    bool empty;
     bool dirty;
-    bool reserved;
-    maddr_t first_maddr;
+    maddr_t start_maddr;;
     shared_array<uint32_t> data;
     shared_ptr<void> coherence_info;
     uint64_t last_access_time;
-} cacheLine_t;
+} cacheLine;
 
 typedef enum {
+    /* do not perform coherence-hit check */
     CACHE_REQ_READ = 0,
-    CACHE_REQ_WRITE,     /* cache only returns a pointer to write to, not writes data itself */
-    CACHE_REQ_ADD_LINE,  /* cache only returns a pointer to write to, not writes data itself */
-    CACHE_REQ_INVALIDATE /* also work for flush back requests */
+    CACHE_REQ_WRITE,      
+    CACHE_REQ_INVALIDATE,
+    /* perfirm coherence-hit check */
+    /* even if a line matches, it replies a cache miss if the helper says no */
+    /* the line will still be returned in line_copy() */
+    CACHE_REQ_COHERENCE_READ,
+    CACHE_REQ_COHERENCE_WRITE,      
+    CACHE_REQ_COHERENCE_INVALIDATE
+
+    /* INVALIDATE also returns a copy of the invalidated line. The memory is responsible to write back if the line is dirty */
+
 } cacheReqType_t;
 
 typedef enum {
-
-    CACHE_NEW = 0,
-
-    /* cache is working */
-    CACHE_WAIT,
-
-    /* a cache hit for a read or write, or an invalidate is done (the requester may need to check the dirty bit) */
-    /* or a new line is added to the cache */
-    CACHE_HIT,
-
-    /* a cache miss. if it need to evict a line to bring in the requested line, the information of victim is available */
-    /* or a new line couldn't be added because the cache is full */
-    /* or could not invalidate because the line does not exist */
-    CACHE_MISS
-
+    CACHE_REQ_NEW = 0,
+    CACHE_REQ_WAIT,
+    CACHE_REQ_HIT,
+    CACHE_REQ_MISS
 } cacheReqStatus_t;
 
 class cacheRequest {
 public:
 
-    /* Because cache does not know about the cache coherence protocol, it can't do writes by itself */
-    /* The requester can and must write into the returned cache line on a write hit */
-    cacheRequest(maddr_t maddr, cacheReqType_t request_type, shared_ptr<void> coherence_info_to_set = shared_ptr<void>());
+    cacheRequest(maddr_t maddr, cacheReqType_t request_type, 
+                 uint32_t word_count = 0,
+                 shared_array<uint32_t> data_to_write = shared_array<uint32_t>(), 
+                 shared_ptr<void> coherence_info_to_write = shared_ptr<void>());
+
     ~cacheRequest();
 
     inline cacheReqStatus_t status() { return m_status; }
 
-    /* cache_line() is valid only at the cycle when status() becomes CACHE_HIT or CACHE_MISS */
-    inline cacheLine_t* cache_line() { return m_cache_line; }
+    inline shared_ptr<cacheLine> line_copy() { return m_line_copy; }
+    inline shared_ptr<cacheLine> victim_line_copy() { return m_victim_line_copy; }
 
-    inline bool need_invalidate() { assert(status()==CACHE_MISS); return m_need_to_invalidate; }
-    inline maddr_t maddr_to_invalidate() { return m_maddr_to_invalidate; }
+    inline cacheReqType_t request_type() { return m_request_type; }
+    inline maddr_t maddr() { return m_maddr; }
+
+    inline void reset() { assert(m_status != CACHE_REQ_WAIT); m_status = CACHE_REQ_NEW; }
 
     friend class cache;
 
 private:
     cacheReqType_t m_request_type;
     maddr_t m_maddr;
-    cacheReqStatus_t m_status;
-    cacheLine_t* m_cache_line;
-    bool m_need_to_invalidate;
-    maddr_t m_maddr_to_invalidate;
-    shared_ptr<void> m_coherence_info_to_set;
+    uint32_t m_word_count;
 
+    cacheReqStatus_t m_status;
+    shared_ptr<cacheLine> m_line_copy;
+    shared_ptr<cacheLine> m_victim_line_copy;
+    shared_ptr<void> m_coherence_info_to_write;
+    shared_array<uint32_t> m_data_to_write;
 };
 
 class cache {
 public:
+    typedef shared_ptr<void> (*helperCopyCoherenceInfo) (shared_ptr<void>);
+    typedef void (*helperWillReturnLine) (cacheLine&);
+    typedef bool (*helperIsHit) (shared_ptr<cacheRequest>, cacheLine&);
+    typedef void (*helperReserveEmptyLine) (cacheLine&);
+    typedef bool (*helperCanEvictLine) (cacheLine&);
+
     cache(uint32_t numeric_id, const uint64_t &system_time, 
           shared_ptr<tile_statistics> stats, logger &log, shared_ptr<random_gen> ran, 
           uint32_t words_per_line, uint32_t total_lines, uint32_t associativity,
@@ -98,31 +106,37 @@ public:
 
     void request(shared_ptr<cacheRequest> req);
 
+    inline bool read_port_available() { return m_available_read_ports > 0; }
+    inline bool write_port_available() { return m_available_write_ports > 0; }
+
+    inline void set_helper_copy_coherence_info (helperCopyCoherenceInfo fptr) { m_helper_copy_coherence_info = fptr; }
+    inline void set_helper_will_return_line (helperWillReturnLine fptr) { m_helper_will_return_line = fptr; }
+    inline void set_helper_is_hit (helperIsHit fptr) { m_helper_is_hit = fptr; }
+    inline void set_helper_reserve_empty_line (helperReserveEmptyLine fptr) { m_helper_reserve_empty_line = fptr; }
+    inline void set_helper_can_evict_line (helperCanEvictLine fptr) { m_helper_can_evict_line = fptr; }
+
 private:
+    typedef map<uint32_t/*index*/, cacheLine*> cacheTable;
+
     typedef enum {
-        ENTRY_PORT = 0,
         ENTRY_HIT_TEST,
         ENTRY_DONE
-    } entryStatus_t;
+    } reqEntryStatus_t;
 
     typedef struct {
-        entryStatus_t status;
+        reqEntryStatus_t status;
         shared_ptr<cacheRequest> request;
         uint32_t remaining_hit_test_cycles;
-    } entry_t;
+    } reqEntry;
 
-    typedef struct {
-        uint32_t index;
-        uint32_t way;
-    } linePosition_t;
-
-    typedef vector<shared_ptr<entry_t> > entryQueue;
-    typedef map<uint64_t /*address*/, entryQueue> entryTable;
+    typedef vector<reqEntry> reqQueue;
+    typedef map<maddr_t, reqQueue> reqTable;
 
     inline uint32_t get_index(maddr_t maddr) { return (uint32_t)((maddr.address&m_index_mask)>>m_index_pos); }
     inline uint32_t get_offset(maddr_t maddr) { return (uint32_t)(maddr.address&m_offset_mask); }
-    inline maddr_t get_first_maddr(maddr_t maddr) { maddr.address -= get_offset(maddr); return maddr; }
-    cacheLine_t* cache_line(maddr_t maddr); 
+    inline maddr_t get_start_maddr_in_line(maddr_t maddr) { maddr.address -= get_offset(maddr); return maddr; }
+
+    shared_ptr<cacheLine> copy_cache_line(const cacheLine &line);
 
     uint32_t m_id;
     const uint64_t &system_time;
@@ -140,17 +154,19 @@ private:
     uint64_t m_index_mask;
     uint32_t m_index_pos;
 
-    entryQueue m_entries_waiting_for_read_ports;
-    entryQueue m_entries_waiting_for_write_ports;
-    /* NOTE: we assume an infinite cache request table. */
-    /* Although the table size is indeterministic, the finite number of read & write ports helps making it reasonable */
-    map<uint32_t/*mem space id*/, entryTable> m_entry_tables;
-    map<uint32_t/*index*/, cacheLine_t* > m_cache;
-    uint32_t m_number_of_free_read_ports;
-    uint32_t m_number_of_free_write_ports;
+    uint32_t m_available_read_ports;
+    uint32_t m_available_write_ports;
 
-    /* for the performance's sake, store lines to purge at the negative tick (rather than iterating through the cache) */
-    vector<linePosition_t> m_lines_to_purge;
+    helperCopyCoherenceInfo m_helper_copy_coherence_info;
+    helperWillReturnLine m_helper_will_return_line;
+    helperIsHit m_helper_is_hit;
+    helperReserveEmptyLine m_helper_reserve_empty_line;
+    helperCanEvictLine m_helper_can_evict_line;
+
+    reqTable m_req_table;
+    cacheTable m_cache;
+
+    set<tuple<uint32_t, uint32_t, bool, maddr_t> > m_lines_to_invalidate;
 
 };
 

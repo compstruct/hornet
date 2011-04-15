@@ -5,6 +5,12 @@
 #define __MEMORY_TYPES_HPP__
 
 #include <stdint.h>
+#include <boost/tuple/tuple.hpp>
+#include <boost/tuple/tuple_comparison.hpp>
+#include <iostream>
+
+using namespace std;
+using namespace boost;
 
 /* do not change order */
 typedef enum {
@@ -29,9 +35,13 @@ typedef enum {
 } emType_t;
 
 typedef struct {
-    uint32_t mem_space_id;
+    uint32_t space;
     uint64_t address;
 } maddr_t;
+
+bool operator<(const maddr_t &left, const maddr_t &right);
+bool operator==(const maddr_t &left, const maddr_t &right);
+ostream& operator<<(ostream& output, const maddr_t &right);
 
 typedef enum {
     REQ_NEW = 0,

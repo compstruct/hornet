@@ -10,6 +10,7 @@
 #include "logger.hpp"
 #include "random.hpp"
 #include "dramController.hpp"
+#include "messages.hpp"
 
 #include "memory_types.hpp"
 
@@ -53,6 +54,7 @@ public:
            shared_ptr<random_gen> ran);
     virtual ~memory();
 
+    virtual bool available() = 0;
     virtual void request(shared_ptr<memoryRequest> req) = 0;
     virtual void tick_positive_edge() = 0;
     virtual void tick_negative_edge() = 0;
@@ -65,8 +67,12 @@ public:
                                    uint32_t bandwidth_in_words_per_cycle, bool use_lock);
     void set_remote_dram_controller(uint32_t location);
 
+    inline void set_core_send_queues(map<uint32_t, shared_ptr<messageQueue> > queues) { m_core_send_queues = queues; }
+    inline void set_core_receive_queues(map<uint32_t, shared_ptr<messageQueue> > queues) { m_core_receive_queues = queues; }
+
 protected:
     inline void set_req_status(shared_ptr<memoryRequest> req, memReqStatus_t status) { req->m_status = status; }
+    inline void set_req_data(shared_ptr<memoryRequest> req, shared_array<uint32_t> data) { req->m_data = data; }
 
     uint32_t m_id;
     const uint64_t &system_time;
@@ -76,6 +82,9 @@ protected:
 
     dramController* m_dram_controller;
     uint32_t m_dram_controller_location;
+
+    map<uint32_t/*msg type*/, shared_ptr<messageQueue> > m_core_send_queues;
+    map<uint32_t/*msg type*/, shared_ptr<messageQueue> > m_core_receive_queues;
 
 };
 

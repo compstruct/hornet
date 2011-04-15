@@ -9,8 +9,6 @@
 #include "logger.hpp"
 #include "memtraceThreadStats.hpp"
 
-typedef uint32_t mth_id_t;
-
 class memtraceThread {
 public:
     typedef enum {
@@ -20,10 +18,10 @@ public:
     } inst_type_t;
 
 public:
-    memtraceThread(mth_id_t id, const uint64_t &system_time, logger &l);
+    memtraceThread(uint32_t id, const uint64_t &system_time, logger &l);
     ~memtraceThread();
 
-    inline mth_id_t get_id() { return m_id; }
+    inline uint32_t get_id() { return m_id; }
 
     bool finished();
 
@@ -74,7 +72,7 @@ private:
         uint64_t memory_issued_time;
     } inst_t;
 
-    mth_id_t m_id;
+    uint32_t m_id;
     const uint64_t &system_time;
     logger &log;
     shared_ptr<memtraceThreadStatsPerThread> m_stats;
@@ -91,7 +89,7 @@ public:
     ~memtraceThreadPool();
 
     void add_thread(memtraceThread* p);
-    memtraceThread* find(mth_id_t id);
+    memtraceThread* find(uint32_t id);
     memtraceThread* thread_at(uint32_t n);
     unsigned int size();
 
@@ -101,7 +99,7 @@ private:
     /* memtraceThreadPool class has the following restrictions for the performance reason */
     /* 1. no thread is added to the pool during simulation */
     /* 2. no thread is removed from the pool during simulation */
-    map<mth_id_t, memtraceThread*> m_threads;
+    map<uint32_t, memtraceThread*> m_threads;
     mutable recursive_mutex memtraceThreadPool_mutex;
 };
 

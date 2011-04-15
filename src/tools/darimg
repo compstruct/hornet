@@ -416,6 +416,12 @@ def get_memory_cfgs(cfg, core):
     else:
         ret.append(0)
 
+    # core address translation synch delay
+    if cfg.has_option('memory', 'core address translation number of ports'):
+        ret.append(int(cfg.get('memory', 'core address translation number of ports')))
+    else:
+        ret.append(0)
+
     # dram controller latency
     if cfg.has_option('memory', 'dram controller latency'):
         ret.append(int(cfg.get('memory', 'dram controller latency')))
@@ -444,7 +450,7 @@ def get_memory_cfgs(cfg, core):
     if cfg.has_option('memory', 'maximum requests in flight per dram controller'):
         ret.append(int(cfg.get('memory', 'maximum requests in flight per dram controller')))
     else:
-        ret.append(4)
+        ret.append(256)
 
     # bandwidth in words per dram controller 
     if cfg.has_option('memory', 'bandwidth in words per dram controller'):
@@ -458,6 +464,22 @@ def get_memory_cfgs(cfg, core):
         section = 'memory::' + memory_arch
         if cfg.has_option(section, 'words per cache line'):
             ret.append(int(cfg.get(section, 'words per cache line')))
+        else:
+            ret.append(4)
+        if cfg.has_option(section, 'maximum local cache requests in flight'):
+            ret.append(int(cfg.get(section, 'maximum local cache requests in flight')))
+        else:
+            ret.append(4)
+        if cfg.has_option(section, 'maximum remote cache requests in flight'):
+            ret.append(int(cfg.get(section, 'maximum remote cache requests in flight')))
+        else:
+            ret.append(4)
+        if cfg.has_option(section, 'maximum local directory requests in flight'):
+            ret.append(int(cfg.get(section, 'maximum local directory requests in flight')))
+        else:
+            ret.append(4)
+        if cfg.has_option(section, 'maximum remote directory requests in flight'):
+            ret.append(int(cfg.get(section, 'maximum remote directory requests in flight')))
         else:
             ret.append(4)
         for cache_name in ['L1', 'L2']:

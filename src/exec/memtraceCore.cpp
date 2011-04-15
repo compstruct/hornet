@@ -122,13 +122,6 @@ void memtraceCore::execute() {
                 LOG(log,2) << "[memtraceCore:" << get_id().get_numeric_id() << "] "
                     << "finished a memtraceThread " << cur.thread->get_id()
                     << " @ " << system_time << endl;
-#ifdef DBG_PRINT
-#if 0
-                cerr << "[memtraceCore:" << get_id().get_numeric_id() << "] "
-                    << "finished a memtraceThread " << cur.thread->get_id()
-                    << " @ " << system_time << endl;
-#endif
-#endif
                 if (cur.thread->stats_enabled()) {
                     cur.thread->stats()->did_complete();
                 }
@@ -158,19 +151,14 @@ void memtraceCore::execute() {
                         shared_array<uint32_t> dummy = shared_array<uint32_t>(new uint32_t[cur.thread->word_count()]);
                         req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), cur.thread->word_count(), dummy));
                     }
-                    m_memory->request(req);
-                    cur.req = req;
-                    cur.status = LANE_WAIT;
-                    LOG(log,3) << "[thread " << cur.thread->get_id() << " @ " << system_time 
-                        << " ] is making a memory request on core " 
-                        << get_id().get_numeric_id() << endl;
-#ifdef DBG_PRINT
-#if 0
-                    cerr << "[thread " << cur.thread->get_id() << " @ " << system_time 
-                        << " ] is making a memory request on core " 
-                        << get_id().get_numeric_id() << endl;
-#endif
-#endif
+                    if (m_memory->available()) {
+                        m_memory->request(req);
+                        cur.req = req;
+                        cur.status = LANE_WAIT;
+                        cerr << "[thread " << cur.thread->get_id() << " @ " << system_time 
+                            << " ] is making a memory request on core " 
+                            << get_id().get_numeric_id() << " for address " << cur.thread->maddr() << endl;
+                    }
                 } else if (cur.thread->type() == memtraceThread::INST_OTHER) {
                     cur.status = LANE_IDLE;
                 }

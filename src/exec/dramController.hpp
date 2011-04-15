@@ -22,7 +22,7 @@ typedef enum {
     DRAM_REQ_READ = 0,
     DRAM_REQ_WRITE,
 
-    /* Indirect mode */
+    /* EXPERIMENTAL Indirect mode */
 
     /* In indirect mode, word_count is only used for the performance model.*/
     /* Actual data is written & read in a shared_ptr<void> pointer.        */
@@ -38,7 +38,7 @@ typedef enum {
 
 typedef enum {
     DRAM_NEW = 0,
-    DRAM_WAIT,
+    DRAM_WAIT, /* request fetched. being processed */
     DRAM_DONE
 } dramReqStatus_t;
 
@@ -55,11 +55,13 @@ public:
     inline const shared_array<uint32_t> read() { assert(m_request_type == DRAM_REQ_READ); return m_data; }
     inline const shared_ptr<void> read_indirect() { assert(m_request_type == DRAM_REQ_READ_INDIRECT); return m_indirect_data; }
 
+    inline bool is_indirect() { return (m_request_type == DRAM_REQ_READ_INDIRECT || m_request_type == DRAM_REQ_WRITE_INDIRECT); }
+    inline bool is_read() { return (m_request_type == DRAM_REQ_READ || m_request_type == DRAM_REQ_READ_INDIRECT); }
+    inline maddr_t maddr() { return m_maddr; }
+
     friend class dramController;
 
 private:
-    inline bool is_indirect() { return (m_request_type == DRAM_REQ_READ_INDIRECT || m_request_type == DRAM_REQ_WRITE_INDIRECT); }
-    inline bool is_read() { return (m_request_type == DRAM_REQ_READ || m_request_type == DRAM_REQ_READ_INDIRECT); }
     dramReqType_t m_request_type;
     maddr_t m_maddr;
     uint32_t m_word_count;
@@ -77,11 +79,13 @@ public:
     friend class dramController;
 
 private:
-    typedef map<uint64_t/*index*/, shared_array<uint32_t> > memSpace;
-    typedef map<uint64_t/*address*/, shared_ptr<void> > indirectMemSpace;
+    typedef map<uint64_t/*start_address*/, shared_array<uint32_t> > memSpace;
+    typedef map<uint32_t/*mem space id*/, memSpace> memSpaces;
+    typedef map<maddr_t, shared_ptr<void> > indirectMemSpaces;
 
-    map<uint32_t/*mem space id*/, memSpace> m_memory;
-    map<uint32_t/*mem space id*/, indirectMemSpace> m_indirect_memory;
+    memSpaces m_memory;
+    indirectMemSpaces m_indirect_memory;
+
     mutable recursive_mutex dram_mutex;
 
 };
@@ -100,6 +104,8 @@ public:
     void tick_negative_edge();
 
     void request(shared_ptr<dramRequest> req);
+
+    inline bool available() { return m_number_of_free_ports > 0; }
 
 private:
     void dram_access(shared_ptr<dramRequest> req);
@@ -138,7 +144,6 @@ private:
     uint32_t m_bandwidth_in_words_per_cycle;
 
     entryQueue m_entry_queue;
-    entryQueue m_entries_waiting_for_ports;
 
 };
 

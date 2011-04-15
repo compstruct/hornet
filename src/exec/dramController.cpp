@@ -46,23 +46,21 @@ dramController::dramController(uint32_t id, const uint64_t &t,
 dramController::~dramController() {}
 
 void dramController::request(shared_ptr<dramRequest> req) {
+    assert(available());
     req->m_status = DRAM_WAIT;
     shared_ptr<entry_t> new_entry = shared_ptr<entry_t>(new entry_t);
     new_entry->status = ENTRY_PORT;
     new_entry->request = req;
-    if (m_number_of_free_ports > 0) {
-        --m_number_of_free_ports;
-        new_entry->remaining_words_to_transfer = req->m_word_count + 2 * m_msg_header_size_in_words;
-        if (m_total_latency > 0) {
-            new_entry->status = ENTRY_LATENCY;
-            new_entry->remaining_latency_cycles = m_total_latency;
-        } else {
-            new_entry->status = ENTRY_BANDWIDTH;
-        }
-        m_entry_queue.push_back(new_entry);
+    --m_number_of_free_ports;
+    req->m_status = DRAM_WAIT;
+    new_entry->remaining_words_to_transfer = req->m_word_count + 2 * m_msg_header_size_in_words;
+    if (m_total_latency > 0) {
+        new_entry->status = ENTRY_LATENCY;
+        new_entry->remaining_latency_cycles = m_total_latency;
     } else {
-        m_entries_waiting_for_ports.push_back(new_entry);
+        new_entry->status = ENTRY_BANDWIDTH;
     }
+    m_entry_queue.push_back(new_entry);
 }
 
 void dramController::tick_positive_edge() {
@@ -85,6 +83,7 @@ void dramController::tick_positive_edge() {
         } else {
             dram_access(m_entry_queue.front()->request);
         }
+        m_entry_queue.front()->request->m_status = DRAM_DONE;
         m_entry_queue.erase(m_entry_queue.begin());
         ++m_number_of_free_ports;
     }
@@ -101,20 +100,6 @@ void dramController::tick_negative_edge() {
         }
     }
 
-    /* port serialization */
-    while(m_number_of_free_ports > 0 && !m_entries_waiting_for_ports.empty()) {
-        shared_ptr<entry_t> entry = m_entries_waiting_for_ports.front();
-        --m_number_of_free_ports;
-        if (m_total_latency > 0) {
-            entry->status = ENTRY_LATENCY;
-            entry->remaining_latency_cycles = m_total_latency;
-        } else {
-            entry->status = ENTRY_BANDWIDTH;
-        }
-        m_entry_queue.push_back(entry);
-        m_entries_waiting_for_ports.erase(m_entries_waiting_for_ports.begin());
-    }
-        
 }
 
 void dramController::dram_access_safe(shared_ptr<dramRequest> req) {
@@ -123,35 +108,35 @@ void dramController::dram_access_safe(shared_ptr<dramRequest> req) {
 }
 
 void dramController::dram_access(shared_ptr<dramRequest> req) {
-    uint32_t mem_space_id = req->m_maddr.mem_space_id;
     if (req->is_indirect()) {
-        uint64_t address = req->m_maddr.address;
-        if (m_dram->m_indirect_memory[mem_space_id].count(address) == 0) {
-            m_dram->m_indirect_memory[mem_space_id][address] = shared_ptr<void>();
+        if (m_dram->m_indirect_memory.count(req->m_maddr) == 0) {
+            m_dram->m_indirect_memory[req->m_maddr] = shared_ptr<void>();
         }
         if (req->is_read()) {
-            req->m_indirect_data = m_dram->m_indirect_memory[mem_space_id][address];
+            req->m_indirect_data = m_dram->m_indirect_memory[req->m_maddr];
         } else {
-            m_dram->m_indirect_memory[mem_space_id][address] = req->m_indirect_data;
+            m_dram->m_indirect_memory[req->m_maddr] = req->m_indirect_data;
         }
     } else {
         if (req->is_read()) {
             req->m_data = shared_array<uint32_t>(new uint32_t[req->m_word_count]);
         }
         for (uint32_t it_word = 0; it_word != req->m_word_count; ++it_word) {
+            uint32_t space = req->m_maddr.space;
             uint64_t address = req->m_maddr.address + it_word;
             uint64_t offset = address & DRAM_INDEX_MASK;
-            uint64_t index = address - offset;
-            if (m_dram->m_memory[mem_space_id].count(index) == 0) {
-                m_dram->m_memory[mem_space_id][index] = shared_array<uint32_t>(new uint32_t[WORDS_IN_DRAM_BLOCK]);
+            uint64_t start_address = address - offset;
+            if (m_dram->m_memory[space].count(start_address) == 0) {
+                m_dram->m_memory[space][start_address] = shared_array<uint32_t>(new uint32_t[WORDS_IN_DRAM_BLOCK]);
                 for (uint32_t i = 0; i < WORDS_IN_DRAM_BLOCK; ++i) {
-                    m_dram->m_memory[mem_space_id][index][i] = 0;
+                    /* some initialization (garbage - doesn't matter) */
+                    m_dram->m_memory[space][start_address][i] = i;
                 }
             }
             if (req->is_read()) {
-                req->m_data[it_word] = m_dram->m_memory[mem_space_id][index][offset];
+                req->m_data[it_word] = m_dram->m_memory[space][start_address][offset];
             } else {
-                m_dram->m_memory[mem_space_id][index][offset] = req->m_data[it_word];
+                m_dram->m_memory[space][start_address][offset] = req->m_data[it_word];
             }
         }
     }

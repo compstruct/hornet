@@ -182,11 +182,12 @@ core address translation = stripe
 core address translation latency = 1
 core address translation allocation unit in bytes = 4096
 core address synch delay = 0
+core address number of ports = 0
 dram controller latency = 2
 one-way offchip latency = 150
 dram latency = 50
 dram message header size in words = 4
-maximum requests in flight per dram controller = 4
+maximum requests in flight per dram controller = 256
 bandwidth in words per dram controller = 4''')
     contents = contents + memoryTemplate.substitute(memory_name=memory_fullname[memory_name])
 
@@ -197,6 +198,10 @@ bandwidth in words per dram controller = 4''')
 
 [memory::private-shared MSI]
 words per cache line = 4
+maximum local cache requests in flight = 4
+maximum remote cache requests in flight = 2
+maximum local directory requests in flight = 2
+maximum remote directory requests in flight = 4
 total lines in L1 = 32
 associativity in L1 = 2 
 hit test latency in L1 = 2

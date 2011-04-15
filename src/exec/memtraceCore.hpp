@@ -81,7 +81,7 @@ private:
     shared_ptr<memtraceThreadPool> m_threads;
 
     /* Native contexts */
-    set<mth_id_t> m_native_list;
+    set<uint32_t> m_native_list;
 
     /* Running state */
     bool m_do_evict;
