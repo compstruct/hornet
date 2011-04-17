@@ -6,9 +6,11 @@
 #define DEBUG
 
 #ifdef DEBUG
-#define mh_cerr cerr
+#define mh_log cerr
+#define mh_assert(X) assert(X)
 #else
-#define mh_cerr LOG(log,4)
+#define mh_log LOG(log,4)
+#define mh_assert(X) 
 #endif
 
 cacheRequest::cacheRequest(maddr_t maddr, cacheReqType_t request_type, uint32_t word_count,
@@ -30,13 +32,13 @@ cache::cache(uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, log
     m_helper_copy_coherence_info(NULL), m_helper_will_return_line(NULL), m_helper_is_hit(NULL), m_helper_reserve_empty_line(NULL),
     m_helper_can_evict_line(NULL)
 { 
-    assert(m_associativity > 0);
-    assert(m_words_per_line > 0);
-    assert(m_available_read_ports > 0);
-    assert(m_available_write_ports > 0);
+    mh_assert(m_associativity > 0);
+    mh_assert(m_words_per_line > 0);
+    mh_assert(m_available_read_ports > 0);
+    mh_assert(m_available_write_ports > 0);
     int log2 = 0;
     for (uint32_t i = m_words_per_line * 4; i > 1; i = i/2) {
-        assert(i%2 == 0); /*  must be a power of 2 */
+        mh_assert(i%2 == 0); /*  must be a power of 2 */
         ++log2;
     }
     m_offset_mask = m_words_per_line - 1;
@@ -60,7 +62,7 @@ shared_ptr<cacheLine> cache::copy_cache_line(const cacheLine &line) {
     
     /* deep copy */
     if (line.coherence_info) {
-        assert(m_helper_copy_coherence_info);
+        mh_assert(m_helper_copy_coherence_info);
         copy->coherence_info = m_helper_copy_coherence_info(line.coherence_info);
     }
 
@@ -77,12 +79,13 @@ void cache::request(shared_ptr<cacheRequest> req) {
     case CACHE_REQ_COHERENCE_READ:
     case CACHE_REQ_INVALIDATE:
     case CACHE_REQ_COHERENCE_INVALIDATE:
-        assert(read_port_available());
+        mh_assert(read_port_available());
         --m_available_read_ports;
         break;
     case CACHE_REQ_WRITE:
+    case CACHE_REQ_UPDATE:
     case CACHE_REQ_COHERENCE_WRITE:
-        assert(write_port_available());
+        mh_assert(write_port_available());
         --m_available_write_ports;
         break;
     }
@@ -101,7 +104,7 @@ void cache::request(shared_ptr<cacheRequest> req) {
 }
     
 void cache::tick_positive_edge() {
-    for (reqTable::iterator it_q = m_req_table.begin(); it_q != m_req_table.end(); ++it_q) {
+    for (reqTable::iterator it_q = m_req_table.begin(); it_q != m_req_table.end(); ) {
         reqQueue &q = it_q->second;
         reqEntry &head = q.front();;
         shared_ptr<cacheRequest> req = head.request;
@@ -112,6 +115,8 @@ void cache::tick_positive_edge() {
                 m_cache[idx] = new cacheLine[m_associativity];
                 for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
                     m_cache[idx][it_way].empty = true;
+                    m_cache[idx][it_way].data = shared_array<uint32_t>(new uint32_t[m_words_per_line]);
+                    m_cache[idx][it_way].coherence_info = shared_ptr<void>();
                 }
             }
             vector<uint32_t> evictables;
@@ -121,11 +126,11 @@ void cache::tick_positive_edge() {
             for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
                 cacheLine &line = m_cache[idx][it_way];
                 if (!line.empty && start_maddr == line.start_maddr) {
-
                     bool coherence_hit = 
                         /* either it's not a coherence access */
                         req->m_request_type == CACHE_REQ_READ ||
                         req->m_request_type == CACHE_REQ_WRITE ||
+                        req->m_request_type == CACHE_REQ_UPDATE ||
                         req->m_request_type == CACHE_REQ_INVALIDATE ||
                         /* or it doesn't have a helper */
                         !m_helper_is_hit ||
@@ -134,13 +139,19 @@ void cache::tick_positive_edge() {
                         /* or the helper says it's a hit */
                         (*m_helper_is_hit)(req,line);
 
+                    line.last_access_time = system_time;
+                    if (m_helper_will_return_line) {
+                        (*m_helper_will_return_line)(line);
+                    }
+
                     if (coherence_hit) {
                         req->m_status = CACHE_REQ_HIT;
                         switch (req->m_request_type) {
                         case CACHE_REQ_WRITE:
+                        case CACHE_REQ_UPDATE:
                         case CACHE_REQ_COHERENCE_WRITE:
                             {
-                                assert(!req->m_data_to_write);
+                                mh_assert(req->m_data_to_write);
                                 uint32_t offset = get_offset(req->m_maddr);
                                 for (uint32_t i = 0; i < req->m_word_count; ++i) {
                                     line.data[offset + i] = req->m_data_to_write[i];
@@ -148,7 +159,9 @@ void cache::tick_positive_edge() {
                                 if (req->m_coherence_info_to_write) {
                                     line.coherence_info = req->m_coherence_info_to_write;
                                 }
-                                line.dirty = true;
+                                if (req->m_request_type != CACHE_REQ_UPDATE) {
+                                    line.dirty = true;
+                                }
                                 ++m_available_write_ports;
                                 break;
                             }
@@ -168,12 +181,6 @@ void cache::tick_positive_edge() {
                         }
                     } else {
                         req->m_status = CACHE_REQ_MISS;
-                    }
-
-
-                    line.last_access_time = system_time;
-                    if (m_helper_will_return_line) {
-                        (*m_helper_will_return_line)(line);
                     }
 
                     req->m_line_copy = copy_cache_line(line);
@@ -202,7 +209,11 @@ void cache::tick_positive_edge() {
                         /* Here's a somewhat non-combinational fifo arbitration, but it's okay becaues requests would be */
                         /* randomly serialized... */
                         line.empty = false;
+                        line.dirty = false;
                         (*m_helper_reserve_empty_line)(line);
+                        if (m_helper_will_return_line) {
+                            (*m_helper_will_return_line)(line);
+                        }
                     }
                 } else {
                     req->m_status = CACHE_REQ_MISS;
@@ -228,6 +239,7 @@ void cache::tick_positive_edge() {
                 switch (req->m_request_type) {
                 case CACHE_REQ_WRITE:
                 case CACHE_REQ_COHERENCE_WRITE:
+                case CACHE_REQ_UPDATE:
                     ++m_available_write_ports;
                     break;
                 case CACHE_REQ_INVALIDATE:
@@ -243,8 +255,12 @@ void cache::tick_positive_edge() {
             }
             q.erase(q.begin());
             if (q.size() == 0) {
-                m_req_table.erase(it_q);
+                m_req_table.erase(it_q++);
+            } else {
+                ++it_q;
             }
+        } else {
+            ++it_q;
         }
     }
 
@@ -265,8 +281,11 @@ void cache::tick_negative_edge() {
         } else {
             /* invalidate only case */
             m_cache[it->get<0>()][it->get<1>()].empty = true;
+
         }
     }
+    m_lines_to_invalidate.clear();
+
     /* advance hit testing */
     for (reqTable::iterator it_q = m_req_table.begin(); it_q != m_req_table.end(); ++it_q) {
         reqEntry &head = it_q->second.front();

@@ -10,10 +10,10 @@ all: $(PROG)
 	$(DARIMG) -o $@ $<
 
 %.out: %.trace
-	$(DARSIM) $(PROG) --concurrency 1 --memory-traces $< > $@
+	$(DARSIM) $(PROG) --concurrency 1 --memory-traces $< --random-seed 7 > $@
 
 .PHONY: run
-run: $(PROG) test_serialize.out test_hit.out test_share.out
+run: $(PROG) test_serialize.out test_hit.out test_share_and_invalidate.out
 
 .PHONY: clean
 clean:

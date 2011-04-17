@@ -143,22 +143,18 @@ void memtraceCore::execute() {
             if (cur.thread->remaining_alu_cycle() == 0) {
                 /* finished execution */
                 if (cur.thread->type() == memtraceThread::INST_MEMORY) {
-                    shared_ptr<memoryRequest> req = shared_ptr<memoryRequest>();
                     if (cur.thread->is_read()) {
-                        req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), cur.thread->word_count()));
+                        cur.req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), cur.thread->word_count()));
                     } else {
                         /* this core model doesn't care data */
                         shared_array<uint32_t> dummy = shared_array<uint32_t>(new uint32_t[cur.thread->word_count()]);
-                        req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), cur.thread->word_count(), dummy));
+                        cur.req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), cur.thread->word_count(), dummy));
                     }
-                    if (m_memory->available()) {
-                        m_memory->request(req);
-                        cur.req = req;
-                        cur.status = LANE_WAIT;
-                        cerr << "[thread " << cur.thread->get_id() << " @ " << system_time 
-                            << " ] is making a memory request on core " 
-                            << get_id().get_numeric_id() << " for address " << cur.thread->maddr() << endl;
-                    }
+                    m_memory->request(cur.req);
+                    cur.status = LANE_WAIT;
+                    cerr << "[thread " << cur.thread->get_id() << " @ " << system_time 
+                         << " ] is making a memory request on core " 
+                         << get_id().get_numeric_id() << " for address " << cur.thread->maddr() << endl;
                 } else if (cur.thread->type() == memtraceThread::INST_OTHER) {
                     cur.status = LANE_IDLE;
                 }
@@ -190,51 +186,39 @@ void memtraceCore::execute() {
     }
 }
 
-void memtraceCore::commit_memory_requests() {
+void memtraceCore::update_from_memory_requests() {
     /* update waiting requests */
     for (vector<lane_entry_t>::iterator i = m_lanes.begin(); i != m_lanes.end(); ++i) {
-        if ((*i).status == LANE_WAIT) {
-            if((*i).req->status() == REQ_DONE) {
-                if ((*i).thread->stats_enabled()) {
-                    if ((*i).req->is_read()) {
-                        (*i).thread->stats()->did_finish_read(system_time - (*i).thread->memory_issued_time());
+        lane_entry_t &entry = *i;
+        if (entry.status == LANE_WAIT) {
+            if(entry.req->status() == REQ_DONE) {
+                if (entry.thread->stats_enabled()) {
+                    if (entry.req->is_read()) {
+                        entry.thread->stats()->did_finish_read(system_time - entry.thread->memory_issued_time());
                     } else {
-                        (*i).thread->stats()->did_finish_write(system_time - (*i).thread->memory_issued_time());
+                        entry.thread->stats()->did_finish_write(system_time - entry.thread->memory_issued_time());
                     }
                 }
-
-                LOG(log,2) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
+                cerr << "[core " << get_id().get_numeric_id() << " @ " << system_time 
                     << " ] finished memory operation : "; 
-                if ((*i).req->is_read())  {
-                    LOG(log,2) << " read ";
-                } else {
-                    LOG(log,2) << " written ";
-                }
-                for (uint32_t j = 0; j < (*i).req->word_count(); ++j) {
-                    LOG(log,2) << hex << (*i).req->data()[j] << dec;
-                }
-                LOG(log,2) <<  " on addr " << hex << (*i).req->maddr().address << dec << endl; 
-#ifdef DBG_PRINT
-#if 0
-                cerr << "[core " << get_id().get_numeric_id() << " @ " << system_time << " ] finished memory operation : "; 
-                if ((*i).req->is_read())  {
+                if (entry.req->is_read())  {
                     cerr << " read ";
                 } else {
                     cerr << " written ";
                 }
-#if 0
-                for (uint32_t j = 0; j < (*i).req->word_count(); ++j) {
-                    cerr << hex << (*i).req->data()[j] << dec;
+                for (uint32_t j = 0; j < entry.req->word_count(); ++j) {
+                    cerr << hex << entry.req->data()[j] << dec;
                 }
-#endif
-                cerr <<  " on addr " << hex << (*i).req->maddr().address << dec << endl; 
-#endif
-#endif
-                (*i).status = LANE_IDLE;
+                cerr <<  " on addr " << hex << entry.req->maddr().address << dec << endl; 
+                entry.status = LANE_IDLE;
+            } else if (i->req->status() == REQ_RETRY) {
+                cerr << "retrying" << endl;
+                /* the memory couldn't accept the last request */
+                m_memory->request(i->req); /* it's supposed to be in the positive tick of the next cycle, but doing here is equivalent */             
+            } else if (support_em() && entry.req->status() == REQ_MIGRATE) {
+                entry.thread->reset_current_instruction();
+                entry.status = LANE_MIG;
             }
-        } else if (support_em() && (*i).req->status() == REQ_MIGRATE) {
-            (*i).thread->reset_current_instruction();
-            (*i).status = LANE_MIG;
         }
     }
 }

@@ -37,9 +37,9 @@ typedef enum {
 } dramReqType_t;
 
 typedef enum {
-    DRAM_NEW = 0,
-    DRAM_WAIT, /* request fetched. being processed */
-    DRAM_DONE
+    DRAM_REQ_NEW = 0,
+    DRAM_REQ_WAIT, /* request fetched. being processed */
+    DRAM_REQ_DONE
 } dramReqStatus_t;
 
 class dramRequest {

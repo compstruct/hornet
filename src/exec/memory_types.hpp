@@ -45,6 +45,7 @@ ostream& operator<<(ostream& output, const maddr_t &right);
 
 typedef enum {
     REQ_NEW = 0,
+    REQ_RETRY,
     REQ_WAIT,
     REQ_DONE,
     REQ_MIGRATE

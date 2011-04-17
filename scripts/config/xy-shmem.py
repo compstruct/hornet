@@ -198,10 +198,9 @@ bandwidth in words per dram controller = 4''')
 
 [memory::private-shared MSI]
 words per cache line = 4
-maximum local cache requests in flight = 4
-maximum remote cache requests in flight = 2
-maximum local directory requests in flight = 2
-maximum remote directory requests in flight = 4
+memory access ports for local core = 2
+L1 work table size = 4
+L2 work table size = 4
 total lines in L1 = 32
 associativity in L1 = 2 
 hit test latency in L1 = 2

@@ -4,21 +4,21 @@
 #include "dramController.hpp"
 
 dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count) :
-    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_status(DRAM_NEW), 
+    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_status(DRAM_REQ_NEW), 
     m_data(shared_array<uint32_t>()), m_indirect_data(shared_ptr<void>()) 
 {
     assert(m_request_type == DRAM_REQ_READ || m_request_type == DRAM_REQ_READ_INDIRECT);
 }
 
 dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_array<uint32_t> wdata) :
-    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_status(DRAM_NEW), 
+    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_status(DRAM_REQ_NEW), 
     m_data(wdata), m_indirect_data(shared_ptr<void>()) 
 {
     assert(m_request_type == DRAM_REQ_WRITE);
 }
 
 dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_ptr<void> wdata) :
-    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_status(DRAM_NEW), 
+    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_status(DRAM_REQ_NEW), 
     m_data(shared_array<uint32_t>()), m_indirect_data(wdata) 
 {
     assert(m_request_type == DRAM_REQ_WRITE_INDIRECT);
@@ -47,12 +47,12 @@ dramController::~dramController() {}
 
 void dramController::request(shared_ptr<dramRequest> req) {
     assert(available());
-    req->m_status = DRAM_WAIT;
+    req->m_status = DRAM_REQ_WAIT;
     shared_ptr<entry_t> new_entry = shared_ptr<entry_t>(new entry_t);
     new_entry->status = ENTRY_PORT;
     new_entry->request = req;
     --m_number_of_free_ports;
-    req->m_status = DRAM_WAIT;
+    req->m_status = DRAM_REQ_WAIT;
     new_entry->remaining_words_to_transfer = req->m_word_count + 2 * m_msg_header_size_in_words;
     if (m_total_latency > 0) {
         new_entry->status = ENTRY_LATENCY;
@@ -83,7 +83,7 @@ void dramController::tick_positive_edge() {
         } else {
             dram_access(m_entry_queue.front()->request);
         }
-        m_entry_queue.front()->request->m_status = DRAM_DONE;
+        m_entry_queue.front()->request->m_status = DRAM_REQ_DONE;
         m_entry_queue.erase(m_entry_queue.begin());
         ++m_number_of_free_ports;
     }

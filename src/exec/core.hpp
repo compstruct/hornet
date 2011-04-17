@@ -53,7 +53,7 @@ protected:
     /* implement core logic */
     virtual void execute() = 0;
     /* check and update finished memory requests */
-    virtual void commit_memory_requests() = 0;
+    virtual void update_from_memory_requests() = 0;
 
     /* use these queues to use the network */
     shared_ptr<messageQueue> receive_queue(uint32_t type);

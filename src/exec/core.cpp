@@ -79,10 +79,12 @@ void core::tick_positive_edge() throw(err) {
             stats->offer_packet(flow_id, pid, msg->flit_count);
             /* save in xmit buffer until the transfer finished */
             m_xmit_buffer[xid] = flits;
-            LOG(log, 4) << "[core " << get_id().get_numeric_id() << " @ " << system_time
+            LOG(log,4) << "[core " << get_id().get_numeric_id() << " @ " << system_time
                 << " ] has sent a message type " << (uint32_t) type << " to " << msg->dst << endl;
             m_out_msg_queues[type]->pop();
         } else {
+            LOG(log,4) << "[core " << get_id().get_numeric_id() << " @ " << system_time
+                << " ] couldn't send a message type " << (uint32_t) type << " to " << msg->dst << endl;
             /* retry later */
             delete[] flits;
         }
@@ -137,7 +139,7 @@ void core::tick_positive_edge() throw(err) {
 void core::tick_negative_edge() throw(err) {
 
     /* update requests */
-    commit_memory_requests();
+    update_from_memory_requests();
 
     if (m_memory != shared_ptr<memory>()) {
         m_memory->tick_negative_edge();

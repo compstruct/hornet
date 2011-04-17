@@ -33,6 +33,7 @@ typedef enum {
     /* do not perform coherence-hit check */
     CACHE_REQ_READ = 0,
     CACHE_REQ_WRITE,      
+    CACHE_REQ_UPDATE, /* do not set dirty bit */     
     CACHE_REQ_INVALIDATE,
     /* perfirm coherence-hit check */
     /* even if a line matches, it replies a cache miss if the helper says no */
@@ -55,7 +56,7 @@ typedef enum {
 class cacheRequest {
 public:
 
-    cacheRequest(maddr_t maddr, cacheReqType_t request_type, 
+    explicit cacheRequest(maddr_t maddr, cacheReqType_t request_type, 
                  uint32_t word_count = 0,
                  shared_array<uint32_t> data_to_write = shared_array<uint32_t>(), 
                  shared_ptr<void> coherence_info_to_write = shared_ptr<void>());

@@ -324,10 +324,9 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
             /* cache configurations */
             uint32_t words_per_cache_line = 0;
-            uint32_t max_local_cache_requests_in_flight = 0;
-            uint32_t max_remote_cache_requests_in_flight = 0;
-            uint32_t max_local_directory_requests_in_flight = 0;
-            uint32_t max_remote_directory_requests_in_flight = 0;
+            uint32_t num_local_core_ports = 0;
+            uint32_t l1_work_table_size = 0;
+            uint32_t l2_work_table_size = 0;
             uint32_t l1_total_lines = 0;
             uint32_t l1_associativity = 0;
             uint32_t l1_hit_test_latency = 0;
@@ -348,10 +347,9 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             case MEM_SHARED_SHARED_RA:
             case MEM_PRIVATE_PRIVATE_MOESI:
                 words_per_cache_line = read_word(img);
-                max_local_cache_requests_in_flight = read_word(img);
-                max_remote_cache_requests_in_flight = read_word(img);
-                max_local_directory_requests_in_flight = read_word(img);
-                max_remote_directory_requests_in_flight = read_word(img);
+                num_local_core_ports = read_word(img);
+                l1_work_table_size = read_word(img);
+                l2_work_table_size = read_word(img);
                 l1_total_lines = read_word(img);
                 l1_associativity = read_word(img);
                 l1_hit_test_latency = read_word(img);
@@ -382,8 +380,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     }
                     privateSharedMSI::privateSharedMSICfg_t cfg = { num_nodes, 
                         bytes_per_flit, words_per_cache_line,
-                        max_local_cache_requests_in_flight, max_remote_cache_requests_in_flight,
-                        max_local_directory_requests_in_flight, max_remote_directory_requests_in_flight,
+                        num_local_core_ports, l1_work_table_size, l2_work_table_size,
                         l1_total_lines, l1_associativity, l1_hit_test_latency, l1_read_ports, 
                         l1_write_ports, l1_policy,
                         l2_total_lines, l2_associativity, l2_hit_test_latency, l2_read_ports, 

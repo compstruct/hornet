@@ -23,7 +23,7 @@ public:
     virtual ~memtraceCore() throw();
 
     virtual void execute();
-    virtual void commit_memory_requests();
+    virtual void update_from_memory_requests();
 
     virtual uint64_t next_pkt_time() throw(err);
     virtual bool is_drained() const throw();

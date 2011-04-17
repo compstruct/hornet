@@ -54,7 +54,6 @@ public:
            shared_ptr<random_gen> ran);
     virtual ~memory();
 
-    virtual bool available() = 0;
     virtual void request(shared_ptr<memoryRequest> req) = 0;
     virtual void tick_positive_edge() = 0;
     virtual void tick_negative_edge() = 0;

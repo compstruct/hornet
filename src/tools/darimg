@@ -466,20 +466,16 @@ def get_memory_cfgs(cfg, core):
             ret.append(int(cfg.get(section, 'words per cache line')))
         else:
             ret.append(4)
-        if cfg.has_option(section, 'maximum local cache requests in flight'):
-            ret.append(int(cfg.get(section, 'maximum local cache requests in flight')))
+        if cfg.has_option(section, 'memory access ports for local core'):
+            ret.append(int(cfg.get(section, 'memory access ports for local core')))
+        else:
+            ret.append(2)
+        if cfg.has_option(section, 'L1 work table size'):
+            ret.append(int(cfg.get(section, 'L1 work table size')))
         else:
             ret.append(4)
-        if cfg.has_option(section, 'maximum remote cache requests in flight'):
-            ret.append(int(cfg.get(section, 'maximum remote cache requests in flight')))
-        else:
-            ret.append(4)
-        if cfg.has_option(section, 'maximum local directory requests in flight'):
-            ret.append(int(cfg.get(section, 'maximum local directory requests in flight')))
-        else:
-            ret.append(4)
-        if cfg.has_option(section, 'maximum remote directory requests in flight'):
-            ret.append(int(cfg.get(section, 'maximum remote directory requests in flight')))
+        if cfg.has_option(section, 'L2 work table size'):
+            ret.append(int(cfg.get(section, 'L2 work table size')))
         else:
             ret.append(4)
         for cache_name in ['L1', 'L2']:

@@ -16,10 +16,9 @@ public:
         uint32_t num_nodes;
         uint32_t bytes_per_flit;
         uint32_t words_per_cache_line;
-        uint32_t max_local_cache_requests_in_flight;
-        uint32_t max_remote_cache_requests_in_flight;
-        uint32_t max_local_directory_requests_in_flight;
-        uint32_t max_remote_directory_requests_in_flight;
+        uint32_t num_local_core_ports;
+        uint32_t l1_work_table_size;
+        uint32_t l2_work_table_size;
         /* L1 */
         uint32_t lines_in_l1;
         uint32_t l1_associativity;
@@ -47,7 +46,6 @@ public:
 
     virtual uint32_t number_of_mem_msg_types();
 
-    virtual bool available();
     virtual void request(shared_ptr<memoryRequest> req);
     virtual void tick_positive_edge();
     virtual void tick_negative_edge();
@@ -81,8 +79,7 @@ public:
     typedef enum {
         READERS = 0,
         WRITER,
-        WAITING_FOR_REPLIES,
-        WAITING_FOR_DRAM
+        WAITING_FOR_REPLIES
     } directoryCoherenceStatus_t;
 
     typedef struct {
@@ -106,19 +103,29 @@ public:
 
     typedef struct {
         uint32_t sender;
+        uint32_t receiver;
         coherenceMsgType_t type;
         maddr_t maddr;
         shared_array<uint32_t> data;
+        /* this dirty flag conveniently lets the issuer of this message know whether it has to send it again */
+        bool did_win_last_arbitration;
     } coherenceMsg;
+
+    typedef struct {
+        uint32_t sender;
+        uint32_t receiver;
+        shared_ptr<dramRequest> req;
+        bool did_win_last_arbitration;
+    } dramMsg;
 
 private:
     typedef enum {
-        _TO_L1_WAIT_L1 = 0,
-        _TO_L1_WAIT_CAT,
-        _TO_L1_SEND_REQ,
-        _TO_L1_SEND_REP,
-        _TO_L1_WAIT_REP,
-        _TO_L1_FEED_L1
+        _L1_WORK_WAIT_L1 = 0,
+        _L1_WORK_WAIT_CAT,
+        _L1_WORK_SEND_REQ,
+        _L1_WORK_SEND_REP,
+        _L1_WORK_WAIT_REP,
+        _L1_WORK_FEED_L1
     } toL1Status;
 
     typedef struct {
@@ -131,18 +138,22 @@ private:
         shared_ptr<coherenceMsg> cache_req;
         shared_ptr<coherenceMsg> cache_rep;
         uint64_t requested_time;
+
+        /* for performance */
+        shared_ptr<message_t> net_msg_to_send;
     } toL1Entry;
 
     typedef enum {
-        _TO_L2_READ_L2 = 0,
-        _TO_L2_WAIT_INFO,
-        _TO_L2_SEND_REQ,
-        _TO_L2_WAIT_REP,
-        _TO_L2_INV_L2,
-        _TO_L2_SEND_DRAM,
-        _TO_L2_WAIT_DRAM,
-        _TO_L2_FEED_L2,
-        _TO_L2_SEND_REP
+        _L2_WORK_READ_L2 = 0,
+        _L2_WORK_SEND_REP,
+        _L2_WORK_UPDATE_L2_AND_FINISH,
+        _L2_WORK_UPDATE_L2_AND_RESTART,
+        _L2_WORK_INVALID_L2_AND_RESTART,
+        _L2_WORK_SEND_DIR_REQ_WAIT_DIR_REP,
+        _L2_WORK_WAIT_CACHE_REP,
+        _L2_WORK_SEND_DRAM_FEED_REQ,
+        _L2_WORK_WAIT_DRAM_FEED,
+        _L2_WORK_SEND_DRAM_WRITEBACK
     } toL2Status;
 
     typedef struct {
@@ -150,24 +161,44 @@ private:
         shared_ptr<coherenceMsg> cache_req;
         shared_ptr<cacheRequest> l2_req;
         shared_ptr<coherenceMsg> cache_rep;
-        shared_ptr<dramRequest> dram_req;
+        vector<shared_ptr<coherenceMsg> > dir_reqs;;
+        shared_ptr<coherenceMsg> dir_rep;
+        shared_ptr<dramMsg> dram_req;
+        shared_ptr<dramMsg> dram_rep;
+
+        /* for performance */
+        shared_ptr<message_t> net_msg_to_send;
     } toL2Entry;
 
-    typedef vector<shared_ptr<toL1Entry> > toL1Queue;
-    typedef map<maddr_t, toL1Queue> toL1Table;
+    typedef struct {
+        shared_ptr<dramMsg> dram_req;
+        shared_ptr<dramMsg> dram_rep;
+        /* for performance */
+        shared_ptr<message_t> net_msg_to_send;
+    } toDRAMEntry;
 
-    typedef vector<shared_ptr<toL2Entry> > toL2Queue;
-    typedef map<maddr_t, toL2Queue> toL2Table;
+    typedef map<maddr_t, shared_ptr<toL1Entry> > toL1Table;
+    typedef map<maddr_t, shared_ptr<toL2Entry> > toL2Table;
+    typedef map<maddr_t, shared_ptr<toDRAMEntry> > toDRAMTable;
 
     inline maddr_t get_start_maddr_in_line(maddr_t maddr) { 
         maddr.address -= (maddr.address)%m_cfg.words_per_cache_line; return maddr; 
     }
 
+    /* logics */
+
     void schedule_requests();
 
-    void to_l1_table_update();
-    void to_l2_table_update();
+    void l1_work_table_update();
+
+    void l2_work_table_update();
+    void process_cache_rep(shared_ptr<cacheLine> line, shared_ptr<coherenceMsg> rep);
+
+    void dram_work_table_update();
+
     void accept_incoming_messages();
+
+    /* instance variables */
 
     privateSharedMSICfg_t m_cfg;
 
@@ -177,12 +208,22 @@ private:
 
     shared_ptr<privateSharedMSIStatsPerTile> m_stats;
 
-    toL1Table m_to_l1_table;
-    toL2Table m_to_l2_table;
+    toL1Table m_l1_work_table;
+    toL2Table m_l2_work_table;
+    toDRAMTable m_dram_work_table;
 
-    /* to-entry table request scheduler */
-    vector<shared_ptr<toL1Entry> > m_to_l1_req_schedule_q;
-    vector<shared_ptr<toL2Entry> > m_to_l2_req_schedule_q;
+    /* scheduler queues */
+    vector<shared_ptr<memoryRequest> > m_core_port_schedule_q; 
+    vector<tuple<bool/* is a memoryRequest type */, shared_ptr<void> > > m_to_cache_req_schedule_q; 
+
+    /* scheduler queues for requests in to l2 work table */
+    vector<shared_ptr<coherenceMsg> > m_to_directory_req_schedule_q;
+    vector<shared_ptr<coherenceMsg> > m_to_directory_rep_schedule_q;
+
+    vector<shared_ptr<dramMsg> > m_to_dram_req_schedule_q;
+
+    /* scheduler queues for sending messages to the network */
+    map<uint32_t/* per channel*/, vector<shared_ptr<message_t> > > m_to_network_schedule_q;
 
     /* to-memory request scheduler */
     vector<shared_ptr<catRequest> > m_cat_req_schedule_q;
@@ -192,12 +233,9 @@ private:
     vector<shared_ptr<cacheRequest> > m_l2_write_req_schedule_q;
     vector<shared_ptr<dramRequest> > m_dram_req_schedule_q;
 
-    vector<shared_ptr<coherenceMsg> > m_local_cache_reps_this_cycle;
-
-    uint32_t m_to_l1_table_local_quota;
-    uint32_t m_to_l1_table_remote_quota;
-    uint32_t m_to_l2_table_local_quota;
-    uint32_t m_to_l2_table_remote_quota;
+    uint32_t m_l1_work_table_vacancy;
+    uint32_t m_l2_work_table_vacancy;
+    uint32_t m_available_core_ports;
 };
 
 #endif
