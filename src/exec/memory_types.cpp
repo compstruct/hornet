@@ -4,7 +4,7 @@
 #include "memory_types.hpp"
 
 bool operator<(const maddr_t &left, const maddr_t &right) {
-    return left.space < right.space || (left.space == right.space && left.address < right.space);
+    return left.space < right.space || (left.space == right.space && left.address < right.address);
 }
 
 bool operator==(const maddr_t &left, const maddr_t &right) {

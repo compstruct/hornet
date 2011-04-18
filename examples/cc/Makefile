@@ -13,7 +13,7 @@ all: $(PROG)
 	$(DARSIM) $(PROG) --concurrency 1 --memory-traces $< --random-seed 7 > $@
 
 .PHONY: run
-run: $(PROG) test_serialize.out test_hit.out test_share_and_invalidate.out
+run: $(PROG) test_serialize.out test_hit.out test_share_and_invalidate.out test_inv_cache.out
 
 .PHONY: clean
 clean:

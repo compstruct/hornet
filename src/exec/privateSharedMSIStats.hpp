@@ -17,7 +17,7 @@ public:
     void did_write_l2(bool hit);
 
     /* only for read sharer invalidation */
-    void did_invalidate_sharers(uint32_t num_sharers, uint64_t latency);
+    void did_invalidate_caches(uint32_t num_caches, uint64_t latency);
     void did_read_cat(bool hit);
 
     friend class privateSharedMSIStats;
@@ -29,7 +29,7 @@ private:
     running_stats m_l2_read_hits;
     running_stats m_l2_write_hits;
 
-    running_stats m_invalidated_sharers;
+    running_stats m_invalidated_caches;
     running_stats m_invalidate_penalties;
 
     running_stats m_directory_hits;

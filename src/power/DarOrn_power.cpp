@@ -16,6 +16,11 @@ void Dar_router_init(SIM_router_info_t *info,
         u_int line_width;
         int outdrv;
    
+        /* whatever these means, they are not initialized and cause memory errors. temporarily disable - brandon */
+        info->cache_in_buf = 0;
+        info->mc_in_buf = 0;
+        info->io_in_buf = 0;
+
         /* PHASE1 : set parameters */
         /* general parameters */
         info->n_in_p = system_parameter.input_ports;

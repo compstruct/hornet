@@ -83,7 +83,6 @@ public:
     } directoryCoherenceStatus_t;
 
     typedef struct {
-        bool hold;
         directoryCoherenceStatus_t status;
         set<uint32_t> directory;
     } directoryCoherenceInfo;
@@ -120,11 +119,13 @@ public:
 
 private:
     typedef enum {
-        _L1_WORK_WAIT_L1 = 0,
-        _L1_WORK_WAIT_CAT,
+        _L1_WORK_READ_L1 = 0,
+        _L1_WORK_READ_CAT,
         _L1_WORK_SEND_REQ,
-        _L1_WORK_SEND_REP,
         _L1_WORK_WAIT_REP,
+        _L1_WORK_UPDATE_L1,
+        _L1_WORK_INVALIDATE_AND_RESTART,
+        _L1_WORK_SEND_REP,
         _L1_WORK_FEED_L1
     } toL1Status;
 
@@ -137,6 +138,8 @@ private:
         shared_ptr<coherenceMsg> dir_rep;
         shared_ptr<coherenceMsg> cache_req;
         shared_ptr<coherenceMsg> cache_rep;
+
+        /* for stats */
         uint64_t requested_time;
 
         /* for performance */
@@ -153,7 +156,7 @@ private:
         _L2_WORK_WAIT_CACHE_REP,
         _L2_WORK_SEND_DRAM_FEED_REQ,
         _L2_WORK_WAIT_DRAM_FEED,
-        _L2_WORK_SEND_DRAM_WRITEBACK
+        _L2_WORK_DRAM_WRITEBACK
     } toL2Status;
 
     typedef struct {
@@ -165,6 +168,13 @@ private:
         shared_ptr<coherenceMsg> dir_rep;
         shared_ptr<dramMsg> dram_req;
         shared_ptr<dramMsg> dram_rep;
+
+        /* for stats */
+        uint64_t invalidate_begin_time;
+        uint32_t invalidate_num_targets;
+        bool is_first_served;
+        bool did_first_go_dram;
+        bool is_frst_read;
 
         /* for performance */
         shared_ptr<message_t> net_msg_to_send;
@@ -182,7 +192,7 @@ private:
     typedef map<maddr_t, shared_ptr<toDRAMEntry> > toDRAMTable;
 
     inline maddr_t get_start_maddr_in_line(maddr_t maddr) { 
-        maddr.address -= (maddr.address)%m_cfg.words_per_cache_line; return maddr; 
+        maddr.address -= (maddr.address)%(m_cfg.words_per_cache_line*4); return maddr; 
     }
 
     /* logics */

@@ -24,8 +24,8 @@ void privateSharedMSIStatsPerTile::did_write_l2(bool hit) {
     m_l2_write_hits.add(hit? 1:0, 1);
 }
 
-void privateSharedMSIStatsPerTile::did_invalidate_sharers(uint32_t num_sharers, uint64_t latency) {
-    m_invalidated_sharers.add(num_sharers, 1);
+void privateSharedMSIStatsPerTile::did_invalidate_caches(uint32_t num_caches, uint64_t latency) {
+    m_invalidated_caches.add(num_caches, 1);
     m_invalidate_penalties.add(latency, 1);
 } 
 
@@ -64,7 +64,7 @@ void privateSharedMSIStats::print_stats(ostream &out) {
     double total_l2_read_hits = 0.0;
     double total_l2_write_hits = 0.0;
     double total_l2_hits = 0.0;
-    double total_inv_sharers = 0.0;
+    double total_inv_caches = 0.0;
     double total_inv_penalty = 0.0;
     double total_cat_hits = 0.0;
 
@@ -111,22 +111,22 @@ void privateSharedMSIStats::print_stats(ostream &out) {
         total_cat_lookups += cat_lookups;
         total_cat_hits += cat_hits;
 
-        uint64_t invs = st->m_invalidated_sharers.sample_count();
-        double avg_inv_sharers = st->m_invalidated_sharers.get_mean();
-        double inv_sharers = avg_inv_sharers * invs;
+        uint64_t invs = st->m_invalidated_caches.sample_count();
+        double avg_inv_caches = st->m_invalidated_caches.get_mean();
+        double inv_caches = avg_inv_caches * invs;
         double avg_inv_penalty = st->m_invalidate_penalties.get_mean();
         double inv_penalty = avg_inv_penalty * invs;
         total_invs += invs;
-        total_inv_sharers += inv_sharers;
+        total_inv_caches += inv_caches;
         total_inv_penalty += inv_penalty;
 
         char str[1024];
         sprintf(str, "[Private-shared-MSI %4d ] L1hit%%: %.2f read%%: %.2f write%%: %.2f "
                      "L2hit%%: %.2f read%%: %.2f write%%: %.2f "
-                     "avg-inv%%: %.2f avg-inv-sharers: %.2f avg-inv-penalty: %.2f",
+                     "avg-inv%%: %.2f avg-inv-caches: %.2f avg-inv-penalty: %.2f",
                      id, 100.0*l1_rate, 100.0*l1_read_rate, 100.0*l1_write_rate, 
                      100.0*l2_rate, 100.0*l2_read_rate, 100.0*l2_write_rate, 
-                     invs*100.0/l2_writes, inv_sharers/l2_writes, inv_penalty/l2_writes);
+                     invs*100.0/l2_writes, inv_caches/l2_writes, inv_penalty/l2_writes);
 
         out << str << endl;
 
@@ -137,7 +137,7 @@ void privateSharedMSIStats::print_stats(ostream &out) {
     char str[1024];
     sprintf(str, "[Summary: Private-shared-MSI ] L1hit%%: %.2f read%%: %.2f write%%: %.2f "
             "L2hit%%: %.2f read%%: %.2f write%%: %.2f "
-            "avg-inv%%: %.2f avg-inv-sharers: %.2f avg-inv-penalty: %.2f",
+            "avg-inv%%: %.2f avg-inv-caches: %.2f avg-inv-penalty: %.2f",
             100.0*total_l1_hits/total_l1,
             100.0*total_l1_read_hits/total_l1_reads,
             100.0*total_l1_write_hits/total_l1_writes,
@@ -145,7 +145,7 @@ void privateSharedMSIStats::print_stats(ostream &out) {
             100.0*total_l2_read_hits/total_l2_reads,
             100.0*total_l2_write_hits/total_l2_writes,
             total_invs*100.0/total_l2_writes,
-            total_inv_sharers/total_l2_writes, 
+            total_inv_caches/total_l2_writes, 
             total_inv_penalty/total_l2_writes);
 
     out << str << endl;

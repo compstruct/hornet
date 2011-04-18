@@ -1,0 +1,15 @@
+Thread 8  000113 R deadbeef 0 12
+Thread 8  000213 R deadbeef 0 12
+Thread 8  000313 W deadbeef 0 12
+Thread 0  000113 R deadbeef 0 12
+Thread 0  000213 W deadbeef 0 12
+Thread 0  000313 R deadbeef 0 12
+Thread 1  000113 W deadbeef 0 12
+Thread 1  000213 R deadbeef 0 12
+Thread 1  000313 R deadbeef 0 12
+Thread 3  000113 W deadbeef 0 12
+Thread 3  000213 R deadbeef 0 12
+Thread 3  000313 W deadbeef 0 12
+Thread 7  000113 W deadbeef 0 12
+Thread 7  000213 W deadbeef 0 12
+Thread 7  000313 W deadbeef 0 12

@@ -5,12 +5,15 @@
 
 #define DEBUG
 
+#define DEBUG
+#undef DEBUG
+
 #ifdef DEBUG
-#define mh_log cerr
+#define mh_log(X) cerr
 #define mh_assert(X) assert(X)
 #else
-#define mh_log LOG(log,4)
-#define mh_assert(X) 
+#define mh_assert(X)
+#define mh_log(X) LOG(log,X)
 #endif
 
 cacheRequest::cacheRequest(maddr_t maddr, cacheReqType_t request_type, uint32_t word_count,
@@ -18,7 +21,8 @@ cacheRequest::cacheRequest(maddr_t maddr, cacheReqType_t request_type, uint32_t 
     m_request_type(request_type), m_maddr(maddr), m_word_count(word_count),
     m_status(CACHE_REQ_NEW), m_line_copy(shared_ptr<cacheLine>()), 
     m_victim_line_copy(shared_ptr<cacheLine>()),
-    m_coherence_info_to_write(coherence_info_to_write), m_data_to_write(data_to_write) 
+    m_coherence_info_to_write(coherence_info_to_write), m_data_to_write(data_to_write),
+    m_do_clean_write(false), m_do_hold_line(false), m_owner_id(maddr), m_do_reserve_on_miss(true)
 {}
 
 cacheRequest::~cacheRequest() {}
@@ -29,7 +33,7 @@ cache::cache(uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, log
     m_id(id), system_time(t), stats(st), log(l), ran(r), m_words_per_line(words_per_line), m_total_lines(total_lines),
     m_associativity(associativity), m_replacement_policy(replacement_policy), m_hit_test_latency(hit_test_latency),
     m_available_read_ports(num_read_ports), m_available_write_ports(num_write_ports),
-    m_helper_copy_coherence_info(NULL), m_helper_will_return_line(NULL), m_helper_is_hit(NULL), m_helper_reserve_empty_line(NULL),
+    m_helper_copy_coherence_info(NULL), m_helper_is_hit(NULL), m_helper_reserve_line(NULL),
     m_helper_can_evict_line(NULL)
 { 
     mh_assert(m_associativity > 0);
@@ -41,12 +45,16 @@ cache::cache(uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, log
         mh_assert(i%2 == 0); /*  must be a power of 2 */
         ++log2;
     }
-    m_offset_mask = m_words_per_line - 1;
+    m_offset_mask = m_words_per_line * 4 - 1;
     m_index_pos = log2;
     m_index_mask = (m_total_lines / m_associativity - 1) << m_index_pos;
 }
 
-cache::~cache() {}
+cache::~cache() {
+    for (cacheTable::iterator it = m_cache.begin(); it != m_cache.end(); ++it) {
+        delete[] m_cache[it->first];
+    }
+}
 
 shared_ptr<cacheLine> cache::copy_cache_line(const cacheLine &line) {
     shared_ptr<cacheLine> copy(new cacheLine);
@@ -74,20 +82,12 @@ void cache::request(shared_ptr<cacheRequest> req) {
     reqEntry new_entry;
     new_entry.request = req;
 
-    switch (req->m_request_type) {
-    case CACHE_REQ_READ:
-    case CACHE_REQ_COHERENCE_READ:
-    case CACHE_REQ_INVALIDATE:
-    case CACHE_REQ_COHERENCE_INVALIDATE:
+    if (req->use_read_ports()) {
         mh_assert(read_port_available());
         --m_available_read_ports;
-        break;
-    case CACHE_REQ_WRITE:
-    case CACHE_REQ_UPDATE:
-    case CACHE_REQ_COHERENCE_WRITE:
+    } else {
         mh_assert(write_port_available());
         --m_available_write_ports;
-        break;
     }
     if (m_hit_test_latency > 0) {
         new_entry.status = ENTRY_HIT_TEST;
@@ -96,7 +96,9 @@ void cache::request(shared_ptr<cacheRequest> req) {
         new_entry.status = ENTRY_DONE;
     }
 
+    req->m_status = CACHE_REQ_WAIT;
     maddr_t start_maddr = get_start_maddr_in_line(req->m_maddr);
+    req->m_owner_id = start_maddr;
     m_req_table[start_maddr].push_back(new_entry);
 
     return;
@@ -115,10 +117,13 @@ void cache::tick_positive_edge() {
                 m_cache[idx] = new cacheLine[m_associativity];
                 for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
                     m_cache[idx][it_way].empty = true;
+                    m_cache[idx][it_way].valid = false;
+                    m_cache[idx][it_way].hold = false;
                     m_cache[idx][it_way].data = shared_array<uint32_t>(new uint32_t[m_words_per_line]);
                     m_cache[idx][it_way].coherence_info = shared_ptr<void>();
                 }
             }
+            bool matched = false;
             vector<uint32_t> evictables;
             vector<uint32_t> empties;
             uint64_t lru_time = UINT64_MAX;
@@ -126,47 +131,50 @@ void cache::tick_positive_edge() {
             for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
                 cacheLine &line = m_cache[idx][it_way];
                 if (!line.empty && start_maddr == line.start_maddr) {
-                    bool coherence_hit = 
-                        /* either it's not a coherence access */
-                        req->m_request_type == CACHE_REQ_READ ||
-                        req->m_request_type == CACHE_REQ_WRITE ||
-                        req->m_request_type == CACHE_REQ_UPDATE ||
-                        req->m_request_type == CACHE_REQ_INVALIDATE ||
-                        /* or it doesn't have a helper */
-                        !m_helper_is_hit ||
-                        /* or the cache line doesn't have a coherence info */
-                        !line.coherence_info ||
-                        /* or the helper says it's a hit */
-                        (*m_helper_is_hit)(req,line);
-
-                    line.last_access_time = system_time;
-                    if (m_helper_will_return_line) {
-                        (*m_helper_will_return_line)(line);
+                    matched = true;
+                    if (line.hold && !(line.owner_id == req->m_owner_id)) {
+                        /* hold by another line */
+                        mh_log(4) << "[cache " << m_id << " @ " << system_time << " ] a miss by holding for address "
+                                  << start_maddr << "(owner : " << line.owner_id << ", req: " << req->m_owner_id << ")" << endl;
+                        req->m_status = CACHE_REQ_MISS;
+                        break;
                     }
-
-                    if (coherence_hit) {
+                    bool hit = req->m_request_type == CACHE_REQ_UPDATE ||
+                               (line.valid && (!m_helper_is_hit || 
+                                               !line.coherence_info || 
+                                               (*m_helper_is_hit)(req, line)));
+                    if (hit) {
+                        /* coherence hit */
                         req->m_status = CACHE_REQ_HIT;
+                        if (req->m_do_hold_line) {
+                            line.hold = true;
+                            line.owner_id = req->m_owner_id;
+                        } else {
+                            line.hold = false;
+                        }
                         switch (req->m_request_type) {
-                        case CACHE_REQ_WRITE:
                         case CACHE_REQ_UPDATE:
-                        case CACHE_REQ_COHERENCE_WRITE:
+                            line.valid = true;
+                        case CACHE_REQ_WRITE:
                             {
                                 mh_assert(req->m_data_to_write);
-                                uint32_t offset = get_offset(req->m_maddr);
+                                
+                                uint32_t offset = get_offset(req->m_maddr) / 4;
                                 for (uint32_t i = 0; i < req->m_word_count; ++i) {
                                     line.data[offset + i] = req->m_data_to_write[i];
                                 }
                                 if (req->m_coherence_info_to_write) {
                                     line.coherence_info = req->m_coherence_info_to_write;
                                 }
-                                if (req->m_request_type != CACHE_REQ_UPDATE) {
+                                if (!req->m_do_clean_write) {
                                     line.dirty = true;
+                                } else {
+                                    line.dirty = false;
                                 }
                                 ++m_available_write_ports;
                                 break;
                             }
                         case CACHE_REQ_INVALIDATE:
-                        case CACHE_REQ_COHERENCE_INVALIDATE:
                             {
                                 maddr_t not_used = { 0, 0 };
                                 m_lines_to_invalidate.insert(make_tuple(idx, it_way, false, not_used));
@@ -174,48 +182,65 @@ void cache::tick_positive_edge() {
                                 break;
                             }
                         case CACHE_REQ_READ:
-                        case CACHE_REQ_COHERENCE_READ:
                             ++m_available_read_ports;
-                            /* nothing to do with read - we are returning the whole line */
                             break;
                         }
+                        line.last_access_time = system_time;
+                        req->m_line_copy = copy_cache_line(line);
+                        break;
                     } else {
+                        mh_log(4) << "[cache " << m_id << " @ " << system_time << " ] a miss by coherence for address "
+                            << start_maddr << endl;
+                        if (req->m_do_hold_line) {
+                            line.hold = true;
+                            line.owner_id = req->m_owner_id;
+                        }
                         req->m_status = CACHE_REQ_MISS;
+                        line.last_access_time = system_time;
+                        req->m_line_copy = copy_cache_line(line);
+                        if (req->use_read_ports()) {
+                            ++m_available_read_ports;
+                        } else {
+                            ++m_available_write_ports;
+                        }
+                        break;
                     }
-
-                    req->m_line_copy = copy_cache_line(line);
-
-                    break;
-
-                } else if (line.empty) {
-                    empties.push_back(it_way);
-                } else {
-                    evictables.push_back(it_way);
-                    if (line.last_access_time < lru_time) {
-                        lru_time = line.last_access_time;
-                        lru_way = it_way;
+                    /* doesn't reach here */
+                } else if (!line.hold || line.owner_id == req->m_owner_id) {
+                    if (line.empty) {
+                        empties.push_back(it_way);
+                    } else {
+                        evictables.push_back(it_way);
+                        if (line.last_access_time < lru_time) {
+                            lru_time = line.last_access_time;
+                            lru_way = it_way;
+                        }
                     }
                 }
             }
-            if (!req->m_line_copy) {
+            if (!matched) {
                 /* no entry */
-                if (req->m_request_type == CACHE_REQ_INVALIDATE || req->m_request_type == CACHE_REQ_COHERENCE_INVALIDATE) {
-                    req->m_status = CACHE_REQ_HIT;
+                mh_log(4) << "[cache " << m_id << " @ " << system_time << " ] a miss by mismatch for address "
+                          << start_maddr << endl;
+                if (req->m_request_type == CACHE_REQ_INVALIDATE) {
+                    req->m_status = CACHE_REQ_MISS;
+                } else if (!req->m_do_reserve_on_miss) {
+                    req->m_status = CACHE_REQ_MISS;
                 } else if (!empties.empty()) {
                     req->m_status = CACHE_REQ_MISS;
-                    if (m_helper_reserve_empty_line) {
-                        cacheLine &line = m_cache[idx][*empties.begin()];
-                        line.start_maddr = start_maddr;
-                        /* Here's a somewhat non-combinational fifo arbitration, but it's okay becaues requests would be */
-                        /* randomly serialized... */
-                        line.empty = false;
-                        line.dirty = false;
-                        (*m_helper_reserve_empty_line)(line);
-                        if (m_helper_will_return_line) {
-                            (*m_helper_will_return_line)(line);
-                        }
+                    /* reserve line */
+                    cacheLine &line = m_cache[idx][*empties.begin()];
+                    line.start_maddr = start_maddr;
+                    line.dirty = false;
+                    if (m_helper_reserve_line) {
+                        (*m_helper_reserve_line)(line);
                     }
-                } else {
+                    line.empty = false;
+                    line.valid = false;
+                    line.hold = true;
+                    line.owner_id = req->m_owner_id;
+                    req->m_line_copy = copy_cache_line(line);
+                } else if (!evictables.empty()) {
                     req->m_status = CACHE_REQ_MISS;
                     uint32_t victim_way = 0;
                     switch (m_replacement_policy) {
@@ -227,31 +252,26 @@ void cache::tick_positive_edge() {
                         break;
                     }
                     cacheLine &line = m_cache[idx][victim_way];
-
-                    if (!m_helper_can_evict_line || !line.coherence_info || !(*m_helper_can_evict_line)(line)) {
+                    if (m_helper_can_evict_line && (*m_helper_can_evict_line)(line)) {
+                        line.empty = false;
+                        line.valid = false;
+                        line.hold = true;
+                        line.owner_id = req->m_owner_id;
+                        req->m_victim_line_copy = copy_cache_line(line);
+                        req->m_line_copy = copy_cache_line(line);
                         m_lines_to_invalidate.insert(make_tuple(idx, victim_way, true, start_maddr));
+                    } else {
+                        req->m_victim_line_copy = copy_cache_line(line);
                     }
-                    if (m_helper_will_return_line) {
-                        (*m_helper_will_return_line)(m_cache[idx][victim_way]);
-                    }
-                    req->m_victim_line_copy = copy_cache_line(m_cache[idx][victim_way]);
-                }       
-                switch (req->m_request_type) {
-                case CACHE_REQ_WRITE:
-                case CACHE_REQ_COHERENCE_WRITE:
-                case CACHE_REQ_UPDATE:
-                    ++m_available_write_ports;
-                    break;
-                case CACHE_REQ_INVALIDATE:
-                case CACHE_REQ_COHERENCE_INVALIDATE:
-                    ++m_available_read_ports;
-                    break;
-                case CACHE_REQ_READ:
-                case CACHE_REQ_COHERENCE_READ:
-                    ++m_available_read_ports;
-                    break;
+                } else {
+                    req->m_status = CACHE_REQ_MISS;
                 }
 
+                if (req->use_read_ports()) {
+                    ++m_available_read_ports;
+                } else {
+                    ++m_available_write_ports;
+                }
             }
             q.erase(q.begin());
             if (q.size() == 0) {
@@ -275,13 +295,18 @@ void cache::tick_negative_edge() {
             /* reserving case */
             cacheLine &line = m_cache[it->get<0>()][it->get<1>()];
             line.start_maddr = it->get<3>();
-            if (!m_helper_reserve_empty_line) {
-                (*m_helper_reserve_empty_line)(line);
+            if (m_helper_reserve_line) {
+                (*m_helper_reserve_line)(line);
             }
+            line.empty = false;
+            line.valid = false;
+            line.hold = true;
+            line.owner_id = line.start_maddr;
         } else {
             /* invalidate only case */
             m_cache[it->get<0>()][it->get<1>()].empty = true;
-
+            m_cache[it->get<0>()][it->get<1>()].valid = false;
+            m_cache[it->get<0>()][it->get<1>()].hold = false;
         }
     }
     m_lines_to_invalidate.clear();

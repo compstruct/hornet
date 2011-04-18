@@ -22,6 +22,9 @@ typedef enum {
 
 typedef struct {
     bool empty;
+    bool valid;
+    bool hold;
+    maddr_t owner_id; /* owner lines' start address */
     bool dirty;
     maddr_t start_maddr;;
     shared_array<uint32_t> data;
@@ -30,19 +33,10 @@ typedef struct {
 } cacheLine;
 
 typedef enum {
-    /* do not perform coherence-hit check */
     CACHE_REQ_READ = 0,
     CACHE_REQ_WRITE,      
-    CACHE_REQ_UPDATE, /* do not set dirty bit */     
-    CACHE_REQ_INVALIDATE,
-    /* perfirm coherence-hit check */
-    /* even if a line matches, it replies a cache miss if the helper says no */
-    /* the line will still be returned in line_copy() */
-    CACHE_REQ_COHERENCE_READ,
-    CACHE_REQ_COHERENCE_WRITE,      
-    CACHE_REQ_COHERENCE_INVALIDATE
-
-    /* INVALIDATE also returns a copy of the invalidated line. The memory is responsible to write back if the line is dirty */
+    CACHE_REQ_UPDATE, 
+    CACHE_REQ_INVALIDATE
 
 } cacheReqType_t;
 
@@ -71,11 +65,22 @@ public:
     inline cacheReqType_t request_type() { return m_request_type; }
     inline maddr_t maddr() { return m_maddr; }
 
-    inline void reset() { assert(m_status != CACHE_REQ_WAIT); m_status = CACHE_REQ_NEW; }
+    inline void reset() { assert(m_status != CACHE_REQ_WAIT); 
+                          m_status = CACHE_REQ_NEW; 
+                          m_line_copy = shared_ptr<cacheLine>();
+                          m_victim_line_copy = shared_ptr<cacheLine>(); }
+
+    inline void set_clean_write(bool enable = true) { m_do_clean_write = enable; }
+    inline void set_owner_id(maddr_t id) { m_owner_id = id; }
+    inline void set_hold_line(bool enable) { m_do_hold_line = enable; }
+    inline void set_reserve_on_miss(bool enable) { m_do_reserve_on_miss = enable; }
 
     friend class cache;
 
 private:
+    inline bool use_read_ports() { return m_request_type == CACHE_REQ_READ ||
+                                          m_request_type == CACHE_REQ_INVALIDATE; }
+
     cacheReqType_t m_request_type;
     maddr_t m_maddr;
     uint32_t m_word_count;
@@ -85,14 +90,19 @@ private:
     shared_ptr<cacheLine> m_victim_line_copy;
     shared_ptr<void> m_coherence_info_to_write;
     shared_array<uint32_t> m_data_to_write;
+
+    bool m_do_clean_write;
+    bool m_do_hold_line;
+    maddr_t m_owner_id;
+    bool m_do_reserve_on_miss;
+
 };
 
 class cache {
 public:
     typedef shared_ptr<void> (*helperCopyCoherenceInfo) (shared_ptr<void>);
-    typedef void (*helperWillReturnLine) (cacheLine&);
     typedef bool (*helperIsHit) (shared_ptr<cacheRequest>, cacheLine&);
-    typedef void (*helperReserveEmptyLine) (cacheLine&);
+    typedef void (*helperReserveLine) (cacheLine&);
     typedef bool (*helperCanEvictLine) (cacheLine&);
 
     cache(uint32_t numeric_id, const uint64_t &system_time, 
@@ -111,9 +121,8 @@ public:
     inline bool write_port_available() { return m_available_write_ports > 0; }
 
     inline void set_helper_copy_coherence_info (helperCopyCoherenceInfo fptr) { m_helper_copy_coherence_info = fptr; }
-    inline void set_helper_will_return_line (helperWillReturnLine fptr) { m_helper_will_return_line = fptr; }
     inline void set_helper_is_hit (helperIsHit fptr) { m_helper_is_hit = fptr; }
-    inline void set_helper_reserve_empty_line (helperReserveEmptyLine fptr) { m_helper_reserve_empty_line = fptr; }
+    inline void set_helper_reserve_line (helperReserveLine fptr) { m_helper_reserve_line = fptr; }
     inline void set_helper_can_evict_line (helperCanEvictLine fptr) { m_helper_can_evict_line = fptr; }
 
 private:
@@ -159,9 +168,8 @@ private:
     uint32_t m_available_write_ports;
 
     helperCopyCoherenceInfo m_helper_copy_coherence_info;
-    helperWillReturnLine m_helper_will_return_line;
     helperIsHit m_helper_is_hit;
-    helperReserveEmptyLine m_helper_reserve_empty_line;
+    helperReserveLine m_helper_reserve_line;
     helperCanEvictLine m_helper_can_evict_line;
 
     reqTable m_req_table;
