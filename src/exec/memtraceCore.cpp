@@ -152,7 +152,7 @@ void memtraceCore::execute() {
                     }
                     m_memory->request(cur.req);
                     cur.status = LANE_WAIT;
-                    cerr << "[thread " << cur.thread->get_id() << " @ " << system_time 
+                    LOG(log,4) << "[thread " << cur.thread->get_id() << " @ " << system_time 
                          << " ] is making a memory request on core " 
                          << get_id().get_numeric_id() << " for address " << cur.thread->maddr() << endl;
                 } else if (cur.thread->type() == memtraceThread::INST_OTHER) {
@@ -199,20 +199,19 @@ void memtraceCore::update_from_memory_requests() {
                         entry.thread->stats()->did_finish_write(system_time - entry.thread->memory_issued_time());
                     }
                 }
-                cerr << "[core " << get_id().get_numeric_id() << " @ " << system_time 
+                LOG(log,4) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
                     << " ] finished memory operation : "; 
                 if (entry.req->is_read())  {
-                    cerr << " read ";
+                    LOG(log,4) << " read ";
                 } else {
-                    cerr << " written ";
+                    LOG(log,4) << " written ";
                 }
                 for (uint32_t j = 0; j < entry.req->word_count(); ++j) {
-                    cerr << hex << entry.req->data()[j] << dec;
+                    LOG(log,4) << hex << entry.req->data()[j] << dec;
                 }
-                cerr <<  " on addr " << hex << entry.req->maddr().address << dec << endl; 
+                LOG(log,4) <<  " on addr " << hex << entry.req->maddr().address << dec << endl; 
                 entry.status = LANE_IDLE;
             } else if (i->req->status() == REQ_RETRY) {
-                cerr << "retrying" << endl;
                 /* the memory couldn't accept the last request */
                 m_memory->request(i->req); /* it's supposed to be in the positive tick of the next cycle, but doing here is equivalent */             
             } else if (support_em() && entry.req->status() == REQ_MIGRATE) {

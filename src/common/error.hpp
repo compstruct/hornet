@@ -416,6 +416,18 @@ private:
     virtual void show_to(ostream &out) const;
 };
 
+class err_bad_shmem_cfg : public err {
+public:
+    explicit err_bad_shmem_cfg(const string &message) throw();
+    explicit err_bad_shmem_cfg(const char *message) throw();
+    virtual ~err_bad_shmem_cfg() throw();
+private:
+    virtual void show_to(ostream &out) const;
+protected:
+    string msg;
+};
+
+
 ostream &operator<<(ostream &, const err &);
 
 #endif // __ERROR_HPP__

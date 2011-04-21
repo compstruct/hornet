@@ -21,10 +21,8 @@ typedef enum {
 } replacementPolicy_t;
 
 typedef struct {
-    bool empty;
-    bool valid;
-    bool hold;
-    maddr_t owner_id; /* owner lines' start address */
+    bool empty; /* if yes, no acitivity at all on this line. anyone can take this line */
+    bool valid; /* if both empty and valid is false, the line is reserved and waiting for data */
     bool dirty;
     maddr_t start_maddr;;
     shared_array<uint32_t> data;
@@ -35,7 +33,7 @@ typedef struct {
 typedef enum {
     CACHE_REQ_READ = 0,
     CACHE_REQ_WRITE,      
-    CACHE_REQ_UPDATE, 
+    CACHE_REQ_UPDATE, /* update and validate the cache line */ 
     CACHE_REQ_INVALIDATE
 
 } cacheReqType_t;
@@ -70,10 +68,9 @@ public:
                           m_line_copy = shared_ptr<cacheLine>();
                           m_victim_line_copy = shared_ptr<cacheLine>(); }
 
+    /* to support architecture-specific functionalities */
     inline void set_clean_write(bool enable = true) { m_do_clean_write = enable; }
-    inline void set_owner_id(maddr_t id) { m_owner_id = id; }
-    inline void set_hold_line(bool enable) { m_do_hold_line = enable; }
-    inline void set_reserve_on_miss(bool enable) { m_do_reserve_on_miss = enable; }
+    inline void set_reserve(bool enable) { m_do_reserve= enable; }
 
     friend class cache;
 
@@ -92,9 +89,7 @@ private:
     shared_array<uint32_t> m_data_to_write;
 
     bool m_do_clean_write;
-    bool m_do_hold_line;
-    maddr_t m_owner_id;
-    bool m_do_reserve_on_miss;
+    bool m_do_reserve;
 
 };
 
@@ -137,6 +132,7 @@ private:
         reqEntryStatus_t status;
         shared_ptr<cacheRequest> request;
         uint32_t remaining_hit_test_cycles;
+        bool need_to_evict_and_reserve;
     } reqEntry;
 
     typedef vector<reqEntry> reqQueue;
@@ -175,7 +171,8 @@ private:
     reqTable m_req_table;
     cacheTable m_cache;
 
-    set<tuple<uint32_t, uint32_t, bool, maddr_t> > m_lines_to_invalidate;
+    set<tuple<uint32_t/*idx*/, uint32_t/*ways*/> > m_lines_to_evict; /* and leave it empty */
+    set<tuple<uint32_t/*idx*/, uint32_t/*way*/, maddr_t> > m_lines_to_evict_and_reserve; /* evict and reserve it for another line */
 
 };
 

@@ -13,12 +13,14 @@
 class privateSharedMSI : public memory {
 public:
     typedef struct {
+        bool     use_mesi;
         uint32_t num_nodes;
         uint32_t bytes_per_flit;
         uint32_t words_per_cache_line;
         uint32_t num_local_core_ports;
         uint32_t l1_work_table_size;
-        uint32_t l2_work_table_size;
+        uint32_t l2_work_table_size_regular;
+        uint32_t l2_work_table_size_reserved;
         /* L1 */
         uint32_t lines_in_l1;
         uint32_t l1_associativity;
@@ -91,6 +93,7 @@ public:
         SH_REQ = 0,
         EX_REQ,
         INV_REQ,
+        EMPTY_REQ, /* intra-directory request */
         WB_REQ,
         FLUSH_REQ,
         SH_REP,
@@ -106,8 +109,11 @@ public:
         coherenceMsgType_t type;
         maddr_t maddr;
         shared_array<uint32_t> data;
-        /* this dirty flag conveniently lets the issuer of this message know whether it has to send it again */
+        /* this messy flag conveniently lets the issuer of this message know whether it has to send it again */
         bool did_win_last_arbitration;
+
+        /* debug purpose - erase later */
+        uint64_t waited;
     } coherenceMsg;
 
     typedef struct {
@@ -120,13 +126,12 @@ public:
 private:
     typedef enum {
         _L1_WORK_READ_L1 = 0,
+        _L1_WORK_SEND_CACHE_REP,
         _L1_WORK_READ_CAT,
-        _L1_WORK_SEND_REQ,
-        _L1_WORK_WAIT_REP,
-        _L1_WORK_UPDATE_L1,
-        _L1_WORK_INVALIDATE_AND_RESTART,
-        _L1_WORK_SEND_REP,
-        _L1_WORK_FEED_L1
+        _L1_WORK_SEND_CACHE_REQ,
+        _L1_WORK_WAIT_DIRECTORY_REP,
+        _L1_WORK_FEED_L1_AND_FINISH,
+        _L1_WORK_INVALIDATE_SHARED_LINE
     } toL1Status;
 
     typedef struct {
@@ -144,23 +149,26 @@ private:
 
         /* for performance */
         shared_ptr<message_t> net_msg_to_send;
+
     } toL1Entry;
 
     typedef enum {
         _L2_WORK_READ_L2 = 0,
-        _L2_WORK_SEND_REP,
         _L2_WORK_UPDATE_L2_AND_FINISH,
-        _L2_WORK_UPDATE_L2_AND_RESTART,
-        _L2_WORK_INVALID_L2_AND_RESTART,
-        _L2_WORK_SEND_DIR_REQ_WAIT_DIR_REP,
-        _L2_WORK_WAIT_CACHE_REP,
+        _L2_WORK_EMPTY_LINE_TO_EVICT,
+        _L2_WORK_REORDER_CACHE_REP,
+        _L2_WORK_INVALIDATE_CACHES,
+        _L2_WORK_UPDATE_L2_AND_SEND_REP,
+        _L2_WORK_DRAM_WRITEBACK_AND_UPDATE,
+        _L2_WORK_DRAM_WRITEBACK_AND_REQUEST,
         _L2_WORK_SEND_DRAM_FEED_REQ,
         _L2_WORK_WAIT_DRAM_FEED,
-        _L2_WORK_DRAM_WRITEBACK
+        _L2_WORK_SEND_DIRECTORY_REP
     } toL2Status;
 
     typedef struct {
         toL2Status status;
+        bool accept_cache_replies;
         shared_ptr<coherenceMsg> cache_req;
         shared_ptr<cacheRequest> l2_req;
         shared_ptr<coherenceMsg> cache_rep;
@@ -169,12 +177,12 @@ private:
         shared_ptr<dramMsg> dram_req;
         shared_ptr<dramMsg> dram_rep;
 
+        bool using_reserved_space;
+
         /* for stats */
         uint64_t invalidate_begin_time;
         uint32_t invalidate_num_targets;
-        bool is_first_served;
-        bool did_first_go_dram;
-        bool is_frst_read;
+        bool did_miss_on_first;
 
         /* for performance */
         shared_ptr<message_t> net_msg_to_send;
@@ -194,6 +202,7 @@ private:
     inline maddr_t get_start_maddr_in_line(maddr_t maddr) { 
         maddr.address -= (maddr.address)%(m_cfg.words_per_cache_line*4); return maddr; 
     }
+    inline uint32_t get_flit_count(uint32_t bytes) { return (bytes + m_cfg.bytes_per_flit - 1) / m_cfg.bytes_per_flit; }
 
     /* logics */
 
@@ -244,7 +253,8 @@ private:
     vector<shared_ptr<dramRequest> > m_dram_req_schedule_q;
 
     uint32_t m_l1_work_table_vacancy;
-    uint32_t m_l2_work_table_vacancy;
+    uint32_t m_l2_work_table_vacancy_regular;
+    uint32_t m_l2_work_table_vacancy_reserved; /* need at least one dedicated space for invalidating L1 caches for eviction */
     uint32_t m_available_core_ports;
 };
 

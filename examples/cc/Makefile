@@ -1,10 +1,14 @@
 DARIMG=darimg
 DARSIM=darsim
 
-PROG = privateSharedMSI.img
+CFG_FILES = privateSharedMSI.cfg privateSharedMESI.cfg
+CFG_NAMES = $(patsubst %.cfg, %, ${CFG_FILES})
+IMG_FILES = $(patsubst %.cfg, %.img, ${CFG_FILES})
+TRACE_FILES = test_serialize.trace test_hit.trace test_share_and_invalidate.trace test_inv_cache.trace random.trace
+TRACE_NAMES = $(patsubst %.trace, %, ${TRACE_FILES})
 
 .PHONY: all
-all: $(PROG)
+all: $(IMG_FILES)
 
 %.img: %.cfg 
 	$(DARIMG) -o $@ $<
@@ -13,9 +17,11 @@ all: $(PROG)
 	$(DARSIM) $(PROG) --concurrency 1 --memory-traces $< --random-seed 7 > $@
 
 .PHONY: run
-run: $(PROG) test_serialize.out test_hit.out test_share_and_invalidate.out test_inv_cache.out
+run: $(IMG_FILES) 
+	$(foreach trace,$(TRACE_NAMES),$(foreach img,$(CFG_NAMES), $(DARSIM) $(img).img --concurrency 1 --memory-traces $(trace).trace --random-seed 23 > $(img)_$(trace).out;))
 
 .PHONY: clean
 clean:
-	rm *img 
+	$(foreach trace, $(TRACE_NAMES), rm -f *$(trace).out;)
+	$(foreach img,$(IMG_FILES), rm -f *$(img);)
 

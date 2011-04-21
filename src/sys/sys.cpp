@@ -326,7 +326,8 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             uint32_t words_per_cache_line = 0;
             uint32_t num_local_core_ports = 0;
             uint32_t l1_work_table_size = 0;
-            uint32_t l2_work_table_size = 0;
+            uint32_t l2_work_table_size_regular = 0;
+            uint32_t l2_work_table_size_reserved = 0;
             uint32_t l1_total_lines = 0;
             uint32_t l1_associativity = 0;
             uint32_t l1_hit_test_latency = 0;
@@ -340,16 +341,28 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             uint32_t l2_write_ports = 0;
             replacementPolicy_t l2_policy = REPLACE_LRU;
 
+            bool msi_mesi_do_exclusive = false;
+
             switch (mem_type) {
-            case MEM_PRIVATE_SHARED_MSI:
+            case MEM_PRIVATE_SHARED_MSI_MESI:
+                msi_mesi_do_exclusive = read_word(img);
+                break;
             case MEM_PRIVATE_SHARED_LCC:
-            case MEM_PRIVATE_SHARED_MESI:
+            case MEM_SHARED_SHARED_RA:
+            case MEM_PRIVATE_PRIVATE_MOESI:
+                break;
+            }
+
+            switch (mem_type) {
+            case MEM_PRIVATE_SHARED_MSI_MESI:
+            case MEM_PRIVATE_SHARED_LCC:
             case MEM_SHARED_SHARED_RA:
             case MEM_PRIVATE_PRIVATE_MOESI:
                 words_per_cache_line = read_word(img);
                 num_local_core_ports = read_word(img);
                 l1_work_table_size = read_word(img);
-                l2_work_table_size = read_word(img);
+                l2_work_table_size_regular = read_word(img);
+                l2_work_table_size_reserved = read_word(img);
                 l1_total_lines = read_word(img);
                 l1_associativity = read_word(img);
                 l1_hit_test_latency = read_word(img);
@@ -370,7 +383,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             /* memory construction */
             shared_ptr<memory> mem = shared_ptr<memory>();
             switch (mem_type) {
-            case MEM_PRIVATE_SHARED_MSI:
+            case MEM_PRIVATE_SHARED_MSI_MESI:
                 {
                     assert(em_type == EM_NEVER);
                     if (private_shared_msi_stats == shared_ptr<privateSharedMSIStats>()) {
@@ -378,9 +391,9 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                             shared_ptr<privateSharedMSIStats>(new privateSharedMSIStats(t->get_time()));
                         stats->add_aux_statistics(private_shared_msi_stats);
                     }
-                    privateSharedMSI::privateSharedMSICfg_t cfg = { num_nodes, 
+                    privateSharedMSI::privateSharedMSICfg_t cfg = { msi_mesi_do_exclusive, num_nodes, 
                         bytes_per_flit, words_per_cache_line,
-                        num_local_core_ports, l1_work_table_size, l2_work_table_size,
+                        num_local_core_ports, l1_work_table_size, l2_work_table_size_regular, l2_work_table_size_reserved,
                         l1_total_lines, l1_associativity, l1_hit_test_latency, l1_read_ports, 
                         l1_write_ports, l1_policy,
                         l2_total_lines, l2_associativity, l2_hit_test_latency, l2_read_ports, 
@@ -398,7 +411,6 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                 }
                 break;
             case MEM_PRIVATE_SHARED_LCC:
-            case MEM_PRIVATE_SHARED_MESI:
             case MEM_SHARED_SHARED_RA:
             case MEM_PRIVATE_PRIVATE_MOESI:
                 assert(false); /* not implemented yet */

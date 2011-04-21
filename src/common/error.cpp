@@ -333,3 +333,11 @@ void err_parse::show_to(ostream &out) const {
     }
     out << ": " << msg;
 }
+
+err_bad_shmem_cfg::err_bad_shmem_cfg(const string &new_msg) throw() : msg(new_msg) { }
+err_bad_shmem_cfg::err_bad_shmem_cfg(const char *new_msg) throw() : msg(new_msg) { }
+err_bad_shmem_cfg::~err_bad_shmem_cfg() throw() { }
+void err_bad_shmem_cfg::show_to(ostream &out) const {
+    out << "PANIC: " << msg;
+}
+

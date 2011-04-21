@@ -13,6 +13,7 @@ public:
 
     inline void did_finish_read(uint64_t latency) { m_read_latencies.add(latency, 1); }
     inline void did_finish_write(uint64_t latency) { m_write_latencies.add(latency, 1); }
+    inline uint64_t total_served() { return m_read_latencies.sample_count() + m_write_latencies.sample_count(); }
 
     friend class memStats;
 

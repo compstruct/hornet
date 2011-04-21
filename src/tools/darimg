@@ -350,11 +350,10 @@ def get_core_cfgs(cfg, core):
     return ret
 
 def get_memory_cfgs(cfg, core):
-    memory_id = {'private-shared MSI':0, 
+    memory_id = {'private-shared MSI/MESI':0, 
                  'private-shared LCC':1,
-                 'private-shared MESI': 2,
-                 'shared-shared RA':3,
-                 'private-private MOESI':4}
+                 'shared-shared RA':2,
+                 'private-private MOESI':3}
     ret = []
     if core in ['mips_mpi', 'injector']:
         # need no memory configurations
@@ -366,7 +365,7 @@ def get_memory_cfgs(cfg, core):
         if memory_id.has_key(memory_arch) == False:
             raise Err('bad memory architecture name : %s (must be one of %s)' % (memory_arch, str(memory_id.keys())))
     else:
-        memory_arch = 'private-shared MSI'
+        memory_arch = 'private-shared MSI/MESI'
     ret.append(memory_id[memory_arch])
 
     # dram controller location
@@ -458,8 +457,18 @@ def get_memory_cfgs(cfg, core):
     else:
         ret.append(4)
 
+    if memory_arch in ['private-shared MSI/MESI']:
+        section = 'memory::' + memory_arch
+        if cfg.has_option(section, 'use Exclusive state'):
+            answer = cfg.get(section, 'use Exclusive state')
+            if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
+                ret.append(1)
+            else:
+                ret.append(0)
+        else:
+            ret.append(0)
     # cache configuration (L1L2)
-    if memory_arch in ['private-shared MSI', 'private-shared LCC', 'private-shared MESI',  \
+    if memory_arch in ['private-shared MSI/MESI', 'private-shared LCC', \
                        'shared-shared RA', 'private-private MOESI']:
         section = 'memory::' + memory_arch
         if cfg.has_option(section, 'words per cache line'):
@@ -474,8 +483,12 @@ def get_memory_cfgs(cfg, core):
             ret.append(int(cfg.get(section, 'L1 work table size')))
         else:
             ret.append(4)
-        if cfg.has_option(section, 'L2 work table size'):
-            ret.append(int(cfg.get(section, 'L2 work table size')))
+        if cfg.has_option(section, 'L2 work table size for regular requests and replies'):
+            ret.append(int(cfg.get(section, 'L2 work table size for regular requests and replies')))
+        else:
+            ret.append(4)
+        if cfg.has_option(section, 'reserved L2 work table size for line eviction'):
+            ret.append(int(cfg.get(section, 'reserved L2 work table size for line eviction')))
         else:
             ret.append(4)
         for cache_name in ['L1', 'L2']:

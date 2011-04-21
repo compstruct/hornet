@@ -113,6 +113,7 @@ void core::tick_positive_edge() throw(err) {
                 if (m_in_msg_queues[new_msg->type]->push_back(new_msg)) {
                     LOG(log,3) << "[core " << get_id().get_numeric_id() << " @ " << system_time
                         << " ] has received a message type " << (uint32_t) new_msg->type 
+                        << " size " << new_msg->flit_count 
                         << " waiting queue size "
                         << m_in_msg_queues[new_msg->type]->size() << endl;
                     m_incoming_packets.erase(channel);
@@ -120,6 +121,9 @@ void core::tick_positive_edge() throw(err) {
                 }
             }
         }
+    }
+    if (++m_receive_channel_round_robin_pointer == 32) {
+        m_receive_channel_round_robin_pointer = 0;
     }
     uint32_t waiting = m_net->get_waiting_queues();
     boost::function<int(int)> rr_fn = bind(&random_gen::random_range, ran, _1);

@@ -13,8 +13,7 @@ public:
 
     void did_read_l1(bool hit);
     void did_write_l1(bool hit);
-    void did_read_l2(bool hit);
-    void did_write_l2(bool hit);
+    void did_access_l2(bool hit);
 
     /* only for read sharer invalidation */
     void did_invalidate_caches(uint32_t num_caches, uint64_t latency);
@@ -26,8 +25,7 @@ private:
 
     running_stats m_l1_read_hits;
     running_stats m_l1_write_hits;
-    running_stats m_l2_read_hits;
-    running_stats m_l2_write_hits;
+    running_stats m_l2_hits;
 
     running_stats m_invalidated_caches;
     running_stats m_invalidate_penalties;

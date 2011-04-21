@@ -166,7 +166,8 @@ maximum active threads per core = 2'''
 
     # memory defaults
     memory_fullname = {
-        'privateSharedMSI':'private-shared MSI'
+        'privateSharedMSI':'private-shared MSI/MESI',
+        'privateSharedMESI':'private-shared MSI/MESI'
     }
     if memory_fullname.has_key(memory_name) is False:
         print 'Err - memory %s is not supported. must be one of %s'%(memory_name, str(memory_fullname.keys()))
@@ -192,15 +193,21 @@ bandwidth in words per dram controller = 4''')
     contents = contents + memoryTemplate.substitute(memory_name=memory_fullname[memory_name])
 
     # memory specific defaults
-    if memory_name in ['privateSharedMSI']:
-        contents = contents + '''\
+    if memory_name in ['privateSharedMSI', 'privateSharedMESI']:
+        if memory_name in ['privateSharedMSI']:
+            mesitype = 'no'
+        else:
+            mesitype = 'yes'
+        memorySpecificTemplate = string.Template('''\
 
 
-[memory::private-shared MSI]
+[memory::$memory_name]
+use Exclusive state = $mesi
 words per cache line = 4
 memory access ports for local core = 2
 L1 work table size = 4
-L2 work table size = 4
+L2 work table size for regular requests and replies = 4
+reserved L2 work table size for line eviction = 2
 total lines in L1 = 32
 associativity in L1 = 2 
 hit test latency in L1 = 2
@@ -212,8 +219,8 @@ associativity in L2 = 4
 hit test latency in L2 = 4
 read ports in L2 = 2
 write ports in L2 = 1
-replacement policy in L2 = LRU'''
-
+replacement policy in L2 = LRU''')
+        contents = contents + memorySpecificTemplate.substitute(memory_name=memory_fullname[memory_name], mesi=mesitype)
 
     print >>out, contents
     
