@@ -19,8 +19,9 @@ public:
         uint32_t words_per_cache_line;
         uint32_t num_local_core_ports;
         uint32_t l1_work_table_size;
-        uint32_t l2_work_table_size_regular;
-        uint32_t l2_work_table_size_reserved;
+        uint32_t l2_work_table_size_shared;
+        uint32_t l2_work_table_size_replies;
+        uint32_t l2_work_table_size_evict;
         /* L1 */
         uint32_t lines_in_l1;
         uint32_t l1_associativity;
@@ -177,7 +178,8 @@ private:
         shared_ptr<dramMsg> dram_req;
         shared_ptr<dramMsg> dram_rep;
 
-        bool using_reserved_space;
+        bool using_space_for_reply;
+        bool using_space_for_evict;
 
         /* for stats */
         uint64_t invalidate_begin_time;
@@ -253,8 +255,9 @@ private:
     vector<shared_ptr<dramRequest> > m_dram_req_schedule_q;
 
     uint32_t m_l1_work_table_vacancy;
-    uint32_t m_l2_work_table_vacancy_regular;
-    uint32_t m_l2_work_table_vacancy_reserved; /* need at least one dedicated space for invalidating L1 caches for eviction */
+    uint32_t m_l2_work_table_vacancy_shared;
+    uint32_t m_l2_work_table_vacancy_replies; /* need at least one dedicated space for accepting an L1 reply */
+    uint32_t m_l2_work_table_vacancy_evict; /* need at least one dedicated space for invalidating L1 caches for eviction */
     uint32_t m_available_core_ports;
 };
 

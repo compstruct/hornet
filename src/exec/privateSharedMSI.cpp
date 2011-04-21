@@ -95,8 +95,9 @@ privateSharedMSI::privateSharedMSI(uint32_t id,
     m_cat(a_cat), 
     m_stats(shared_ptr<privateSharedMSIStatsPerTile>()),
     m_l1_work_table_vacancy(cfg.l1_work_table_size),
-    m_l2_work_table_vacancy_regular(cfg.l2_work_table_size_regular),
-    m_l2_work_table_vacancy_reserved(cfg.l2_work_table_size_reserved), 
+    m_l2_work_table_vacancy_shared(cfg.l2_work_table_size_shared),
+    m_l2_work_table_vacancy_replies(cfg.l2_work_table_size_replies),
+    m_l2_work_table_vacancy_evict(cfg.l2_work_table_size_evict), 
     m_available_core_ports(cfg.num_local_core_ports)
 {
     if (m_cfg.bytes_per_flit == 0) throw err_bad_shmem_cfg("flit size must be non-zero.");
@@ -105,9 +106,11 @@ privateSharedMSI::privateSharedMSI(uint32_t id,
     if (m_cfg.lines_in_l2 == 0) throw err_bad_shmem_cfg("privateSharedMSI/MESI : L2 size must be non-zero.");
     if (m_cfg.l1_work_table_size <= m_cfg.num_local_core_ports) 
         throw err_bad_shmem_cfg("privateSharedMSI/MESI : L1 work table size must be greater than local core ports.");
-    if (m_cfg.l2_work_table_size_reserved == 0) 
+    if (m_cfg.l2_work_table_size_replies == 0) 
+        throw err_bad_shmem_cfg("privateSharedMSI/MESI : L2 work table must have non-zero space for cache replies.");
+    if (m_cfg.l2_work_table_size_evict == 0) 
         throw err_bad_shmem_cfg("privateSharedMSI/MESI : L2 work table must have non-zero space for line eviction.");
-    if (m_cfg.l2_work_table_size_regular == 0) 
+    if (m_cfg.l2_work_table_size_shared == 0) 
         throw err_bad_shmem_cfg("privateSharedMSI/MESI : L2 work table must be non-zero.");
     if (m_cfg.l1_work_table_size == 0) 
         throw err_bad_shmem_cfg("privateSharedMSI/MESI : L1 work table must be non-zero.");
@@ -649,20 +652,21 @@ void privateSharedMSI::l2_work_table_update() {
                 ++it_addr;
                 continue;
             } else if (cache_req->type == EMPTY_REQ) {
+                mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " received an empty request for " << start_maddr << endl;
                 if (l2_req->status() == CACHE_REQ_MISS) {
                     /* before this request is fired, others already invalidated this line */
                     mh_assert(!cache_rep); /* there must be no cache replies that has not been processed */
-                    if (entry->using_reserved_space) {
-                        ++m_l2_work_table_vacancy_reserved;
+                    if (entry->using_space_for_evict) {
+                        ++m_l2_work_table_vacancy_evict;
+                    } else if (entry->using_space_for_reply) {
+                        ++m_l2_work_table_vacancy_replies;
                     } else {
-                        ++m_l2_work_table_vacancy_regular;
+                        ++m_l2_work_table_vacancy_shared;
                     }
                     m_l2_work_table.erase(it_addr++);
                     continue;
                 } else {
                     /* hit */
-                    mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] tries to invalidate caches of line for " 
-                              << start_maddr << " to evict the line " << endl;
                     if (line_info->directory.empty()) {
                         l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_INVALIDATE));
                         l2_req->set_reserve(false);
@@ -812,6 +816,8 @@ void privateSharedMSI::l2_work_table_update() {
                         }
                     } else {
                         if (victim && m_l2_work_table.count(victim->start_maddr) == 0) {
+                            mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] tries to invalidate caches of line for " 
+                                      << start_maddr << " to evict the line " << endl;
                             shared_ptr<coherenceMsg> new_msg(new coherenceMsg);
                             new_msg->sender = m_id;
                             new_msg->receiver = m_id;
@@ -834,10 +840,12 @@ void privateSharedMSI::l2_work_table_update() {
                 continue;
             }
             mh_assert(l2_req->status() == CACHE_REQ_HIT);
-            if (entry->using_reserved_space) {
-                ++m_l2_work_table_vacancy_reserved;
+            if (entry->using_space_for_evict) {
+                ++m_l2_work_table_vacancy_evict;
+            } else if (entry->using_space_for_reply) {
+                ++m_l2_work_table_vacancy_replies;
             } else {
-                ++m_l2_work_table_vacancy_regular;
+                ++m_l2_work_table_vacancy_shared;
             }
             m_l2_work_table.erase(it_addr++);
             continue;
@@ -904,6 +912,13 @@ void privateSharedMSI::l2_work_table_update() {
             ++it_addr;
             continue;
         } else if (entry->status == _L2_WORK_INVALIDATE_CACHES) {
+            if (start_maddr.address == 0x400840 && system_time > 390000) {
+                cerr << "start " << m_id << " @ " << system_time << " dir_reqs size " << entry->dir_reqs.size() << " : ";
+                for (vector<shared_ptr<coherenceMsg> >::iterator i = entry->dir_reqs.begin(); i != entry->dir_reqs.end(); ++i) {
+                    cerr << (*i)->receiver;
+                }
+                cerr << endl;
+            }
             if (cache_rep) {
                 process_cache_rep(line, cache_rep);
                 entry->cache_rep = shared_ptr<coherenceMsg>();
@@ -941,7 +956,23 @@ void privateSharedMSI::l2_work_table_update() {
                     }
                     dir_req->did_win_last_arbitration = false;
                     entry->dir_reqs.erase(entry->dir_reqs.begin());
+                } else if (line_info->directory.count(dir_req->receiver) == 0) {
+                    mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] already received a cache reply "
+                        << " for " << dir_req->maddr << " so do not send a request " << endl;
+                    if (entry->net_msg_to_send) {
+                        entry->net_msg_to_send = shared_ptr<message_t>();
+                    }
+                    dir_req->did_win_last_arbitration = false;
+                    entry->dir_reqs.erase(entry->dir_reqs.begin());
+
                 } else {
+#if 0
+                    if (++dir_req->waited > 10000) {
+                        cerr << "[DIRECTORY " << m_id << " @ " << system_time << " ] cannot send a directory request "
+                                  << "to " << dir_req->receiver << " for " << dir_req->maddr;
+                    }
+#endif
+
                     break;
                 }
             }
@@ -989,7 +1020,13 @@ void privateSharedMSI::l2_work_table_update() {
                     }
                     mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] sent a directory reply to "
                         << m_id << " for " << start_maddr << endl;
-                    ++m_l2_work_table_vacancy_regular;
+                    if (entry->using_space_for_evict) {
+                        ++m_l2_work_table_vacancy_evict;
+                    } else if (entry->using_space_for_reply) {
+                        ++m_l2_work_table_vacancy_replies;
+                    } else {
+                        ++m_l2_work_table_vacancy_shared;
+                    }
                     m_l2_work_table.erase(it_addr++);
                     continue;
                 } else {
@@ -1150,7 +1187,13 @@ void privateSharedMSI::l2_work_table_update() {
                 }
                 mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] sent a directory reply to "
                     << dir_rep->receiver << " for " << start_maddr << endl;
-                ++m_l2_work_table_vacancy_regular;
+                if (entry->using_space_for_evict) {
+                    ++m_l2_work_table_vacancy_evict;
+                } else if (entry->using_space_for_reply) {
+                    ++m_l2_work_table_vacancy_replies;
+                } else {
+                    ++m_l2_work_table_vacancy_shared;
+                }
                 m_l2_work_table.erase(it_addr++);
                 continue;
             } else {
@@ -1225,7 +1268,7 @@ void privateSharedMSI::accept_incoming_messages() {
         } else {
 
             /* for debugging only - erase later */
-#if 1
+#if 0
             if (++cc_msg->waited > 10000) {
                 cerr << "[NET " << m_id << " @ " << system_time << " ] cannot receive a directory ";
                 if (cc_msg->type == SH_REP || cc_msg->type == EX_REP) {
@@ -1274,7 +1317,7 @@ void privateSharedMSI::accept_incoming_messages() {
         } else {
 
             /* erase later */
-#if 1
+#if 0
             if (++cc_msg->waited > 10000) {
                 cerr << "[NET " << m_id << " @ " << system_time << " ] cannot receive a cache req (" << cc_msg->type 
                     << ") for " << cc_msg->maddr  
@@ -1420,8 +1463,8 @@ void privateSharedMSI::schedule_requests() {
                 static_pointer_cast<coherenceMsg>(m_to_cache_req_schedule_q.front().get<1>());
             maddr_t start_maddr = msg->maddr;
             if (m_l1_work_table.count(start_maddr)) {
-                /* discard this directory request if the current state is pending */
-                if (m_l1_work_table[start_maddr]->status == _L1_WORK_WAIT_DIRECTORY_REP) {
+                /* discard this directory request if currency core request gets or got a miss */
+                if (m_l1_work_table[start_maddr]->status != _L1_WORK_READ_L1) {
                     msg->did_win_last_arbitration = true; /* will be discarded from the network queue */
                 }
             } else if (m_l1_work_table_vacancy) {
@@ -1475,13 +1518,13 @@ void privateSharedMSI::schedule_requests() {
                 m_l2_work_table[start_maddr]->cache_rep = msg;
                 msg->did_win_last_arbitration = true;
             }
-        } else if (m_l2_work_table_vacancy_regular) {
+        } else if (m_l2_work_table_vacancy_replies) {
             mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache reply from " << msg->sender 
-                      << " for address " << msg->maddr << " (new entry) " << endl;
+                << " for address " << msg->maddr << " (new entry - reserved) " << endl;
             shared_ptr<toL2Entry> new_entry(new toL2Entry);
             new_entry->accept_cache_replies = false;
-            new_entry->using_reserved_space = false;
-            new_entry->using_reserved_space = false;
+            new_entry->using_space_for_evict = false;
+            new_entry->using_space_for_reply = true;
             new_entry->status = _L2_WORK_READ_L2;
             new_entry->did_miss_on_first = false;
             new_entry->cache_rep = msg;
@@ -1498,7 +1541,32 @@ void privateSharedMSI::schedule_requests() {
             msg->did_win_last_arbitration = true;
 
             m_l2_work_table[start_maddr] = new_entry;
-            --m_l2_work_table_vacancy_regular;
+            --m_l2_work_table_vacancy_replies;
+
+        } else if (m_l2_work_table_vacancy_shared) {
+            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache reply from " << msg->sender 
+                      << " for address " << msg->maddr << " (new entry) " << endl;
+            shared_ptr<toL2Entry> new_entry(new toL2Entry);
+            new_entry->accept_cache_replies = false;
+            new_entry->using_space_for_evict = false;
+            new_entry->using_space_for_reply = false;
+            new_entry->status = _L2_WORK_READ_L2;
+            new_entry->did_miss_on_first = false;
+            new_entry->cache_rep = msg;
+
+            shared_ptr<cacheRequest> l2_req(new cacheRequest(msg->maddr, CACHE_REQ_READ));
+            l2_req->set_reserve(true);
+            new_entry->l2_req = l2_req;
+
+            new_entry->cache_req = shared_ptr<coherenceMsg>();
+            new_entry->dir_rep = shared_ptr<coherenceMsg>();
+            new_entry->dram_req = shared_ptr<dramMsg>();
+            new_entry->dram_rep = shared_ptr<dramMsg>();
+
+            msg->did_win_last_arbitration = true;
+
+            m_l2_work_table[start_maddr] = new_entry;
+            --m_l2_work_table_vacancy_shared;
         }
         m_to_directory_rep_schedule_q.erase(m_to_directory_rep_schedule_q.begin());
     }
@@ -1511,14 +1579,15 @@ void privateSharedMSI::schedule_requests() {
             m_to_directory_req_schedule_q.erase(m_to_directory_req_schedule_q.begin());
             continue;
         }
-        if (msg->type == EMPTY_REQ && m_l2_work_table_vacancy_reserved) {
+        if (msg->type == EMPTY_REQ && m_l2_work_table_vacancy_evict) {
             /* the hardware needs a dedicated space for invalidating L1 caches in order to evict a line */
             /* otherwise, it may deadlock when all entries are trying to evict a line but there's no space in the table */
             mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache request from " << msg->sender 
                       << " for address " << msg->maddr << " (new entry) " << endl;
             shared_ptr<toL2Entry> new_entry(new toL2Entry);
             new_entry->accept_cache_replies = true;
-            new_entry->using_reserved_space = true;
+            new_entry->using_space_for_evict = true;
+            new_entry->using_space_for_reply = false;
             new_entry->status = _L2_WORK_READ_L2;
             new_entry->did_miss_on_first = false;
             new_entry->cache_req = msg;
@@ -1535,13 +1604,14 @@ void privateSharedMSI::schedule_requests() {
             msg->did_win_last_arbitration = true;
 
             m_l2_work_table[start_maddr] = new_entry;
-            --m_l2_work_table_vacancy_reserved;
-        } else if (m_l2_work_table_vacancy_regular) {
+            --m_l2_work_table_vacancy_evict;
+        } else if (m_l2_work_table_vacancy_shared) {
             mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache request from " << msg->sender 
                       << " for address " << msg->maddr << " (new entry) " << endl;
             shared_ptr<toL2Entry> new_entry(new toL2Entry);
             new_entry->accept_cache_replies = false;
-            new_entry->using_reserved_space = false;
+            new_entry->using_space_for_evict = false;
+            new_entry->using_space_for_reply = false;
             new_entry->status = _L2_WORK_READ_L2;
             new_entry->cache_req = msg;
 
@@ -1557,7 +1627,7 @@ void privateSharedMSI::schedule_requests() {
             msg->did_win_last_arbitration = true;
 
             m_l2_work_table[start_maddr] = new_entry;
-            --m_l2_work_table_vacancy_regular;
+            --m_l2_work_table_vacancy_shared;
         }
         m_to_directory_req_schedule_q.erase(m_to_directory_req_schedule_q.begin());
     }

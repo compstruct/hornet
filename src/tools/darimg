@@ -483,14 +483,18 @@ def get_memory_cfgs(cfg, core):
             ret.append(int(cfg.get(section, 'L1 work table size')))
         else:
             ret.append(4)
-        if cfg.has_option(section, 'L2 work table size for regular requests and replies'):
-            ret.append(int(cfg.get(section, 'L2 work table size for regular requests and replies')))
+        if cfg.has_option(section, 'shared L2 work table size'):
+            ret.append(int(cfg.get(section, 'shared L2 work table size')))
         else:
             ret.append(4)
+        if cfg.has_option(section, 'reserved L2 work table size for cache replies'):
+            ret.append(int(cfg.get(section, 'reserved L2 work table size for cache replies')))
+        else:
+            ret.append(1)
         if cfg.has_option(section, 'reserved L2 work table size for line eviction'):
             ret.append(int(cfg.get(section, 'reserved L2 work table size for line eviction')))
         else:
-            ret.append(4)
+            ret.append(1)
         for cache_name in ['L1', 'L2']:
             if cfg.has_option(section, 'total lines in ' + cache_name):
                 ret.append(int(cfg.get(section, 'total lines in ' + cache_name)))
