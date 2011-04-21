@@ -474,7 +474,7 @@ def get_memory_cfgs(cfg, core):
         if cfg.has_option(section, 'words per cache line'):
             ret.append(int(cfg.get(section, 'words per cache line')))
         else:
-            ret.append(4)
+            ret.append(8)
         if cfg.has_option(section, 'memory access ports for local core'):
             ret.append(int(cfg.get(section, 'memory access ports for local core')))
         else:
@@ -499,15 +499,24 @@ def get_memory_cfgs(cfg, core):
             if cfg.has_option(section, 'total lines in ' + cache_name):
                 ret.append(int(cfg.get(section, 'total lines in ' + cache_name)))
             else:
-                ret.append(32)
+                if cache_name in ['L1']:
+                    ret.append(256)
+                else:
+                    ret.append(4096)
             if cfg.has_option(section, 'associativity in ' + cache_name):
                 ret.append(int(cfg.get(section, 'associativity in ' + cache_name)))
             else:
-                ret.append(2)
+                if cache_name in ['L1']:
+                    ret.append(2)
+                else:
+                    ret.append(4)
             if cfg.has_option(section, 'hit test latency in ' + cache_name):
                 ret.append(int(cfg.get(section, 'hit test latency in ' + cache_name)))
             else:
-                ret.append(2)
+                if cache_name in ['L1']:
+                    ret.append(2)
+                else:
+                    ret.append(4)
             if cfg.has_option(section, 'read ports in ' + cache_name):
                 ret.append(int(cfg.get(section, 'read ports in ' + cache_name)))
             else:

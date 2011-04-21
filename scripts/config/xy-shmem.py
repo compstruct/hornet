@@ -203,19 +203,19 @@ bandwidth in words per dram controller = 4''')
 
 [memory::$memory_name]
 use Exclusive state = $mesi
-words per cache line = 4
+words per cache line = 8
 memory access ports for local core = 2
 L1 work table size = 4
 shared L2 work table size = 4
 reserved L2 work table size for cache replies = 1
 reserved L2 work table size for line eviction = 1
-total lines in L1 = 32
+total lines in L1 = 256
 associativity in L1 = 2 
 hit test latency in L1 = 2
 read ports in L1 = 2
 write ports in L1 = 1
 replacement policy in L1 = LRU
-total lines in L2 = 128
+total lines in L2 = 4096
 associativity in L2 = 4 
 hit test latency in L2 = 4
 read ports in L2 = 2

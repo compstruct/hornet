@@ -912,13 +912,6 @@ void privateSharedMSI::l2_work_table_update() {
             ++it_addr;
             continue;
         } else if (entry->status == _L2_WORK_INVALIDATE_CACHES) {
-            if (start_maddr.address == 0x400840 && system_time > 390000) {
-                cerr << "start " << m_id << " @ " << system_time << " dir_reqs size " << entry->dir_reqs.size() << " : ";
-                for (vector<shared_ptr<coherenceMsg> >::iterator i = entry->dir_reqs.begin(); i != entry->dir_reqs.end(); ++i) {
-                    cerr << (*i)->receiver;
-                }
-                cerr << endl;
-            }
             if (cache_rep) {
                 process_cache_rep(line, cache_rep);
                 entry->cache_rep = shared_ptr<coherenceMsg>();
