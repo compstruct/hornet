@@ -16,7 +16,11 @@ Dependancies:
 Setup: 
 
 sh bootstrap
+
 ./configure --prefix=$HORNET_HOME --enable-mips-rts --enable-testsuite=no CFLAGS="-g -O0 -DEM2_PURE" CXXFLAGS="-g -O0 -DEM2_PURE"
+--- or ---
+./configure --prefix=$HORNET_HOME --enable-mips-rts --enable-testsuite=no CFLAGS="-g -O0" CXXFLAGS="-g -O0"
+
 sudo make
 sudo make install
 

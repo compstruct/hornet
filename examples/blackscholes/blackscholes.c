@@ -14,7 +14,6 @@
 
 	TODO
 	1.) check and remove extra __H_fflush(); calls
-	2.) make sure __H_enable_memory_hierarchy is called
 
 	CHANGES:
 	1.) library function call names
@@ -391,7 +390,7 @@ int bs_thread(void *tid_ptr) {
 ////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char **argv)
 {
-	unsigned id = cpu_id();
+	unsigned id = thread_id();
 
 #ifdef ENABLE_THREADS_HORNET
 	nThreads = 4;
@@ -735,4 +734,5 @@ int main(int argc, char **argv)
 
 	return 0;
 }
+
 

@@ -517,17 +517,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
             // Memory hierarchy setup ------------------------------------------       
 
-            shared_ptr<mcpu> new_core(new mcpu( pe_id(id), 
-                                                t->get_time(), 
-                                                cpu_entry_point,
-                                                cpu_stack_pointer,
-                                                t->get_packet_id_factory(),
-                                                t->get_statistics(),
-                                                log,
-                                                ran,
-                                                core_cfgs));;
-            /* Compatible only with EM^2 extension
-               shared_ptr<mcpu> new_core(new mcpu( num_nodes,
+            shared_ptr<mcpu> new_core(new mcpu( num_nodes,
                                                 pe_id(id), 
                                                 t->get_time(), 
                                                 cpu_entry_point,
@@ -536,7 +526,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                                                 t->get_statistics(),
                                                 log,
                                                 ran,
-                                                core_cfgs));*/
+                                                core_cfgs));
             p = new_core;
 
             // I$ setup --------------------------------------------------------
@@ -832,3 +822,4 @@ bool sys::work_tbd_darsim() throw(err) {
 uint64_t sys::get_time() const throw() {
     return sys_time;
 }
+

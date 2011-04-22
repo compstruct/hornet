@@ -22,7 +22,7 @@ libdarexec_la_SOURCES = \
     awayCache.hpp awayCache.cpp \
     core.hpp core.cpp \
     coreMessageQueue.hpp coreMessageQueue.cpp \
-		mcpu.hpp mcpu.cpp \
+		mcpu.hpp mcpu_props.hpp mcpu.cpp \
 		memtraceCore.hpp memtraceCore.cpp \
     memtraceThread.hpp memtraceThread.cpp \
     memtraceThreadPool.hpp memtraceThreadPool.cpp 
