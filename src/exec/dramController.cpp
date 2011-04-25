@@ -4,24 +4,25 @@
 #include "dramController.hpp"
 
 dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count) :
-    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_status(DRAM_REQ_NEW), 
-    m_data(shared_array<uint32_t>()), m_indirect_data(shared_ptr<void>()) 
+    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_aux_word_size(0), m_status(DRAM_REQ_NEW), 
+    m_data(shared_array<uint32_t>()), m_aux_data(shared_ptr<void>()) 
 {
-    assert(m_request_type == DRAM_REQ_READ || m_request_type == DRAM_REQ_READ_INDIRECT);
+    assert(m_request_type == DRAM_REQ_READ);
 }
 
 dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_array<uint32_t> wdata) :
-    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_status(DRAM_REQ_NEW), 
-    m_data(wdata), m_indirect_data(shared_ptr<void>()) 
+    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_aux_word_size(0), m_status(DRAM_REQ_NEW), 
+    m_data(wdata), m_aux_data(shared_ptr<void>()) 
 {
     assert(m_request_type == DRAM_REQ_WRITE);
 }
 
-dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_ptr<void> wdata) :
-    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_status(DRAM_REQ_NEW), 
-    m_data(shared_array<uint32_t>()), m_indirect_data(wdata) 
+dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_array<uint32_t> wdata,
+                         uint32_t aux_word_size, shared_ptr<void> aux_data) :
+    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_aux_word_size(0), m_status(DRAM_REQ_NEW), 
+    m_data(shared_array<uint32_t>()), m_aux_data(aux_data) 
 {
-    assert(m_request_type == DRAM_REQ_WRITE_INDIRECT);
+    assert(m_request_type == DRAM_REQ_WRITE);
 }
 
 dram::dram() {}
@@ -108,36 +109,30 @@ void dramController::dram_access_safe(shared_ptr<dramRequest> req) {
 }
 
 void dramController::dram_access(shared_ptr<dramRequest> req) {
-    if (req->is_indirect()) {
-        if (m_dram->m_indirect_memory.count(req->m_maddr) == 0) {
-            m_dram->m_indirect_memory[req->m_maddr] = shared_ptr<void>();
-        }
-        if (req->is_read()) {
-            req->m_indirect_data = m_dram->m_indirect_memory[req->m_maddr];
-        } else {
-            m_dram->m_indirect_memory[req->m_maddr] = req->m_indirect_data;
-        }
-    } else {
+    if (req->is_read() && m_dram->m_aux_memory.count(req->m_maddr) > 0) {
+        req->m_aux_data = m_dram->m_aux_memory[req->m_maddr];
+    } else if (!req->is_read() && req->m_aux_data) {
+        m_dram->m_aux_memory[req->m_maddr] = req->m_aux_data;
+    }
+    for (uint32_t it_word = 0; it_word != req->m_word_count; ++it_word) {
+        uint32_t space = req->m_maddr.space;
+        uint64_t address = req->m_maddr.address + it_word;
+        uint64_t offset = address & DRAM_INDEX_MASK;
+        uint64_t start_address = address - offset;
         if (req->is_read()) {
             req->m_data = shared_array<uint32_t>(new uint32_t[req->m_word_count]);
         }
-        for (uint32_t it_word = 0; it_word != req->m_word_count; ++it_word) {
-            uint32_t space = req->m_maddr.space;
-            uint64_t address = req->m_maddr.address + it_word;
-            uint64_t offset = address & DRAM_INDEX_MASK;
-            uint64_t start_address = address - offset;
-            if (m_dram->m_memory[space].count(start_address) == 0) {
-                m_dram->m_memory[space][start_address] = shared_array<uint32_t>(new uint32_t[WORDS_IN_DRAM_BLOCK]);
-                for (uint32_t i = 0; i < WORDS_IN_DRAM_BLOCK; ++i) {
-                    /* some initialization (garbage - doesn't matter) */
-                    m_dram->m_memory[space][start_address][i] = i;
-                }
+        if (m_dram->m_memory[space].count(start_address) == 0) {
+            m_dram->m_memory[space][start_address] = shared_array<uint32_t>(new uint32_t[WORDS_IN_DRAM_BLOCK]);
+            for (uint32_t i = 0; i < WORDS_IN_DRAM_BLOCK; ++i) {
+                /* some initialization (garbage - doesn't matter) */
+                m_dram->m_memory[space][start_address][i] = i;
             }
-            if (req->is_read()) {
-                req->m_data[it_word] = m_dram->m_memory[space][start_address][offset];
-            } else {
-                m_dram->m_memory[space][start_address][offset] = req->m_data[it_word];
-            }
+        }
+        if (req->is_read()) {
+            req->m_data[it_word] = m_dram->m_memory[space][start_address][offset];
+        } else {
+            m_dram->m_memory[space][start_address][offset] = req->m_data[it_word];
         }
     }
 }

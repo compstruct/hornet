@@ -1,7 +1,7 @@
 DARIMG=darimg
 DARSIM=darsim
 
-CFG_FILES = privateSharedMSI.cfg privateSharedMESI.cfg
+CFG_FILES = privateSharedMSI.cfg privateSharedMESI.cfg privateSharedLCCFixed100.cfg privateSharedLCCIdeal.cfg privateSharedLCCZeroDelay.cfg
 CFG_NAMES = $(patsubst %.cfg, %, ${CFG_FILES})
 IMG_FILES = $(patsubst %.cfg, %.img, ${CFG_FILES})
 TRACE_FILES = test_serialize.trace test_hit.trace test_share_and_invalidate.trace test_inv_cache.trace random.trace

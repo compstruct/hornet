@@ -17,7 +17,8 @@ using namespace boost;
 /* do not change the order */
 typedef enum {
     REPLACE_LRU = 0,
-    REPLACE_RANDOM = 1
+    REPLACE_RANDOM = 1,
+    REPLACE_CUSTOM /* using memory-specific information */
 } replacementPolicy_t;
 
 typedef struct {
@@ -96,9 +97,10 @@ private:
 class cache {
 public:
     typedef shared_ptr<void> (*helperCopyCoherenceInfo) (shared_ptr<void>);
-    typedef bool (*helperIsHit) (shared_ptr<cacheRequest>, cacheLine&);
+    typedef bool (*helperIsHit) (shared_ptr<cacheRequest>, cacheLine&, const uint64_t&);
     typedef void (*helperReserveLine) (cacheLine&);
-    typedef bool (*helperCanEvictLine) (cacheLine&);
+    typedef bool (*helperCanEvictLine) (cacheLine&, const uint64_t&);
+    typedef uint32_t (*helperReplacementPolicy) (vector<uint32_t>&, cacheLine const*, const uint64_t&, shared_ptr<random_gen> ran);
 
     cache(uint32_t numeric_id, const uint64_t &system_time, 
           shared_ptr<tile_statistics> stats, logger &log, shared_ptr<random_gen> ran, 
@@ -119,6 +121,9 @@ public:
     inline void set_helper_is_hit (helperIsHit fptr) { m_helper_is_hit = fptr; }
     inline void set_helper_reserve_line (helperReserveLine fptr) { m_helper_reserve_line = fptr; }
     inline void set_helper_can_evict_line (helperCanEvictLine fptr) { m_helper_can_evict_line = fptr; }
+    inline void set_helper_replacement_policy (helperReplacementPolicy fptr) { 
+        m_replacement_policy = REPLACE_CUSTOM;
+        m_helper_replacement_policy = fptr; }
 
 private:
     typedef map<uint32_t/*index*/, cacheLine*> cacheTable;
@@ -167,6 +172,7 @@ private:
     helperIsHit m_helper_is_hit;
     helperReserveLine m_helper_reserve_line;
     helperCanEvictLine m_helper_can_evict_line;
+    helperReplacementPolicy m_helper_replacement_policy;
 
     reqTable m_req_table;
     cacheTable m_cache;

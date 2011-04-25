@@ -167,7 +167,8 @@ maximum active threads per core = 2'''
     # memory defaults
     memory_fullname = {
         'privateSharedMSI':'private-shared MSI/MESI',
-        'privateSharedMESI':'private-shared MSI/MESI'
+        'privateSharedMESI':'private-shared MSI/MESI',
+        'privateSharedLCC':'private-shared LCC'
     }
     if memory_fullname.has_key(memory_name) is False:
         print 'Err - memory %s is not supported. must be one of %s'%(memory_name, str(memory_fullname.keys()))
@@ -189,10 +190,12 @@ one-way offchip latency = 150
 dram latency = 50
 dram message header size in words = 4
 maximum requests in flight per dram controller = 256
-bandwidth in words per dram controller = 4''')
+bandwidth in words per dram controller = 4
+address size in bytes = 4''')
     contents = contents + memoryTemplate.substitute(memory_name=memory_fullname[memory_name])
 
     # memory specific defaults
+
     if memory_name in ['privateSharedMSI', 'privateSharedMESI']:
         if memory_name in ['privateSharedMSI']:
             mesitype = 'no'
@@ -222,6 +225,33 @@ read ports in L2 = 2
 write ports in L2 = 1
 replacement policy in L2 = LRU''')
         contents = contents + memorySpecificTemplate.substitute(memory_name=memory_fullname[memory_name], mesi=mesitype)
+
+    if memory_name in ['privateSharedLCC']:
+        memorySpecificTemplate = string.Template('''\
+
+
+[memory::$memory_name]
+timestamp logic = fixed
+words per cache line = 8
+memory access ports for local core = 2
+evict unexpired line and store timestamp in DRAM = no
+use separate VCs for write requests = yes
+default timestamp delta = 100
+shared L2 work table size = 4
+reserved L2 work table size for reads = 2
+total lines in L1 = 256
+associativity in L1 = 2 
+hit test latency in L1 = 2
+read ports in L1 = 2
+write ports in L1 = 1
+replacement policy in L1 = LRU
+total lines in L2 = 4096
+associativity in L2 = 4 
+hit test latency in L2 = 4
+read ports in L2 = 2
+write ports in L2 = 1
+replacement policy in L2 = LRU''')
+        contents = contents + memorySpecificTemplate.substitute(memory_name=memory_fullname[memory_name])
 
     print >>out, contents
     

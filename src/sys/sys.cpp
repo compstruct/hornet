@@ -27,6 +27,7 @@
 #include "memtraceCore.hpp"
 /* memories */
 #include "privateSharedMSI.hpp"
+#include "privateSharedLCC.hpp"
 
 typedef enum {
     CORE_MIPS_MPI = 0,
@@ -172,6 +173,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     shared_ptr<memtraceThreadPool> memtrace_thread_pool(new memtraceThreadPool());
 
     shared_ptr<privateSharedMSIStats> private_shared_msi_stats = shared_ptr<privateSharedMSIStats>();
+    shared_ptr<privateSharedLCCStats> private_shared_lcc_stats = shared_ptr<privateSharedLCCStats>();
 
     shared_ptr<dram> new_dram(new dram ());
 
@@ -321,86 +323,44 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             uint32_t msg_header_size_in_words = read_word(img);
             uint32_t dc_max_requests_in_flight = read_word(img);
             uint32_t bandwidth_in_words_per_cycle = read_word(img);
+            uint32_t address_size_in_bytes = read_word(img);
 
             /* cache configurations */
-            uint32_t words_per_cache_line = 0;
-            uint32_t num_local_core_ports = 0;
-            uint32_t l1_work_table_size= 0;
-            uint32_t l2_work_table_size_shared = 0;
-            uint32_t l2_work_table_size_replies = 0;
-            uint32_t l2_work_table_size_evict = 0;
-            uint32_t l1_total_lines = 0;
-            uint32_t l1_associativity = 0;
-            uint32_t l1_hit_test_latency = 0;
-            uint32_t l1_read_ports = 0;
-            uint32_t l1_write_ports = 0;
-            replacementPolicy_t l1_policy = REPLACE_LRU;
-            uint32_t l2_total_lines = 0;
-            uint32_t l2_associativity = 0;
-            uint32_t l2_hit_test_latency = 0;
-            uint32_t l2_read_ports = 0;
-            uint32_t l2_write_ports = 0;
-            replacementPolicy_t l2_policy = REPLACE_LRU;
-
-            bool msi_mesi_do_exclusive = false;
-
-            switch (mem_type) {
-            case MEM_PRIVATE_SHARED_MSI_MESI:
-                msi_mesi_do_exclusive = read_word(img);
-                break;
-            case MEM_PRIVATE_SHARED_LCC:
-            case MEM_SHARED_SHARED_RA:
-            case MEM_PRIVATE_PRIVATE_MOESI:
-                break;
-            }
-
-            switch (mem_type) {
-            case MEM_PRIVATE_SHARED_MSI_MESI:
-            case MEM_PRIVATE_SHARED_LCC:
-            case MEM_SHARED_SHARED_RA:
-            case MEM_PRIVATE_PRIVATE_MOESI:
-                words_per_cache_line = read_word(img);
-                num_local_core_ports = read_word(img);
-                l1_work_table_size= read_word(img);
-                l2_work_table_size_shared = read_word(img);
-                l2_work_table_size_replies = read_word(img);
-                l2_work_table_size_evict = read_word(img);
-                l1_total_lines = read_word(img);
-                l1_associativity = read_word(img);
-                l1_hit_test_latency = read_word(img);
-                l1_read_ports = read_word(img);
-                l1_write_ports = read_word(img);
-                uint32_t l1_policy_word = read_word(img);
-                l1_policy = static_cast<replacementPolicy_t>(l1_policy_word);
-                l2_total_lines = read_word(img);
-                l2_associativity = read_word(img);
-                l2_hit_test_latency = read_word(img);
-                l2_read_ports = read_word(img);
-                l2_write_ports = read_word(img);
-                uint32_t l2_policy_word = read_word(img);
-                l2_policy = static_cast<replacementPolicy_t>(l2_policy_word);
-                break;
-            }
-
-            /* memory construction */
             shared_ptr<memory> mem = shared_ptr<memory>();
+
             switch (mem_type) {
             case MEM_PRIVATE_SHARED_MSI_MESI:
                 {
+                    privateSharedMSI::privateSharedMSICfg_t cfg;
+                    cfg.use_mesi = read_word(img);
+                    cfg.num_nodes = num_nodes;
+                    cfg.bytes_per_flit = bytes_per_flit;
+                    cfg.address_size_in_bytes = address_size_in_bytes;
+                    cfg.l1_work_table_size= read_word(img);
+                    cfg.l2_work_table_size_shared = read_word(img);
+                    cfg.l2_work_table_size_replies = read_word(img);
+                    cfg.l2_work_table_size_evict = read_word(img);
+                    cfg.l1_replacement_policy = (replacementPolicy_t)read_word(img);
+                    cfg.l2_replacement_policy = (replacementPolicy_t)read_word(img);
+                    cfg.words_per_cache_line = read_word(img);
+                    cfg.num_local_core_ports = read_word(img);
+                    cfg.lines_in_l1 = read_word(img);
+                    cfg.l1_associativity = read_word(img);
+                    cfg.l1_hit_test_latency = read_word(img);
+                    cfg.l1_num_read_ports = read_word(img);
+                    cfg.l1_num_write_ports = read_word(img);
+                    cfg.lines_in_l2 = read_word(img);
+                    cfg.l2_associativity = read_word(img);
+                    cfg.l2_hit_test_latency = read_word(img);
+                    cfg.l2_num_read_ports = read_word(img);
+                    cfg.l2_num_write_ports = read_word(img);
+
                     assert(em_type == EM_NEVER);
                     if (private_shared_msi_stats == shared_ptr<privateSharedMSIStats>()) {
                         private_shared_msi_stats = 
                             shared_ptr<privateSharedMSIStats>(new privateSharedMSIStats(t->get_time()));
                         stats->add_aux_statistics(private_shared_msi_stats);
                     }
-                    privateSharedMSI::privateSharedMSICfg_t cfg = { msi_mesi_do_exclusive, num_nodes, 
-                        bytes_per_flit, words_per_cache_line,
-                        num_local_core_ports, l1_work_table_size, 
-                        l2_work_table_size_shared, l2_work_table_size_replies, l2_work_table_size_evict,
-                        l1_total_lines, l1_associativity, l1_hit_test_latency, l1_read_ports, 
-                        l1_write_ports, l1_policy,
-                        l2_total_lines, l2_associativity, l2_hit_test_latency, l2_read_ports, 
-                        l2_write_ports, l2_policy };
                     shared_ptr<privateSharedMSI> new_mem = 
                         shared_ptr<privateSharedMSI>(new privateSharedMSI(id, t->get_time(), 
                                                                           t->get_statistics(), log, ran, new_cat, cfg));
@@ -411,13 +371,60 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     private_shared_msi_stats->add_per_tile_stats(per_tile_stats);
 
                     mem = new_mem;
+
+                    break;
                 }
-                break;
             case MEM_PRIVATE_SHARED_LCC:
-            case MEM_SHARED_SHARED_RA:
-            case MEM_PRIVATE_PRIVATE_MOESI:
-                assert(false); /* not implemented yet */
-                break;
+                {
+                    privateSharedLCC::privateSharedLCCCfg_t cfg;
+                    cfg.logic = (privateSharedLCC::timestampLogic_t)read_word(img);
+                    cfg.save_timestamp_in_dram = read_word(img);
+                    cfg.use_separate_vc_for_writes = read_word(img);
+                    cfg.default_timestamp_delta = read_word(img); /**/
+                    cfg.num_nodes = num_nodes;
+                    cfg.bytes_per_flit = bytes_per_flit;
+                    cfg.address_size_in_bytes = address_size_in_bytes;
+                    cfg.l2_work_table_size_shared = read_word(img);
+                    cfg.l2_work_table_size_readonly = read_word(img);
+                    cfg.l1_replacement_policy = (privateSharedLCC::_replacementPolicy_t)read_word(img);
+                    cfg.l2_replacement_policy = (privateSharedLCC::_replacementPolicy_t)read_word(img);                 
+                    cfg.words_per_cache_line = read_word(img);
+                    cfg.num_local_core_ports = read_word(img);
+                    cfg.lines_in_l1 = read_word(img);
+                    cfg.l1_associativity = read_word(img);
+                    cfg.l1_hit_test_latency = read_word(img);
+                    cfg.l1_num_read_ports = read_word(img);
+                    cfg.l1_num_write_ports = read_word(img);
+                    cfg.lines_in_l2 = read_word(img);
+                    cfg.l2_associativity = read_word(img);
+                    cfg.l2_hit_test_latency = read_word(img);
+                    cfg.l2_num_read_ports = read_word(img);
+                    cfg.l2_num_write_ports = read_word(img);
+
+                    if (private_shared_lcc_stats == shared_ptr<privateSharedLCCStats>()) {
+                        private_shared_lcc_stats = 
+                            shared_ptr<privateSharedLCCStats>(new privateSharedLCCStats(t->get_time()));
+                        stats->add_aux_statistics(private_shared_lcc_stats);
+                    }
+
+                    shared_ptr<privateSharedLCC> new_mem = 
+                        shared_ptr<privateSharedLCC>(new privateSharedLCC(id, t->get_time(), 
+                                                                          t->get_statistics(), log, ran, new_cat, cfg));
+                    shared_ptr<privateSharedLCCStatsPerTile> per_tile_stats = 
+                        shared_ptr<privateSharedLCCStatsPerTile>(new privateSharedLCCStatsPerTile(id, t->get_time()));
+                    new_mem->set_per_tile_stats(per_tile_stats);
+
+                    private_shared_lcc_stats->add_per_tile_stats(per_tile_stats);
+
+                    mem = new_mem;
+
+                    break;
+                }
+            default:
+                {
+                    throw err_bad_shmem_cfg("not supported memory type");
+                    break;
+                }
             }
 
             /* dram controller set up */

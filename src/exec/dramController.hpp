@@ -20,20 +20,7 @@ using namespace boost;
 typedef enum {
     /* Normal mode */
     DRAM_REQ_READ = 0,
-    DRAM_REQ_WRITE,
-
-    /* EXPERIMENTAL Indirect mode */
-
-    /* In indirect mode, word_count is only used for the performance model.*/
-    /* Actual data is written & read in a shared_ptr<void> pointer.        */
-    /* The first address becomes the only unique key for the data.         */
-
-    /* USE WITH CAUTION                                                    */
-    /* NOTE : Overlaps of indirect data is ignored.                        */
-    /* NOTE : Data is not copied. Better use it only for one cycle         */
-
-    DRAM_REQ_READ_INDIRECT,
-    DRAM_REQ_WRITE_INDIRECT
+    DRAM_REQ_WRITE
 } dramReqType_t;
 
 typedef enum {
@@ -46,17 +33,18 @@ class dramRequest {
 public:
     /* read */
     dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count);
-    /* normal mode - write */
+    /* normal write */
     dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_array<uint32_t> wdata);
-    /* dummy mode - write */
-    dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_ptr<void> wdata);
+    /* extended write */
+    dramRequest(maddr_t maddr, dramReqType_t request_type, 
+                uint32_t word_count, shared_array<uint32_t> wdata, 
+                uint32_t aux_word_size, shared_ptr<void> aux_data);
 
     inline dramReqStatus_t status() { return m_status; }
-    inline const shared_array<uint32_t> read() { assert(m_request_type == DRAM_REQ_READ); return m_data; }
-    inline const shared_ptr<void> read_indirect() { assert(m_request_type == DRAM_REQ_READ_INDIRECT); return m_indirect_data; }
+    inline shared_array<uint32_t> read() { return m_data; }
+    inline shared_ptr<void> read_aux() { return m_aux_data; }
 
-    inline bool is_indirect() { return (m_request_type == DRAM_REQ_READ_INDIRECT || m_request_type == DRAM_REQ_WRITE_INDIRECT); }
-    inline bool is_read() { return (m_request_type == DRAM_REQ_READ || m_request_type == DRAM_REQ_READ_INDIRECT); }
+    inline bool is_read() { return m_request_type == DRAM_REQ_READ; }
     inline maddr_t maddr() { return m_maddr; }
 
     friend class dramController;
@@ -65,9 +53,10 @@ private:
     dramReqType_t m_request_type;
     maddr_t m_maddr;
     uint32_t m_word_count;
+    uint32_t m_aux_word_size;
     dramReqStatus_t m_status;
     shared_array<uint32_t> m_data;
-    shared_ptr<void> m_indirect_data;;
+    shared_ptr<void> m_aux_data;
 
 };
 
@@ -81,10 +70,10 @@ public:
 private:
     typedef map<uint64_t/*start_address*/, shared_array<uint32_t> > memSpace;
     typedef map<uint32_t/*mem space id*/, memSpace> memSpaces;
-    typedef map<maddr_t, shared_ptr<void> > indirectMemSpaces;
+    typedef map<maddr_t, shared_ptr<void> > auxMemSpaces;
 
     memSpaces m_memory;
-    indirectMemSpaces m_indirect_memory;
+    auxMemSpaces m_aux_memory;
 
     mutable recursive_mutex dram_mutex;
 

@@ -457,6 +457,66 @@ def get_memory_cfgs(cfg, core):
     else:
         ret.append(4)
 
+    if cfg.has_option('memory', 'address size in bytes'):
+        ret.append(int(cfg.get('memory', 'address size in bytes')))
+    else:
+        ret.append(4)
+
+    if memory_arch in ['private-shared LCC']:
+        section = 'memory::' + memory_arch
+        timestamp_logic_id = {'fixed':0, 'ideal':1, 'zero-delay':2}
+        if cfg.has_option(section, 'timestamp logic'):
+            answer = cfg.get(section, 'timestamp logic')
+            if answer not in timestamp_logic_id.keys():
+                raise Err('timestamp logic %s not supported (must be one of %s)' % (answer, str(timestamp_logic_id.keys())))
+            else:
+                ret.append(timestamp_logic_id[answer])
+        else:
+            ret.append(timestamp_logic_id['fixed'])
+        if cfg.has_option(section, 'evict unexpired line and store timestamp in DRAM'):
+            answer = cfg.get(section, 'evict unexpired line and store timestamp in DRAM')
+            if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
+                ret.append(1)
+            else:
+                ret.append(0)
+        else:
+            ret.append(0)
+        if cfg.has_option(section, 'use separate VCs for write requests'):
+            answer = cfg.get(section, 'use separate VCs for write requests')
+            if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
+                ret.append(1)
+            else:
+                ret.append(0)
+        else:
+            ret.append(0)
+        if cfg.has_option(section, 'default timestamp delta'):
+            ret.append(int(cfg.get(section, 'default timestamp delta')))
+        else:
+            ret.append(100)
+        if cfg.has_option(section, 'shared L2 work table size'):
+            ret.append(int(cfg.get(section, 'shared L2 work table size')))
+        else:
+            ret.append(4)
+        if cfg.has_option(section, 'reserved L2 work table size for reads'):
+            ret.append(int(cfg.get(section, 'reserved L2 work table size for reads')))
+        else:
+            ret.append(2)
+        for cache_name in ['L1', 'L2']:
+            option_id = {
+                'LRU':0,
+                'random':1,
+                'nearest expiration and LRU':2,
+                'nearest expiration and random':3 }
+            if cfg.has_option(section, 'replacement policy in ' + cache_name):
+                option = cfg.get(section, 'replacement policy in ' + cache_name)
+                if (option_id.has_key(option)):
+                    ret.append(option_id[option])
+                else:
+                    raise Err('bad cache replacement policy name : %s (must be one of %s)' % (option, str(option_id.keys())))
+            else:
+                ret.append(option_id['LRU'])
+
+
     if memory_arch in ['private-shared MSI/MESI']:
         section = 'memory::' + memory_arch
         if cfg.has_option(section, 'use Exclusive state'):
@@ -467,18 +527,6 @@ def get_memory_cfgs(cfg, core):
                 ret.append(0)
         else:
             ret.append(0)
-    # cache configuration (L1L2)
-    if memory_arch in ['private-shared MSI/MESI', 'private-shared LCC', \
-                       'shared-shared RA', 'private-private MOESI']:
-        section = 'memory::' + memory_arch
-        if cfg.has_option(section, 'words per cache line'):
-            ret.append(int(cfg.get(section, 'words per cache line')))
-        else:
-            ret.append(8)
-        if cfg.has_option(section, 'memory access ports for local core'):
-            ret.append(int(cfg.get(section, 'memory access ports for local core')))
-        else:
-            ret.append(2)
         if cfg.has_option(section, 'L1 work table size'):
             ret.append(int(cfg.get(section, 'L1 work table size')))
         else:
@@ -495,6 +543,31 @@ def get_memory_cfgs(cfg, core):
             ret.append(int(cfg.get(section, 'reserved L2 work table size for line eviction')))
         else:
             ret.append(1)
+        for cache_name in ['L1', 'L2']:
+            option_id = {
+                'LRU':0,
+                'random':1}
+            if cfg.has_option(section, 'replacement policy in ' + cache_name):
+                option = cfg.get(section, 'replacement policy in ' + cache_name)
+                if (option_id.has_key(option)):
+                    ret.append(option_id[option])
+                else:
+                    raise Err('bad cache replacement policy name : %s (must be one of %s)' % (option, str(option_id.keys())))
+            else:
+                ret.append(option_id['LRU'])
+
+    # cache configuration (L1L2)
+    if memory_arch in ['private-shared MSI/MESI', 'private-shared LCC', \
+                       'shared-shared RA', 'private-private MOESI']:
+        section = 'memory::' + memory_arch
+        if cfg.has_option(section, 'words per cache line'):
+            ret.append(int(cfg.get(section, 'words per cache line')))
+        else:
+            ret.append(8)
+        if cfg.has_option(section, 'memory access ports for local core'):
+            ret.append(int(cfg.get(section, 'memory access ports for local core')))
+        else:
+            ret.append(2)
         for cache_name in ['L1', 'L2']:
             if cfg.has_option(section, 'total lines in ' + cache_name):
                 ret.append(int(cfg.get(section, 'total lines in ' + cache_name)))
@@ -525,17 +598,6 @@ def get_memory_cfgs(cfg, core):
                 ret.append(int(cfg.get(section, 'write ports in ' + cache_name)))
             else:
                 ret.append(1)
-            option_id = {
-                'LRU':0,
-                'random':1}
-            if cfg.has_option(section, 'replacement policy in ' + cache_name):
-                option = cfg.get(section, 'replacement policy in ' + cache_name)
-                if (option_id.has_key(option)):
-                    ret.append(option_id[option])
-                else:
-                    raise Err('bad cache replacement policy name : %s (must be one of %s)' % (option, str(option_id.keys())))
-            else:
-                ret.append(option_id['LRU'])
     return ret
 
 def new_system_config(cfg, verbose=False):

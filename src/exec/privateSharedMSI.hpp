@@ -17,6 +17,7 @@ public:
         uint32_t num_nodes;
         uint32_t bytes_per_flit;
         uint32_t words_per_cache_line;
+        uint32_t address_size_in_bytes;
         uint32_t num_local_core_ports;
         uint32_t l1_work_table_size;
         uint32_t l2_work_table_size_shared;

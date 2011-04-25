@@ -106,9 +106,9 @@ void privateSharedMSIStats::print_stats(ostream &out) {
 
         char str[1024];
         sprintf(str, "[Private-shared-MSI/MESI %4d ] L1hit%%: %.2f read%%: %.2f write%%: %.2f "
-                     "L2hit%%: %.2f inv%%: %.2f #targets/inv: %.2f avg-inv-latency: %.2f",
+                     "L2hit%%: %.2f inv%%: %.2f #targets/inv: %.2f avg-inv-latency: %.2f CAThit%%: %.2f",
                      id, 100.0*l1_rate, 100.0*l1_read_rate, 100.0*l1_write_rate, 
-                     100.0*l2_rate, (double)invs/l2*100.0, avg_inv_caches, avg_inv_penalty);
+                     100.0*l2_rate, (double)invs/l2*100.0, avg_inv_caches, avg_inv_penalty, cat_rate);
 
         out << str << endl;
 
@@ -118,14 +118,15 @@ void privateSharedMSIStats::print_stats(ostream &out) {
 
     char str[1024];
     sprintf(str, "[Summary: Private-shared-MSI/MESI ] L1hit%%: %.2f read%%: %.2f write%%: %.2f "
-            "L2hit%%: %.2f inv%%: %.2f #targets/inv: %.2f avg-inv-penalty: %.2f",
+            "L2hit%%: %.2f inv%%: %.2f #targets/inv: %.2f avg-inv-penalty: %.2f CAThit%%: %.2f",
             100.0*total_l1_hits/total_l1,
             100.0*total_l1_read_hits/total_l1_reads,
             100.0*total_l1_write_hits/total_l1_writes,
             100.0*total_l2_hits/total_l2,
             (double)total_invs/total_l2*100.0,
             total_inv_caches/total_invs, 
-            total_inv_penalty/total_invs);
+            total_inv_penalty/total_invs,
+            total_cat_hits/total_cat_lookups);
 
     out << str << endl;
 

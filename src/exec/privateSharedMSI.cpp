@@ -7,7 +7,6 @@
 #include <boost/bind.hpp>
 
 /* 64-bit address */
-#define ADDRESS_SIZE 8
 
 #define DEBUG
 #undef DEBUG
@@ -32,7 +31,7 @@ static shared_ptr<void> directory_copy_coherence_info(shared_ptr<void> source) {
     return ret;
 }
 
-static bool cache_is_hit(shared_ptr<cacheRequest> req, cacheLine& line) { 
+static bool cache_is_hit(shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
     shared_ptr<privateSharedMSI::cacheCoherenceInfo> info = 
         static_pointer_cast<privateSharedMSI::cacheCoherenceInfo>(line.coherence_info);
     switch (req->request_type()) {
@@ -69,13 +68,13 @@ static void cache_reserve_line(cacheLine &line) {
     return; 
 }
 
-static bool cache_can_evict_line(cacheLine &line) {
+static bool cache_can_evict_line(cacheLine &line, const uint64_t &system_time) {
     shared_ptr<privateSharedMSI::cacheCoherenceInfo> info = 
         static_pointer_cast<privateSharedMSI::cacheCoherenceInfo>(line.coherence_info);
     return info->status != privateSharedMSI::PENDING;
 }
 
-static bool directory_can_evict_line(cacheLine &line) { 
+static bool directory_can_evict_line(cacheLine &line, const uint64_t &syste_time) { 
     shared_ptr<privateSharedMSI::directoryCoherenceInfo> info = 
         static_pointer_cast<privateSharedMSI::directoryCoherenceInfo>(line.coherence_info);
     return info->directory.empty();
@@ -116,10 +115,12 @@ privateSharedMSI::privateSharedMSI(uint32_t id,
         throw err_bad_shmem_cfg("privateSharedMSI/MESI : L1 work table must be non-zero.");
 
     m_l1 = new cache(id, t, st, l, r, 
-                     cfg.words_per_cache_line, cfg.lines_in_l1, cfg.l1_associativity, cfg.l1_replacement_policy, 
+                     cfg.words_per_cache_line, cfg.lines_in_l1, cfg.l1_associativity, 
+                     cfg.l1_replacement_policy, 
                      cfg.l1_hit_test_latency, cfg.l1_num_read_ports, cfg.l1_num_write_ports);
     m_l2 = new cache(id, t, st, l, r, 
-                     cfg.words_per_cache_line, cfg.lines_in_l2, cfg.l2_associativity, cfg.l2_replacement_policy, 
+                     cfg.words_per_cache_line, cfg.lines_in_l2, cfg.l2_associativity, 
+                     cfg.l2_replacement_policy,
                      cfg.l2_hit_test_latency, cfg.l2_num_read_ports, cfg.l2_num_write_ports);
 
     m_l1->set_helper_copy_coherence_info(&cache_copy_coherence_info);
@@ -155,16 +156,20 @@ void privateSharedMSI::request(shared_ptr<memoryRequest> req) {
 
 void privateSharedMSI::tick_positive_edge() {
     /* schedule and make requests */
-#if 0
+#if 1
     static uint64_t last_served[64];
     if (system_time % 100000 == 0) {
         cerr << "[MEM " << m_id << " @ " << system_time << " ]";
+        cout << "[MEM " << m_id << " @ " << system_time << " ]";
         if (stats_enabled()) {
             cerr << " total served : " << stats()->total_served();
             cerr << " since last : " << stats()->total_served() - last_served[m_id];
+            cout << " total served : " << stats()->total_served();
+            cout << " since last : " << stats()->total_served() - last_served[m_id];
             last_served[m_id] = stats()->total_served();
         }
         cerr << " in L1 work table : " << m_l1_work_table.size() << " in L2 work table : " << m_l2_work_table.size() << endl;
+        cout << " in L1 work table : " << m_l1_work_table.size() << " in L2 work table : " << m_l2_work_table.size() << endl;
     }
 #endif
 
@@ -274,7 +279,7 @@ void privateSharedMSI::l1_work_table_update() {
                         new_msg->src = m_id;
                         new_msg->dst = dir_home;
                         new_msg->type = MSG_CACHE_REP;
-                        new_msg->flit_count = get_flit_count(1 + ADDRESS_SIZE + data_size);
+                        new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + data_size);
                         new_msg->content = cache_rep;
                         entry->net_msg_to_send = new_msg;
                         m_to_network_schedule_q[MSG_CACHE_REP].push_back(new_msg);
@@ -296,9 +301,9 @@ void privateSharedMSI::l1_work_table_update() {
                         }
                     }
                     shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
-                    uint32_t offset = core_req->maddr().address % m_cfg.words_per_cache_line / 4;
+                    uint32_t word_offset = (core_req->maddr().address / 4 )  % m_cfg.words_per_cache_line;
                     for (uint32_t i = 0; i < core_req->word_count(); ++i) {
-                        ret[i] = line->data[i + offset];
+                        ret[i] = line->data[i + word_offset];
                     }
                     set_req_data(core_req, ret);
                     set_req_status(core_req, REQ_DONE);
@@ -347,7 +352,7 @@ void privateSharedMSI::l1_work_table_update() {
                                 new_msg->src = m_id;
                                 new_msg->dst = dir_home;
                                 new_msg->type = MSG_CACHE_REP;
-                                new_msg->flit_count = get_flit_count(1 + ADDRESS_SIZE + data_size);
+                                new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + data_size);
                                 new_msg->content = cache_rep;
                                 entry->net_msg_to_send = new_msg;
                                 m_to_network_schedule_q[MSG_CACHE_REP].push_back(new_msg);
@@ -356,9 +361,12 @@ void privateSharedMSI::l1_work_table_update() {
                         } else {
                             if (cat_req->status() == CAT_REQ_DONE) {
                                 uint32_t dir_home = cat_req->home();
+                                if (stats_enabled()) {
+                                    stats()->did_read_cat(dir_home ==  m_id);
+                                }
                                 cache_req = shared_ptr<coherenceMsg>(new coherenceMsg);
                                 cache_req->sender = m_id;
-                                cache_req->receiver = cat_req->home();
+                                cache_req->receiver = dir_home;
                                 cache_req->type = core_req->is_read() ? SH_REQ : EX_REQ;
                                 cache_req->maddr = start_maddr;
                                 cache_req->data = shared_array<uint32_t>();
@@ -374,7 +382,7 @@ void privateSharedMSI::l1_work_table_update() {
                                     new_msg->src = m_id;
                                     new_msg->dst = dir_home;
                                     new_msg->type = MSG_CACHE_REQ;
-                                    new_msg->flit_count = get_flit_count(1 + ADDRESS_SIZE);
+                                    new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
                                     new_msg->content = cache_req;
                                     entry->net_msg_to_send = new_msg;
                                     m_to_network_schedule_q[MSG_CACHE_REQ].push_back(new_msg);
@@ -415,7 +423,7 @@ void privateSharedMSI::l1_work_table_update() {
                 new_msg->src = m_id;
                 new_msg->dst = dir_home;
                 new_msg->type = MSG_CACHE_REP;
-                new_msg->flit_count = get_flit_count(1 + ADDRESS_SIZE);
+                new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
                 new_msg->content = cache_rep;
                 entry->net_msg_to_send = new_msg;
                 m_to_network_schedule_q[MSG_CACHE_REP].push_back(new_msg);
@@ -437,7 +445,7 @@ void privateSharedMSI::l1_work_table_update() {
                     m_l1_work_table.erase(it_addr++);
                     continue;
                 } else {
-                    /* either a victim was evicted, or a current shared line is invalidated. */
+                    /* either a victim was evicted, or a current SHARED line is invalidated. */
                     mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] has sent a cache reply to directory "
                         << cache_rep->receiver << " for address " << cache_rep->maddr
                         << " (evicted)." << endl;
@@ -447,6 +455,9 @@ void privateSharedMSI::l1_work_table_update() {
                             dir_home = cat_req->home();
                         } else {
                             dir_home = line_info->directory_home;
+                        }
+                        if (!(line && line->valid) && stats_enabled()) {
+                            stats()->did_read_cat(dir_home == m_id);
                         }
                         cache_req = shared_ptr<coherenceMsg>(new coherenceMsg);
                         cache_req->sender = m_id;
@@ -464,7 +475,7 @@ void privateSharedMSI::l1_work_table_update() {
                             new_msg->src = m_id;
                             new_msg->dst = dir_home;
                             new_msg->type = MSG_CACHE_REQ;
-                            new_msg->flit_count = get_flit_count(1 + ADDRESS_SIZE);
+                            new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
                             new_msg->content = cache_req;
                             entry->net_msg_to_send = new_msg;
                             m_to_network_schedule_q[MSG_CACHE_REQ].push_back(new_msg);
@@ -488,9 +499,12 @@ void privateSharedMSI::l1_work_table_update() {
         } else if (entry->status == _L1_WORK_READ_CAT) {
             if (cat_req->status() == CAT_REQ_DONE) {
                 uint32_t dir_home = cat_req->home();
+                if (stats_enabled()) {
+                    stats()->did_read_cat(dir_home == m_id);
+                }
                 cache_req = shared_ptr<coherenceMsg>(new coherenceMsg);
                 cache_req->sender = m_id;
-                cache_req->receiver = cat_req->home();
+                cache_req->receiver = dir_home;
                 cache_req->type = core_req->is_read() ? SH_REQ : EX_REQ;
                 cache_req->maddr = start_maddr;
                 cache_req->data = shared_array<uint32_t>();
@@ -504,7 +518,7 @@ void privateSharedMSI::l1_work_table_update() {
                     new_msg->src = m_id;
                     new_msg->dst = dir_home;
                     new_msg->type = MSG_CACHE_REQ;
-                    new_msg->flit_count = get_flit_count(1 + ADDRESS_SIZE);
+                    new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
                     new_msg->content = cache_req;
                     entry->net_msg_to_send = new_msg;
                     m_to_network_schedule_q[MSG_CACHE_REQ].push_back(new_msg);
@@ -562,9 +576,9 @@ void privateSharedMSI::l1_work_table_update() {
                 }
             }
             shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
-            uint32_t offset = core_req->maddr().address % m_cfg.words_per_cache_line / 4;
+            uint32_t word_offset = (core_req->maddr().address / 4 )  % m_cfg.words_per_cache_line;
             for (uint32_t i = 0; i < core_req->word_count(); ++i) {
-                ret[i] = line->data[i + offset];
+                ret[i] = line->data[i + word_offset];
             }
             set_req_data(core_req, ret);
             set_req_status(core_req, REQ_DONE);
@@ -787,7 +801,7 @@ void privateSharedMSI::l2_work_table_update() {
                                 entry->net_msg_to_send->src = m_id;
                                 entry->net_msg_to_send->dst = m_dram_controller_location;
                                 entry->net_msg_to_send->type = MSG_DRAM_REQ;
-                                entry->net_msg_to_send->flit_count = get_flit_count (1 + ADDRESS_SIZE + m_cfg.words_per_cache_line * 4);
+                                entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
                                 entry->net_msg_to_send->content = dram_req;
                                 m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
                             }
@@ -808,7 +822,7 @@ void privateSharedMSI::l2_work_table_update() {
                                 entry->net_msg_to_send->src = m_id;
                                 entry->net_msg_to_send->dst = m_dram_controller_location;
                                 entry->net_msg_to_send->type = MSG_DRAM_REQ;
-                                entry->net_msg_to_send->flit_count = get_flit_count (1 + ADDRESS_SIZE);
+                                entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes);
                                 entry->net_msg_to_send->content = dram_req;
                                 m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
                             }
@@ -891,7 +905,7 @@ void privateSharedMSI::l2_work_table_update() {
                         new_msg->type = MSG_DIRECTORY_REQ_REP;
                         new_msg->src = m_id;
                         new_msg->dst = dir_req->receiver;
-                        new_msg->flit_count = get_flit_count(1 + ADDRESS_SIZE);
+                        new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
                         new_msg->content = dir_req;
                         entry->net_msg_to_send = new_msg;
                     }
@@ -959,10 +973,15 @@ void privateSharedMSI::l2_work_table_update() {
                     entry->dir_reqs.erase(entry->dir_reqs.begin());
 
                 } else {
-#if 0
+#if 1
                     if (++dir_req->waited > 10000) {
                         cerr << "[DIRECTORY " << m_id << " @ " << system_time << " ] cannot send a directory request "
                                   << "to " << dir_req->receiver << " for " << dir_req->maddr;
+                        cout << "[DIRECTORY " << m_id << " @ " << system_time << " ] cannot send a directory request "
+                                  << "to " << dir_req->receiver << " for " << dir_req->maddr;
+                    }
+                    if (dir_req->waited > 10100) {
+                        throw err_bad_shmem_cfg("seems like a deadlock");
                     }
 #endif
 
@@ -979,7 +998,7 @@ void privateSharedMSI::l2_work_table_update() {
                         new_msg->type = MSG_DIRECTORY_REQ_REP;
                         new_msg->src = m_id;
                         new_msg->dst = dir_req->receiver;
-                        new_msg->flit_count = get_flit_count(1 + ADDRESS_SIZE);
+                        new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
                         new_msg->content = dir_req;
                         entry->net_msg_to_send = new_msg;
                     }
@@ -1027,7 +1046,7 @@ void privateSharedMSI::l2_work_table_update() {
                     entry->net_msg_to_send->type = MSG_DIRECTORY_REQ_REP;
                     entry->net_msg_to_send->src = m_id;
                     entry->net_msg_to_send->dst = sender;
-                    entry->net_msg_to_send->flit_count = get_flit_count(1 + ADDRESS_SIZE + m_cfg.words_per_cache_line * 4);
+                    entry->net_msg_to_send->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
                     entry->net_msg_to_send->content = dir_rep;
                     m_to_network_schedule_q[MSG_DIRECTORY_REQ_REP].push_back(entry->net_msg_to_send);
                     entry->status = _L2_WORK_SEND_DIRECTORY_REP;
@@ -1054,7 +1073,7 @@ void privateSharedMSI::l2_work_table_update() {
                             entry->net_msg_to_send->src = m_id;
                             entry->net_msg_to_send->dst = m_dram_controller_location;
                             entry->net_msg_to_send->type = MSG_DRAM_REQ;
-                            entry->net_msg_to_send->flit_count = get_flit_count (1 + ADDRESS_SIZE + m_cfg.words_per_cache_line * 4);
+                            entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
                             entry->net_msg_to_send->content = dram_req;
                             m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
                         }
@@ -1121,7 +1140,7 @@ void privateSharedMSI::l2_work_table_update() {
                     entry->net_msg_to_send->src = m_id;
                     entry->net_msg_to_send->dst = m_dram_controller_location;
                     entry->net_msg_to_send->type = MSG_DRAM_REQ;
-                    entry->net_msg_to_send->flit_count = get_flit_count (1 + ADDRESS_SIZE);
+                    entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes);
                     entry->net_msg_to_send->content = dram_req;
                     m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
                 }
@@ -1226,7 +1245,7 @@ void privateSharedMSI::dram_work_table_update() {
                         new_msg->src = m_id;
                         new_msg->dst = entry->dram_req->sender;
                         uint32_t data_size = m_cfg.words_per_cache_line * 4;
-                        new_msg->flit_count = get_flit_count(1 + ADDRESS_SIZE + data_size);
+                        new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + data_size);
                         new_msg->content = entry->dram_rep;
                         entry->net_msg_to_send = new_msg;
                     }
@@ -1261,13 +1280,16 @@ void privateSharedMSI::accept_incoming_messages() {
         } else {
 
             /* for debugging only - erase later */
-#if 0
+#if 1
             if (++cc_msg->waited > 10000) {
                 cerr << "[NET " << m_id << " @ " << system_time << " ] cannot receive a directory ";
+                cout << "[NET " << m_id << " @ " << system_time << " ] cannot receive a directory ";
                 if (cc_msg->type == SH_REP || cc_msg->type == EX_REP) {
                     cerr << "reply (";
+                    cout << "reply (";
                 } else {
                     cerr << "request (";
+                    cout << "request (";
                 } 
                 cerr << cc_msg->type 
                     << ") for " << cc_msg->maddr  
@@ -1275,9 +1297,14 @@ void privateSharedMSI::accept_incoming_messages() {
                     << " (table:size " << m_l1_work_table.size() << " ) ";
                 if (m_l1_work_table.count(cc_msg->maddr)) {
                     cerr << "existing entry state : " << m_l1_work_table[cc_msg->maddr]->status << endl;
+                    cout << "existing entry state : " << m_l1_work_table[cc_msg->maddr]->status << endl;
                 } else {
                     cerr << "table full" << endl;
+                    cout << "table full" << endl;
                 }
+            }
+            if (cc_msg->waited > 10100) {
+                throw err_bad_shmem_cfg("seems like a deadlock");
             }
 #endif
 
@@ -1310,17 +1337,26 @@ void privateSharedMSI::accept_incoming_messages() {
         } else {
 
             /* erase later */
-#if 0
+#if 1
             if (++cc_msg->waited > 10000) {
                 cerr << "[NET " << m_id << " @ " << system_time << " ] cannot receive a cache req (" << cc_msg->type 
                     << ") for " << cc_msg->maddr  
                     << " from " << msg->src << " cannot get in"  
                     << " (table:size " << m_l2_work_table.size() << " ) ";
+                cout << "[NET " << m_id << " @ " << system_time << " ] cannot receive a cache req (" << cc_msg->type 
+                    << ") for " << cc_msg->maddr  
+                    << " from " << msg->src << " cannot get in"  
+                    << " (table:size " << m_l2_work_table.size() << " ) ";
                 if (m_l2_work_table.count(cc_msg->maddr)) {
                     cerr << "existing entry state : " << m_l2_work_table[cc_msg->maddr]->status << endl;
+                    cout << "existing entry state : " << m_l2_work_table[cc_msg->maddr]->status << endl;
                 } else {
                     cerr << "table full" << endl;
+                    cout << "table full" << endl;
                 }
+            }
+            if (cc_msg->waited > 10100) {
+                throw err_bad_shmem_cfg("seems like a deadlock");
             }
 #endif
 
@@ -1341,17 +1377,26 @@ void privateSharedMSI::accept_incoming_messages() {
         } else {
 
             /* erase later */
-#if 0
+#if 1
             if (++cc_msg->waited > 10000) {
                 cerr << "[NET " << m_id << " @ " << system_time << " ] cannot receive a cache rep (" << cc_msg->type 
                     << ") for " << cc_msg->maddr  
                     << " from " << msg->src << " cannot get in"  
                     << " (table:size " << m_l2_work_table.size() << " ) ";
+                cout << "[NET " << m_id << " @ " << system_time << " ] cannot receive a cache rep (" << cc_msg->type 
+                    << ") for " << cc_msg->maddr  
+                    << " from " << msg->src << " cannot get in"  
+                    << " (table:size " << m_l2_work_table.size() << " ) ";
                 if (m_l2_work_table.count(cc_msg->maddr)) {
                     cerr << "existing entry state : " << m_l2_work_table[cc_msg->maddr]->status << endl;
+                    cout << "existing entry state : " << m_l2_work_table[cc_msg->maddr]->status << endl;
                 } else {
                     cerr << "table full" << endl;
+                    cout << "table full" << endl;
                 }
+            }
+            if (cc_msg->waited > 10100) {
+                throw err_bad_shmem_cfg("seems like a deadlock");
             }
 #endif
 
@@ -1457,8 +1502,12 @@ void privateSharedMSI::schedule_requests() {
             maddr_t start_maddr = msg->maddr;
             if (m_l1_work_table.count(start_maddr)) {
                 /* discard this directory request if currency core request gets or got a miss */
-                if (m_l1_work_table[start_maddr]->status != _L1_WORK_READ_L1) {
+                if ((m_l1_work_table[start_maddr]->status != _L1_WORK_READ_L1) &&
+                    !(m_l1_work_table[start_maddr]->dir_rep))
+                {
                     msg->did_win_last_arbitration = true; /* will be discarded from the network queue */
+                    mh_log(4) << "[L1 " << m_id  << " @ " << system_time << " ] discarded a directory request (" << msg->type 
+                        << ") for address " << msg->maddr << " (state: " << m_l1_work_table[start_maddr]->status << " ) " << endl;
                 }
             } else if (m_l1_work_table_vacancy) {
                 shared_ptr<toL1Entry> new_entry(new toL1Entry);
@@ -1522,7 +1571,7 @@ void privateSharedMSI::schedule_requests() {
             new_entry->did_miss_on_first = false;
             new_entry->cache_rep = msg;
 
-            shared_ptr<cacheRequest> l2_req(new cacheRequest(msg->maddr, CACHE_REQ_READ));
+            shared_ptr<cacheRequest> l2_req(new cacheRequest(msg->maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
             l2_req->set_reserve(true);
             new_entry->l2_req = l2_req;
 
@@ -1547,7 +1596,7 @@ void privateSharedMSI::schedule_requests() {
             new_entry->did_miss_on_first = false;
             new_entry->cache_rep = msg;
 
-            shared_ptr<cacheRequest> l2_req(new cacheRequest(msg->maddr, CACHE_REQ_READ));
+            shared_ptr<cacheRequest> l2_req(new cacheRequest(msg->maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
             l2_req->set_reserve(true);
             new_entry->l2_req = l2_req;
 
@@ -1585,7 +1634,7 @@ void privateSharedMSI::schedule_requests() {
             new_entry->did_miss_on_first = false;
             new_entry->cache_req = msg;
 
-            shared_ptr<cacheRequest> l2_req(new cacheRequest(msg->maddr, CACHE_REQ_READ));
+            shared_ptr<cacheRequest> l2_req(new cacheRequest(msg->maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
             l2_req->set_reserve(false); /* if it misses, no need to bring the line in */
             new_entry->l2_req = l2_req;
 
@@ -1608,7 +1657,7 @@ void privateSharedMSI::schedule_requests() {
             new_entry->status = _L2_WORK_READ_L2;
             new_entry->cache_req = msg;
 
-            shared_ptr<cacheRequest> l2_req(new cacheRequest(msg->maddr, CACHE_REQ_READ));
+            shared_ptr<cacheRequest> l2_req(new cacheRequest(msg->maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
             l2_req->set_reserve(true);
             new_entry->l2_req = l2_req;
 

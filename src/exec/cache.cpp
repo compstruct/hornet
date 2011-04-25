@@ -33,7 +33,8 @@ cache::cache(uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, log
     m_id(id), system_time(t), stats(st), log(l), ran(r), m_words_per_line(words_per_line), m_total_lines(total_lines),
     m_associativity(associativity), m_replacement_policy(replacement_policy), m_hit_test_latency(hit_test_latency),
     m_available_read_ports(num_read_ports), m_available_write_ports(num_write_ports),
-    m_helper_copy_coherence_info(NULL), m_helper_is_hit(NULL), m_helper_reserve_line(NULL), m_helper_can_evict_line(NULL)
+    m_helper_copy_coherence_info(NULL), m_helper_is_hit(NULL), m_helper_reserve_line(NULL), m_helper_can_evict_line(NULL),
+    m_helper_replacement_policy(NULL)
 { 
     mh_assert(m_associativity > 0);
     mh_assert(m_words_per_line > 0);
@@ -142,7 +143,7 @@ void cache::tick_positive_edge() {
                         (line.valid && /* need to be valid (otherwise, the line is still waiting for data or will be invalidated */
                                (!m_helper_is_hit ||  /* if it doesn't care coherency, it's a hit here */
                                 !line.coherence_info ||  /* if it has no coherence information, it's regarded a hit too */
-                                (*m_helper_is_hit)(req, line) /* otherwise the helper should say it's a hit */
+                                (*m_helper_is_hit)(req, line, system_time) /* otherwise the helper should say it's a hit */
                                ));
 
                     if (hit) {
@@ -282,13 +283,18 @@ void cache::tick_positive_edge() {
                 case REPLACE_LRU:
                     victim_way = lru_way;
                     break;
+                case REPLACE_CUSTOM:
+                    mh_assert(m_helper_replacement_policy);
+                    victim_way = (*m_helper_replacement_policy)(evictables, m_cache[idx], system_time, ran);
+                    break;
                 default:
                     break;
                 }
                 cacheLine &line = m_cache[idx][victim_way];
                 req->m_victim_line_copy = copy_cache_line(line);
 
-                if (m_helper_can_evict_line && (*m_helper_can_evict_line)(line)) {
+                if (!m_helper_can_evict_line ||
+                    (m_helper_can_evict_line && (*m_helper_can_evict_line)(line, system_time))) {
                     /* if we can evict right now */
                     req->m_line_copy = copy_cache_line(line);
                     req->m_line_copy->start_maddr = start_maddr;
