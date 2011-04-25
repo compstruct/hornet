@@ -7,7 +7,7 @@
 #include <boost/bind.hpp>
 
 #define TIMESTAMP_WORDS 2
-#define TIMESTAMP_DELTA_MAX 15000
+#define TIMESTAMP_DELTA_MAX 4048 
 
 #define DEBUG
 #undef DEBUG
