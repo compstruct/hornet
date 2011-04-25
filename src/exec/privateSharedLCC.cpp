@@ -196,9 +196,6 @@ privateSharedLCC::privateSharedLCC(uint32_t id,
         m_l2->set_helper_can_evict_line(&l2_can_evict_line_inclusive);
     }
 
-    if (stats_enabled() && m_cfg.logic == TIMESTAMP_IDEAL) {
-        stats()->record_ideal_timestamp();
-    }
 }
 
 privateSharedLCC::~privateSharedLCC() {
@@ -286,6 +283,7 @@ void privateSharedLCC::l1_work_table_update() {
         maddr_t start_maddr = it_addr->first;
         shared_ptr<toL1Entry> entry = it_addr->second;
 
+//        if (system_time > 137515) 
 //        cerr << "doing something for l1 " << m_id << " @ " << system_time << " for " << start_maddr << " state " << entry->status << endl;
         shared_ptr<memoryRequest> core_req = entry->core_req;
         shared_ptr<cacheRequest> l1_req = entry->l1_req;
@@ -527,7 +525,8 @@ void privateSharedLCC::l2_work_table_update() {
     for (toL2Table::iterator it_addr = m_l2_work_table.begin(); it_addr != m_l2_work_table.end(); ) {
         maddr_t start_maddr = it_addr->first;
         shared_ptr<toL2Entry> entry = it_addr->second;
-//        cerr << "doing something for l2 " << m_id << " @ " << system_time << " for " << start_maddr << " state " << entry->status << endl;
+//        if (system_time > 137515)
+//       cerr << "doing something for l2 " << m_id << " @ " << system_time << " for " << start_maddr << " state " << entry->status << endl;
 
         shared_ptr<cacheRequest> l2_req = entry->l2_req;
         shared_ptr<cacheLine> line = l2_req ? l2_req->line_copy() : shared_ptr<cacheLine>();
@@ -561,7 +560,11 @@ void privateSharedLCC::l2_work_table_update() {
                             line_info->first_read_time_since_last_expiration = UINT64_MAX;
                         }
                         mh_log(4) << "[LCC " << m_id << " @ " << system_time << " ] has invalidated all shared lines for "
-                                  << start_maddr << " due to a write." << endl;
+                                  << start_maddr << " due to a write." << " firt read time since last expiration : " 
+                                  << hex << line_info->first_read_time_since_last_expiration << dec << endl;
+                    }
+                    if (m_cfg.logic == TIMESTAMP_ZERO_DELAY) {
+                        line_info->timestamp_iter = 0;
                     }
                 } else if (line_info->synched_expiration_time) {
                     if (line_info->first_read_time_since_last_expiration == UINT64_MAX) {
@@ -572,7 +575,9 @@ void privateSharedLCC::l2_work_table_update() {
                     /* new timestamp */
                     switch (m_cfg.logic) {
                     case TIMESTAMP_FIXED:
-                        line_info->expiration_time = system_time + m_cfg.default_timestamp_delta;
+                        if (!entry->write_requests_waiting) {
+                            line_info->expiration_time = system_time + m_cfg.default_timestamp_delta;
+                        }
                         break;
                     case TIMESTAMP_ZERO_DELAY:
                         while ((line_info->timestamp_iter < line_info->timestamp_iter_record) &&
@@ -702,6 +707,7 @@ void privateSharedLCC::l2_work_table_update() {
                     if (m_cfg.logic == TIMESTAMP_ZERO_DELAY) {
                         line_info->timestamp_delta -= line_info->expiration_time - system_time;
                         line_info->timestamp_iter_record = line_info->timestamp_iter;
+                        line_info->timestamp_iter = 0;
                     }
                 } else if (victim && (victim->dirty || m_cfg.save_timestamp_in_dram)) {
                     dram_req = shared_ptr<dramMsg>(new dramMsg);
@@ -966,7 +972,8 @@ void privateSharedLCC::l2_work_table_update() {
                                 line_info->first_read_time_since_last_expiration = UINT64_MAX;
                             }
                             mh_log(4) << "[LCC " << m_id << " @ " << system_time << " ] has invalidated all shared lines for "
-                                      << start_maddr << " due to a write." << endl;
+                                << start_maddr << " due to a write." << " firt read time since last expiration : " 
+                                << hex << line_info->first_read_time_since_last_expiration << dec << endl;
                         }
                         uint32_t word_offset = (lcc_write_req->maddr.address / 4 ) % m_cfg.words_per_cache_line;
                         for (uint32_t i = 0; i < lcc_write_req->word_count; ++i) {
@@ -980,7 +987,9 @@ void privateSharedLCC::l2_work_table_update() {
                         } else {
                             switch (m_cfg.logic) {
                             case TIMESTAMP_FIXED:
-                                line_info->expiration_time = system_time + m_cfg.default_timestamp_delta;
+                                if (!entry->write_requests_waiting) {
+                                    line_info->expiration_time = system_time + m_cfg.default_timestamp_delta;
+                                }
                                 break;
                             case TIMESTAMP_ZERO_DELAY:
                                 while ((line_info->timestamp_iter < line_info->timestamp_iter_record) &&
@@ -1100,6 +1109,7 @@ void privateSharedLCC::l2_work_table_update() {
                     }
                     entry->lcc_read_req = shared_ptr<coherenceMsg>();
                 } else {
+                    entry->accept_read_requests = false; /* enable when it comes back */
                     msg_to_send = shared_ptr<message_t>(new message_t);
                     msg_to_send->type = MSG_LCC_REP;
                     msg_to_send->src = m_id;
@@ -1149,6 +1159,7 @@ void privateSharedLCC::l2_work_table_update() {
                     }
                     entry->lcc_read_req = shared_ptr<coherenceMsg>();
                 } else {
+                    entry->accept_read_requests = false; /* enable when it comes back */
                     msg_to_send = shared_ptr<message_t>(new message_t);
                     msg_to_send->type = MSG_LCC_REP;
                     msg_to_send->src = m_id;
@@ -1185,6 +1196,9 @@ void privateSharedLCC::l2_work_table_update() {
                 }
                 entry->lcc_read_req = shared_ptr<coherenceMsg>();
                 entry->status = _L2_WORK_WAIT_TIMESTAMP;
+                entry->accept_read_requests = true;
+            } else {
+                m_to_network_schedule_q[MSG_LCC_REP].push_back(msg_to_send);
             }
             ++it_addr;
             continue;
@@ -1199,6 +1213,9 @@ void privateSharedLCC::l2_work_table_update() {
                 }
                 entry->lcc_read_req = shared_ptr<coherenceMsg>();
                 entry->status = _L2_WORK_WAIT_TIMESTAMP_AFTER_DRAM_FEED;
+                entry->accept_read_requests = true;
+            } else {
+                m_to_network_schedule_q[MSG_LCC_REP].push_back(msg_to_send);
             }
             ++it_addr;
             continue;
@@ -1240,6 +1257,7 @@ void privateSharedLCC::l2_work_table_update() {
                 m_l2_work_table.erase(it_addr++);
                 continue;
             } else {
+                m_to_network_schedule_q[MSG_LCC_REP].push_back(msg_to_send);
                 ++it_addr;
                 continue;
             }
@@ -1474,53 +1492,6 @@ void privateSharedLCC::schedule_requests() {
 
     }
 
-    random_shuffle(m_to_l2_read_req_schedule_q.begin(), m_to_l2_read_req_schedule_q.end(), rr_fn);
-    while (m_to_l2_read_req_schedule_q.size()) {
-        shared_ptr<coherenceMsg> msg = m_to_l2_read_req_schedule_q.front();
-        maddr_t start_maddr = msg->maddr;
-        if (m_l2_work_table.count(start_maddr)) {
-            if (m_l2_work_table[start_maddr]->accept_read_requests && !m_l2_work_table[start_maddr]->lcc_rep) {
-                mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received an LCC read request" 
-                          << " from " << msg->sender << " for address " << msg->maddr << endl;
-                m_l2_work_table[start_maddr]->lcc_read_req = msg;
-                msg->did_win_last_arbitration = true;
-            }
-        } else if (m_l2_work_table_vacancy_readonly > 0 || m_l2_work_table_vacancy_shared > 0) {
-            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received an LCC read request from " << msg->sender 
-                      << " for address " << msg->maddr << " (new entry - reserved) " << endl;
-            shared_ptr<toL2Entry> new_entry(new toL2Entry);
-            new_entry->accept_read_requests = false;
-            new_entry->write_requests_waiting = false;
-            new_entry->write_blocked_time = 0;
-            if (m_l2_work_table_vacancy_readonly > 0) {
-                --m_l2_work_table_vacancy_readonly;
-                new_entry->using_space_for_reads = true;
-            } else {
-                --m_l2_work_table_vacancy_shared;
-                new_entry->using_space_for_reads = false;
-            }
-            new_entry->status = _L2_WORK_WAIT_L2;
-            new_entry->did_miss_on_first = false;
-
-            new_entry->lcc_read_req = msg;
-            new_entry->lcc_write_req = shared_ptr<coherenceMsg>();
-
-            shared_ptr<cacheRequest> l2_req(new cacheRequest(start_maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
-            l2_req->set_reserve(true);
-            new_entry->l2_req = l2_req;
-
-            new_entry->lcc_rep = shared_ptr<coherenceMsg>();
-            new_entry->dram_req = shared_ptr<dramMsg>();
-            new_entry->dram_rep = shared_ptr<dramMsg>();
-            new_entry->net_msg_to_send = shared_ptr<message_t>();
-
-            msg->did_win_last_arbitration = true;
-
-            m_l2_work_table[start_maddr] = new_entry;
-        }
-        m_to_l2_read_req_schedule_q.erase(m_to_l2_read_req_schedule_q.begin());
-    }
-
     random_shuffle(m_to_l2_write_req_schedule_q.begin(), m_to_l2_write_req_schedule_q.end(), rr_fn);
     while (m_to_l2_write_req_schedule_q.size()) {
         shared_ptr<coherenceMsg> msg = m_to_l2_write_req_schedule_q.front();
@@ -1563,7 +1534,53 @@ void privateSharedLCC::schedule_requests() {
         m_to_l2_write_req_schedule_q.erase(m_to_l2_write_req_schedule_q.begin());
     }
 
-  
+    random_shuffle(m_to_l2_read_req_schedule_q.begin(), m_to_l2_read_req_schedule_q.end(), rr_fn);
+    while (m_to_l2_read_req_schedule_q.size()) {
+        shared_ptr<coherenceMsg> msg = m_to_l2_read_req_schedule_q.front();
+        maddr_t start_maddr = msg->maddr;
+        if (m_l2_work_table.count(start_maddr)) {
+            if (m_l2_work_table[start_maddr]->accept_read_requests && !m_l2_work_table[start_maddr]->lcc_read_req) {
+                mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received an LCC read request" 
+                          << " from " << msg->sender << " for address " << msg->maddr << endl;
+                m_l2_work_table[start_maddr]->lcc_read_req = msg;
+                msg->did_win_last_arbitration = true;
+            }
+        } else if (m_l2_work_table_vacancy_readonly > 0 || m_l2_work_table_vacancy_shared > 0) {
+            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received an LCC read request from " << msg->sender 
+                      << " for address " << msg->maddr << " (new entry - reserved) " << endl;
+            shared_ptr<toL2Entry> new_entry(new toL2Entry);
+            new_entry->accept_read_requests = false;
+            new_entry->write_requests_waiting = false;
+            new_entry->write_blocked_time = 0;
+            if (m_l2_work_table_vacancy_readonly > 0) {
+                --m_l2_work_table_vacancy_readonly;
+                new_entry->using_space_for_reads = true;
+            } else {
+                --m_l2_work_table_vacancy_shared;
+                new_entry->using_space_for_reads = false;
+            }
+            new_entry->status = _L2_WORK_WAIT_L2;
+            new_entry->did_miss_on_first = false;
+
+            new_entry->lcc_read_req = msg;
+            new_entry->lcc_write_req = shared_ptr<coherenceMsg>();
+
+            shared_ptr<cacheRequest> l2_req(new cacheRequest(start_maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
+            l2_req->set_reserve(true);
+            new_entry->l2_req = l2_req;
+
+            new_entry->lcc_rep = shared_ptr<coherenceMsg>();
+            new_entry->dram_req = shared_ptr<dramMsg>();
+            new_entry->dram_rep = shared_ptr<dramMsg>();
+            new_entry->net_msg_to_send = shared_ptr<message_t>();
+
+            msg->did_win_last_arbitration = true;
+
+            m_l2_work_table[start_maddr] = new_entry;
+        }
+        m_to_l2_read_req_schedule_q.erase(m_to_l2_read_req_schedule_q.begin());
+    }
+ 
     /* 4 : arbitrate inputs to dram work table */
     random_shuffle(m_to_dram_req_schedule_q.begin(), m_to_dram_req_schedule_q.end(), rr_fn);
     while (m_to_dram_req_schedule_q.size()) {

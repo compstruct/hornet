@@ -37,6 +37,7 @@ private:
 
     bool m_record_ideal_timestamp_delta;
     map<maddr_t, running_stats> m_ideal_delta;
+    map<maddr_t, vector<uint64_t> > m_ideal_delta_samples;
 
 };
 

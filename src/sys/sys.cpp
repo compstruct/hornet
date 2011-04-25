@@ -412,6 +412,9 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                                                                           t->get_statistics(), log, ran, new_cat, cfg));
                     shared_ptr<privateSharedLCCStatsPerTile> per_tile_stats = 
                         shared_ptr<privateSharedLCCStatsPerTile>(new privateSharedLCCStatsPerTile(id, t->get_time()));
+                    if (cfg.logic == privateSharedLCC::TIMESTAMP_IDEAL) {
+                        per_tile_stats->record_ideal_timestamp();
+                    }
                     new_mem->set_per_tile_stats(per_tile_stats);
 
                     private_shared_lcc_stats->add_per_tile_stats(per_tile_stats);

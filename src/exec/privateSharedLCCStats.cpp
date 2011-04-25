@@ -28,6 +28,7 @@ void privateSharedLCCStatsPerTile::could_not_evict_l2() {
 void privateSharedLCCStatsPerTile::record_ideal_timestamp_delta(maddr_t maddr, uint64_t delta) {
     if (m_record_ideal_timestamp_delta) {
         m_ideal_delta[maddr].add(delta, 1);
+        m_ideal_delta_samples[maddr].push_back(delta);
     }
 }
 
@@ -67,6 +68,10 @@ void privateSharedLCCStats::print_stats(ostream &out) {
 
     running_stats avg_ideal_deltas;
     running_stats avg_ideal_stddevs;
+    running_stats avg_ideal_mean_min;
+    running_stats avg_ideal_max_mean;
+    running_stats avg_ideal_mid_deltas;
+    running_stats avg_ideal_mid_stddevs;
 
     perTileStats_t::iterator it;
     uint32_t num_tiles = 0;
@@ -113,14 +118,26 @@ void privateSharedLCCStats::print_stats(ostream &out) {
         sprintf(str, "[Private-shared-LCC %4d ] L1-readhit%%: %.2f L2hit%% %.2f read%%: %.2f write%%: %.2f "
                      "avg write block: %.2f evict block: %ld cyc cat%%: %.2f",
                      id, 100.0*l1_read_rate, 100.0*l2_rate, 100.0*l2_read_rate, 100.0*l2_write_rate, 
-                     avg_write_block, st->m_evict_block_cycles, cat_rate);
+                     avg_write_block, st->m_evict_block_cycles, 100.0*cat_rate);
 
         out << str << endl;
 
         if (st->m_record_ideal_timestamp_delta) {
             for(map<maddr_t, running_stats>::iterator it = st->m_ideal_delta.begin(); it != st->m_ideal_delta.end(); ++it) {
+                maddr_t maddr = it->first;
                 avg_ideal_deltas.add(it->second.get_mean(), 1);
                 avg_ideal_stddevs.add(it->second.get_std_dev(), 1);
+                avg_ideal_mean_min.add(it->second.get_mean() - it->second.get_min(), 1);
+                avg_ideal_max_mean.add(it->second.get_mean() - it->second.get_min(), 1);
+                sort(st->m_ideal_delta_samples[maddr].begin(), st->m_ideal_delta_samples[maddr].end());
+                running_stats middle_90;
+                for (uint32_t i = (uint32_t)(st->m_ideal_delta_samples[maddr].size()*0.05); 
+                     i < (uint32_t)(st->m_ideal_delta_samples[maddr].size()*0.95); ++i) 
+                {
+                    middle_90.add(st->m_ideal_delta_samples[maddr][i], 1);
+                }
+                avg_ideal_mid_deltas.add(middle_90.get_mean(), 1);
+                avg_ideal_mid_stddevs.add(middle_90.get_std_dev(), 1);
             }
         }
     }
@@ -134,14 +151,16 @@ void privateSharedLCCStats::print_stats(ostream &out) {
             100.0*total_l2_hits/total_l2,
             100.0*total_l2_read_hits/total_l2_reads,
             100.0*total_l2_write_hits/total_l2_writes,
-            total_write_block/total_l2_writes, total_evict_block.get_mean(),total_cat_hits/total_cat_lookups);
+            total_write_block/total_l2_writes, total_evict_block.get_mean(),100.0*total_cat_hits/total_cat_lookups);
 
     out << str << endl;
 
     if (avg_ideal_deltas.sample_count()) {
-        sprintf(str, "[Ideal-Summary: Private-shared-LCC ] Ideal delta avg: %.2f"
-                "stddev: %.2f  stddev within lines avg: %.2f",
-                avg_ideal_deltas.get_mean(), avg_ideal_deltas.get_std_dev(), avg_ideal_stddevs.get_mean());
+        sprintf(str, "[Ideal-Summary: Private-shared-LCC ] avg delta: %.2f stddev: %.2f / avg stddev in line: %.2f "
+                     " / avg mid90 delta: %.2f stddev: %.2f / avg mid90 stddev in line : %.2f / avg mean-min: %.2f / avg max-mean: %.2f", 
+                     avg_ideal_deltas.get_mean(), avg_ideal_deltas.get_std_dev(), avg_ideal_stddevs.get_mean(),
+                     avg_ideal_mid_deltas.get_mean(), avg_ideal_mid_deltas.get_std_dev(), avg_ideal_mid_stddevs.get_mean(), 
+                     avg_ideal_mean_min.get_mean(), avg_ideal_max_mean.get_mean());
         out << str << endl;
     }
 
