@@ -85,15 +85,13 @@ public:
     typedef struct {
         uint64_t expiration_time;
         shared_ptr<uint64_t> synched_expiration_time; /* only used in idealized timestamp logic */
+        shared_ptr<uint64_t> first_read_time_since_last_expiration;  /* this is supposed to be updated on the cache, but for now assumes thie information is kept somehow */
 
         /* only used in L2 with some timestamp logic */
-        uint32_t timestamp_delta; 
-        uint32_t timestamp_iter;
-        uint32_t timestamp_iter_record;
+        shared_ptr<bool> in_large_mode;
+        shared_ptr<uint64_t> timestamp_delta_small; 
+        shared_ptr<uint64_t> timestamp_delta_large; 
 
-        /* for stats */
-        uint64_t first_read_time_since_last_expiration;
-        uint64_t first_evict_block_time;
     } coherenceInfo;
 
     typedef enum {
@@ -235,8 +233,11 @@ private:
     vector<shared_ptr<memoryRequest> > m_core_port_schedule_q; 
 
     /* scheduler queues for requests in to l2 work table */
+    vector<shared_ptr<coherenceMsg> > m_to_l2_req_schedule_q;
+#if 0
     vector<shared_ptr<coherenceMsg> > m_to_l2_read_req_schedule_q;
     vector<shared_ptr<coherenceMsg> > m_to_l2_write_req_schedule_q;
+#endif
 
     vector<shared_ptr<dramMsg> > m_to_dram_req_schedule_q;
 
