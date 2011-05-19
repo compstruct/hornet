@@ -173,10 +173,10 @@ privateSharedLCC::privateSharedLCC(uint32_t id,
         break;
     }
 
-    m_l1 = new cache(id, t, st, l, r, 
+    m_l1 = new cache(1, id, t, st, l, r, 
                      cfg.words_per_cache_line, cfg.lines_in_l1, cfg.l1_associativity, l1_policy,
                      cfg.l1_hit_test_latency, cfg.l1_num_read_ports, cfg.l1_num_write_ports);
-    m_l2 = new cache(id, t, st, l, r, 
+    m_l2 = new cache(2, id, t, st, l, r, 
                      cfg.words_per_cache_line, cfg.lines_in_l2, cfg.l2_associativity, l2_policy,
                      cfg.l2_hit_test_latency, cfg.l2_num_read_ports, cfg.l2_num_write_ports);
 

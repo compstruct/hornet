@@ -23,5 +23,6 @@ libdarexec_la_SOURCES = memory_types.hpp memory_types.cpp \
                         privateSharedMSI.hpp privateSharedMSI.cpp \
                         privateSharedLCC.hpp privateSharedLCC.cpp \
                         memStats.hpp memStats.cpp \
+												mcpu.hpp mcpu.cpp \
                         privateSharedMSIStats.hpp privateSharedMSIStats.cpp \
                         privateSharedLCCStats.hpp privateSharedLCCStats.cpp

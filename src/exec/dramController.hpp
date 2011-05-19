@@ -10,9 +10,17 @@
 #include "logger.hpp"
 #include "random.hpp"
 #include "memory_types.hpp"
+#include "mem.hpp"
 
+// C F FIX  
+// was:
+//#define WORDS_IN_DRAM_BLOCK 256 /* must be a power of 2 */
+//#define DRAM_INDEX_MASK WORDS_IN_DRAM_BLOCK /* must be a power of 2 */
+// changed to: 
 #define WORDS_IN_DRAM_BLOCK 256 /* must be a power of 2 */
-#define DRAM_INDEX_MASK (256-WORDS_IN_DRAM_BLOCK) /* must be a power of 2 */
+#define DRAM_INDEX_MASK 0x0FF /* must be a power of 2 */
+// as a quick hack fix
+// (really a better fix is warrented...)
 
 using namespace std;
 using namespace boost;
@@ -77,6 +85,9 @@ private:
 
     mutable recursive_mutex dram_mutex;
 
+public:
+    void mem_read_instant(uint32_t *, uint32_t, uint32_t, uint32_t, bool);
+    void mem_write_instant(shared_ptr<mem>, uint32_t, uint32_t, uint32_t);
 };
 
 class dramController {

@@ -1,0 +1,761 @@
+	.file	1 "mcpu.c"
+	.section .mdebug.abi32
+	.previous
+	.gnu_attribute 4, 1
+	.text
+	.align	2
+	.set	nomips16
+	.set	nomicromips
+	.ent	print_int
+	.type	print_int, @function
+print_int:
+	.frame	$fp,8,$31		# vars= 0, regs= 1/0, args= 0, gp= 0
+	.mask	0x40000000,-4
+	.fmask	0x00000000,0
+	addiu	$sp,$sp,-8
+	sw	$fp,4($sp)
+	move	$fp,$sp
+	sw	$4,8($fp)
+	lw	$3,8($fp)
+#APP
+ # 184 "/home/cwfletcher/wc/svnm/branches/Shared/Hornet/trunk/dar/lib/rts/include/rts.h" 1
+	move $a0, $3; move $v0, $0; syscall;
+ # 0 "" 2
+#NO_APP
+	move	$sp,$fp
+	lw	$fp,4($sp)
+	addiu	$sp,$sp,8
+	j	$31
+	.end	print_int
+	.size	print_int, .-print_int
+	.local	_bottom
+	.comm	_bottom,4,4
+	.local	_top
+	.comm	_top,4,4
+	.local	_empty
+	.comm	_empty,4,4
+	.align	2
+	.set	nomips16
+	.set	nomicromips
+	.ent	memcpy
+	.type	memcpy, @function
+memcpy:
+	.frame	$fp,32,$31		# vars= 24, regs= 1/0, args= 0, gp= 0
+	.mask	0x40000000,-4
+	.fmask	0x00000000,0
+	.set	noreorder
+	.set	nomacro
+	
+	addiu	$sp,$sp,-32
+	sw	$fp,28($sp)
+	move	$fp,$sp
+	sw	$4,32($fp)
+	sw	$5,36($fp)
+	sw	$6,40($fp)
+	lw	$2,32($fp)
+	andi	$2,$2,0x3
+	bne	$2,$0,$L4
+	nop
+
+	lw	$2,36($fp)
+	andi	$2,$2,0x3
+	bne	$2,$0,$L4
+	nop
+
+	lw	$2,40($fp)
+	andi	$2,$2,0x3
+	bne	$2,$0,$L4
+	nop
+
+	lw	$2,32($fp)
+	sw	$2,12($fp)
+	lw	$2,36($fp)
+	sw	$2,8($fp)
+	sw	$0,16($fp)
+	j	$L5
+	nop
+
+$L6:
+	lw	$2,16($fp)
+	sll	$3,$2,2
+	lw	$2,12($fp)
+	addu	$2,$3,$2
+	lw	$3,16($fp)
+	sll	$4,$3,2
+	lw	$3,8($fp)
+	addu	$3,$4,$3
+	lw	$3,0($3)
+	sw	$3,0($2)
+	lw	$2,16($fp)
+	addiu	$2,$2,1
+	sw	$2,16($fp)
+$L5:
+	lw	$2,40($fp)
+	srl	$3,$2,2
+	lw	$2,16($fp)
+	sltu	$2,$2,$3
+	bne	$2,$0,$L6
+	nop
+
+	j	$L7
+	nop
+
+$L4:
+	lw	$2,32($fp)
+	sw	$2,4($fp)
+	lw	$2,36($fp)
+	sw	$2,0($fp)
+	sw	$0,16($fp)
+	j	$L8
+	nop
+
+$L9:
+	lw	$3,4($fp)
+	lw	$2,16($fp)
+	addu	$2,$3,$2
+	lw	$4,0($fp)
+	lw	$3,16($fp)
+	addu	$3,$4,$3
+	lb	$3,0($3)
+	sb	$3,0($2)
+	lw	$2,16($fp)
+	addiu	$2,$2,1
+	sw	$2,16($fp)
+$L8:
+	lw	$3,16($fp)
+	lw	$2,40($fp)
+	sltu	$2,$3,$2
+	bne	$2,$0,$L9
+	nop
+
+$L7:
+	lw	$2,32($fp)
+	move	$sp,$fp
+	lw	$fp,28($sp)
+	addiu	$sp,$sp,32
+	j	$31
+	nop
+
+	.set	macro
+	.set	reorder
+	.end	memcpy
+	.size	memcpy, .-memcpy
+	.align	2
+	.set	nomips16
+	.set	nomicromips
+	.ent	grow
+	.type	grow, @function
+grow:
+	.frame	$fp,32,$31		# vars= 0, regs= 3/0, args= 16, gp= 0
+	.mask	0xc0010000,-4
+	.fmask	0x00000000,0
+	.set	noreorder
+	.set	nomacro
+	
+	addiu	$sp,$sp,-32
+	sw	$31,28($sp)
+	sw	$fp,24($sp)
+	sw	$16,20($sp)
+	move	$fp,$sp
+	sw	$4,32($fp)
+	lui	$2,%hi(_top)
+	lw	$2,%lo(_top)($2)
+	move	$3,$2
+	lw	$2,32($fp)
+	addu	$3,$3,$2
+	lui	$2,%hi(_top)
+	lw	$2,%lo(_top)($2)
+	sltu	$2,$3,$2
+	bne	$2,$0,$L12
+	nop
+
+	lui	$2,%hi(_top)
+	lw	$2,%lo(_top)($2)
+	move	$3,$2
+	lw	$2,32($fp)
+	addu	$2,$3,$2
+	addiu	$3,$2,4095
+	li	$2,-4096			# 0xfffffffffffff000
+	and	$2,$3,$2
+	move	$16,$2
+	lui	$2,%hi(_top)
+	lw	$2,%lo(_top)($2)
+	sltu	$2,$16,$2
+	beq	$2,$0,$L13
+	nop
+
+$L12:
+	move	$2,$0
+	j	$L14
+	nop
+
+$L13:
+	lui	$2,%hi(_top)
+	lw	$2,%lo(_top)($2)
+	addiu	$2,$2,-4
+	sw	$16,0($2)
+	move	$2,$16
+	addiu	$2,$2,-4
+	sw	$0,0($2)
+	lui	$2,%hi(_top)
+	lw	$2,%lo(_top)($2)
+	move	$4,$2
+	jal	free
+	nop
+
+	lui	$2,%hi(_top)
+	sw	$16,%lo(_top)($2)
+	li	$2,1			# 0x1
+$L14:
+	move	$sp,$fp
+	lw	$31,28($sp)
+	lw	$fp,24($sp)
+	lw	$16,20($sp)
+	addiu	$sp,$sp,32
+	j	$31
+	nop
+
+	.set	macro
+	.set	reorder
+	.end	grow
+	.size	grow, .-grow
+	.align	2
+	.set	nomips16
+	.set	nomicromips
+	.ent	malloc
+	.type	malloc, @function
+malloc:
+	.frame	$fp,48,$31		# vars= 0, regs= 8/0, args= 16, gp= 0
+	.mask	0xc03f0000,-4
+	.fmask	0x00000000,0
+	.set	noreorder
+	.set	nomacro
+	
+	addiu	$sp,$sp,-48
+	sw	$31,44($sp)
+	sw	$fp,40($sp)
+	sw	$21,36($sp)
+	sw	$20,32($sp)
+	sw	$19,28($sp)
+	sw	$18,24($sp)
+	sw	$17,20($sp)
+	sw	$16,16($sp)
+	move	$fp,$sp
+	sw	$4,48($fp)
+	lw	$2,48($fp)
+	bne	$2,$0,$L17
+	nop
+
+	move	$2,$0
+	j	$L18
+	nop
+
+$L17:
+	move	$18,$0
+	j	$L19
+	nop
+
+$L31:
+	lw	$2,48($fp)
+	addiu	$3,$2,3
+	li	$2,-4			# 0xfffffffffffffffc
+	and	$2,$3,$2
+	addiu	$19,$2,4
+	sltu	$2,$19,8
+	beq	$2,$0,$L20
+	nop
+
+	move	$2,$0
+	j	$L18
+	nop
+
+$L20:
+	lui	$2,%hi(_bottom)
+	lw	$2,%lo(_bottom)($2)
+	bne	$2,$0,$L21
+	nop
+
+	move	$2,$16
+	addiu	$3,$2,3
+	li	$2,-4			# 0xfffffffffffffffc
+	and	$2,$3,$2
+	move	$16,$2
+	addiu	$16,$16,4
+	lui	$2,%hi(_bottom)
+	sw	$16,%lo(_bottom)($2)
+	lui	$2,%hi(_bottom)
+	lw	$3,%lo(_bottom)($2)
+	lui	$2,%hi(_top)
+	sw	$3,%lo(_top)($2)
+	move	$2,$16
+	addiu	$2,$2,-4
+	sw	$0,0($2)
+$L21:
+	move	$20,$0
+	lui	$2,%hi(_empty)
+	lw	$2,%lo(_empty)($2)
+	move	$16,$2
+	j	$L22
+	nop
+
+$L28:
+	move	$2,$16
+	addiu	$2,$2,-4
+	lw	$2,0($2)
+	move	$21,$2
+	addu	$17,$16,$19
+	sltu	$2,$21,$17
+	bne	$2,$0,$L23
+	nop
+
+	sltu	$2,$16,$17
+	bne	$2,$0,$L24
+	nop
+
+$L23:
+	move	$20,$16
+	move	$2,$16
+	lw	$2,0($2)
+	move	$16,$2
+	j	$L22
+	nop
+
+$L24:
+	addiu	$2,$17,4
+	sltu	$2,$2,$21
+	beq	$2,$0,$L25
+	nop
+
+	move	$2,$17
+	addiu	$2,$2,-4
+	sw	$21,0($2)
+	move	$2,$16
+	addiu	$2,$2,-4
+	sw	$17,0($2)
+	move	$2,$17
+	move	$3,$16
+	lw	$3,0($3)
+	sw	$3,0($2)
+	move	$2,$16
+	sw	$17,0($2)
+$L25:
+	beq	$20,$0,$L26
+	nop
+
+	move	$2,$20
+	move	$3,$16
+	lw	$3,0($3)
+	sw	$3,0($2)
+	j	$L27
+	nop
+
+$L26:
+	move	$2,$16
+	lw	$3,0($2)
+	lui	$2,%hi(_empty)
+	sw	$3,%lo(_empty)($2)
+$L27:
+	move	$2,$16
+	j	$L18
+	nop
+
+$L22:
+	bne	$16,$0,$L28
+	nop
+
+	move	$4,$19
+	jal	grow
+	nop
+
+	beq	$2,$0,$L33
+	nop
+
+$L29:
+	addiu	$18,$18,1
+$L19:
+	sltu	$2,$18,2
+	bne	$2,$0,$L31
+	nop
+
+	j	$L30
+	nop
+
+$L33:
+	nop
+$L30:
+	move	$2,$0
+$L18:
+	move	$sp,$fp
+	lw	$31,44($sp)
+	lw	$fp,40($sp)
+	lw	$21,36($sp)
+	lw	$20,32($sp)
+	lw	$19,28($sp)
+	lw	$18,24($sp)
+	lw	$17,20($sp)
+	lw	$16,16($sp)
+	addiu	$sp,$sp,48
+	j	$31
+	nop
+
+	.set	macro
+	.set	reorder
+	.end	malloc
+	.size	malloc, .-malloc
+	.align	2
+	.set	nomips16
+	.set	nomicromips
+	.ent	realloc
+	.type	realloc, @function
+realloc:
+	.frame	$fp,56,$31		# vars= 8, regs= 7/0, args= 16, gp= 0
+	.mask	0xc01f0000,-4
+	.fmask	0x00000000,0
+	.set	noreorder
+	.set	nomacro
+	
+	addiu	$sp,$sp,-56
+	sw	$31,52($sp)
+	sw	$fp,48($sp)
+	sw	$20,44($sp)
+	sw	$19,40($sp)
+	sw	$18,36($sp)
+	sw	$17,32($sp)
+	sw	$16,28($sp)
+	move	$fp,$sp
+	sw	$4,56($fp)
+	sw	$5,60($fp)
+	lw	$2,56($fp)
+	sw	$2,16($fp)
+	lw	$2,16($fp)
+	bne	$2,$0,$L35
+	nop
+
+	lw	$4,60($fp)
+	jal	malloc
+	nop
+
+	j	$L36
+	nop
+
+$L35:
+	lw	$2,60($fp)
+	bne	$2,$0,$L37
+	nop
+
+	lw	$4,16($fp)
+	jal	free
+	nop
+
+	move	$2,$0
+	j	$L36
+	nop
+
+$L37:
+	lw	$2,60($fp)
+	addiu	$3,$2,3
+	li	$2,-4			# 0xfffffffffffffffc
+	and	$2,$3,$2
+	addiu	$20,$2,4
+	lw	$2,16($fp)
+	addiu	$2,$2,-4
+	lw	$2,0($2)
+	move	$17,$2
+	move	$3,$17
+	lw	$2,16($fp)
+	subu	$2,$3,$2
+	move	$19,$2
+	move	$18,$0
+	lui	$2,%hi(_empty)
+	lw	$2,%lo(_empty)($2)
+	move	$16,$2
+	j	$L38
+	nop
+
+$L44:
+	sltu	$2,$17,$16
+	bne	$2,$0,$L49
+	nop
+
+$L39:
+	bne	$16,$17,$L41
+	nop
+
+	lw	$2,16($fp)
+	addiu	$2,$2,-4
+	move	$3,$16
+	addiu	$3,$3,-4
+	lw	$3,0($3)
+	sw	$3,0($2)
+	beq	$18,$0,$L42
+	nop
+
+	move	$2,$18
+	move	$3,$16
+	lw	$3,0($3)
+	sw	$3,0($2)
+	j	$L43
+	nop
+
+$L42:
+	move	$2,$16
+	lw	$3,0($2)
+	lui	$2,%hi(_empty)
+	sw	$3,%lo(_empty)($2)
+$L43:
+	lw	$2,16($fp)
+	addiu	$2,$2,-4
+	lw	$2,0($2)
+	move	$17,$2
+	j	$L40
+	nop
+
+$L41:
+	move	$18,$16
+	move	$2,$16
+	lw	$2,0($2)
+	move	$16,$2
+$L38:
+	bne	$16,$0,$L44
+	nop
+
+	j	$L40
+	nop
+
+$L49:
+	nop
+$L40:
+	lw	$2,16($fp)
+	addu	$16,$20,$2
+	sltu	$2,$17,$16
+	bne	$2,$0,$L45
+	nop
+
+	lw	$2,16($fp)
+	sltu	$2,$16,$2
+	bne	$2,$0,$L45
+	nop
+
+	addiu	$2,$16,4
+	sltu	$2,$2,$17
+	beq	$2,$0,$L46
+	nop
+
+	move	$2,$16
+	addiu	$2,$2,-4
+	sw	$17,0($2)
+	lw	$2,16($fp)
+	addiu	$2,$2,-4
+	sw	$16,0($2)
+	move	$4,$16
+	jal	free
+	nop
+
+$L46:
+	lw	$2,16($fp)
+	j	$L36
+	nop
+
+$L45:
+	lw	$4,60($fp)
+	jal	malloc
+	nop
+
+	move	$16,$2
+	bne	$16,$0,$L47
+	nop
+
+	move	$2,$0
+	j	$L36
+	nop
+
+$L47:
+	move	$4,$16
+	lw	$5,16($fp)
+	move	$6,$19
+	jal	memcpy
+	nop
+
+	lw	$4,16($fp)
+	jal	free
+	nop
+
+	move	$2,$16
+$L36:
+	move	$sp,$fp
+	lw	$31,52($sp)
+	lw	$fp,48($sp)
+	lw	$20,44($sp)
+	lw	$19,40($sp)
+	lw	$18,36($sp)
+	lw	$17,32($sp)
+	lw	$16,28($sp)
+	addiu	$sp,$sp,56
+	j	$31
+	nop
+
+	.set	macro
+	.set	reorder
+	.end	realloc
+	.size	realloc, .-realloc
+	.align	2
+	.set	nomips16
+	.set	nomicromips
+	.ent	free
+	.type	free, @function
+free:
+	.frame	$fp,24,$31		# vars= 8, regs= 3/0, args= 0, gp= 0
+	.mask	0x40030000,-4
+	.fmask	0x00000000,0
+	.set	noreorder
+	.set	nomacro
+	
+	addiu	$sp,$sp,-24
+	sw	$fp,20($sp)
+	sw	$17,16($sp)
+	sw	$16,12($sp)
+	move	$fp,$sp
+	sw	$4,24($fp)
+	lw	$2,24($fp)
+	sw	$2,0($fp)
+	lw	$2,0($fp)
+	beq	$2,$0,$L61
+	nop
+
+$L51:
+	move	$17,$0
+	lui	$2,%hi(_empty)
+	lw	$2,%lo(_empty)($2)
+	move	$16,$2
+	j	$L53
+	nop
+
+$L56:
+	lw	$2,0($fp)
+	sltu	$2,$2,$16
+	bne	$2,$0,$L62
+	nop
+
+$L54:
+	move	$17,$16
+	move	$2,$16
+	lw	$2,0($2)
+	move	$16,$2
+$L53:
+	bne	$16,$0,$L56
+	nop
+
+	j	$L55
+	nop
+
+$L62:
+	nop
+$L55:
+	lw	$2,0($fp)
+	sw	$16,0($2)
+	beq	$17,$0,$L57
+	nop
+
+	move	$2,$17
+	lw	$3,0($fp)
+	sw	$3,0($2)
+	j	$L58
+	nop
+
+$L57:
+	lui	$2,%hi(_empty)
+	lw	$3,0($fp)
+	sw	$3,%lo(_empty)($2)
+$L58:
+	beq	$16,$0,$L59
+	nop
+
+	lw	$2,0($fp)
+	addiu	$2,$2,-4
+	lw	$2,0($2)
+	bne	$2,$16,$L59
+	nop
+
+	lw	$2,0($fp)
+	addiu	$2,$2,-4
+	move	$3,$16
+	addiu	$3,$3,-4
+	lw	$3,0($3)
+	sw	$3,0($2)
+	lw	$2,0($fp)
+	move	$3,$16
+	lw	$3,0($3)
+	sw	$3,0($2)
+$L59:
+	beq	$17,$0,$L60
+	nop
+
+	move	$2,$17
+	addiu	$2,$2,-4
+	lw	$3,0($2)
+	lw	$2,0($fp)
+	bne	$3,$2,$L60
+	nop
+
+	move	$2,$17
+	addiu	$2,$2,-4
+	lw	$3,0($fp)
+	addiu	$3,$3,-4
+	lw	$3,0($3)
+	sw	$3,0($2)
+	move	$2,$17
+	lw	$3,0($fp)
+	lw	$3,0($3)
+	sw	$3,0($2)
+	j	$L60
+	nop
+
+$L61:
+	nop
+$L60:
+	move	$sp,$fp
+	lw	$fp,20($sp)
+	lw	$17,16($sp)
+	lw	$16,12($sp)
+	addiu	$sp,$sp,24
+	j	$31
+	nop
+
+	.set	macro
+	.set	reorder
+	.end	free
+	.size	free, .-free
+	.align	2
+	.globl	main
+	.set	nomips16
+	.set	nomicromips
+	.ent	main
+	.type	main, @function
+main:
+	.frame	$fp,24,$31		# vars= 0, regs= 2/0, args= 16, gp= 0
+	.mask	0xc0000000,-4
+	.fmask	0x00000000,0
+	.set	noreorder
+	.set	nomacro
+	
+	addiu	$sp,$sp,-24
+	sw	$31,20($sp)
+	sw	$fp,16($sp)
+	move	$fp,$sp
+	li	$4,5			# 0x5
+	jal	print_int
+	nop
+
+	move	$2,$0
+	move	$sp,$fp
+	lw	$31,20($sp)
+	lw	$fp,16($sp)
+	addiu	$sp,$sp,24
+	j	$31
+	nop
+
+	.set	macro
+	.set	reorder
+	.end	main
+	.size	main, .-main
+	.ident	"GCC: (Sourcery G++ Lite 4.4-303) 4.4.1"

@@ -102,7 +102,7 @@ public:
     typedef bool (*helperCanEvictLine) (cacheLine&, const uint64_t&);
     typedef uint32_t (*helperReplacementPolicy) (vector<uint32_t>&, cacheLine const*, const uint64_t&, shared_ptr<random_gen> ran);
 
-    cache(uint32_t numeric_id, const uint64_t &system_time, 
+    cache(uint32_t cache_level, uint32_t numeric_id, const uint64_t &system_time, 
           shared_ptr<tile_statistics> stats, logger &log, shared_ptr<random_gen> ran, 
           uint32_t words_per_line, uint32_t total_lines, uint32_t associativity,
           replacementPolicy_t replacement_policy, 
@@ -112,6 +112,7 @@ public:
     void tick_positive_edge();
     void tick_negative_edge();
 
+    void print_contents();
     void request(shared_ptr<cacheRequest> req);
 
     inline bool read_port_available() { return m_available_read_ports > 0; }
@@ -149,6 +150,7 @@ private:
 
     shared_ptr<cacheLine> copy_cache_line(const cacheLine &line);
 
+    uint32_t m_level;
     uint32_t m_id;
     const uint64_t &system_time;
     shared_ptr<tile_statistics> stats;
@@ -183,3 +185,4 @@ private:
 };
 
 #endif
+

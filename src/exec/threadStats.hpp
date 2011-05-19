@@ -5,6 +5,7 @@
 #define __THREAD_STATS_HPP__
 
 #include "statistics.hpp"
+#include <cstdio>
 
 class threadStatsPerThread {
 public:

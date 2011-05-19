@@ -2,6 +2,7 @@
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
 #include "cache.hpp"
+#include "stdio.h"
 
 #define DEBUG
 
@@ -27,10 +28,10 @@ cacheRequest::cacheRequest(maddr_t maddr, cacheReqType_t request_type, uint32_t 
 
 cacheRequest::~cacheRequest() {}
 
-cache::cache(uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, logger &l, shared_ptr<random_gen> r, 
+cache::cache(uint32_t level, uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, logger &l, shared_ptr<random_gen> r, 
              uint32_t words_per_line, uint32_t total_lines, uint32_t associativity, replacementPolicy_t replacement_policy,
              uint32_t hit_test_latency, uint32_t num_read_ports,  uint32_t num_write_ports) : 
-    m_id(id), system_time(t), stats(st), log(l), ran(r), m_words_per_line(words_per_line), m_total_lines(total_lines),
+    m_level(level), m_id(id), system_time(t), stats(st), log(l), ran(r), m_words_per_line(words_per_line), m_total_lines(total_lines),
     m_associativity(associativity), m_replacement_policy(replacement_policy), m_hit_test_latency(hit_test_latency),
     m_available_read_ports(num_read_ports), m_available_write_ports(num_write_ports),
     m_helper_copy_coherence_info(NULL), m_helper_is_hit(NULL), m_helper_reserve_line(NULL), m_helper_can_evict_line(NULL),
@@ -54,6 +55,20 @@ cache::~cache() {
     for (cacheTable::iterator it = m_cache.begin(); it != m_cache.end(); ++it) {
         delete[] m_cache[it->first];
     }
+}
+
+// pretty printer
+void cache::print_contents() {
+    printf("\nPrinting cache contents, level: %d\n", m_level);
+    for (cacheTable::iterator it = m_cache.begin(); it != m_cache.end(); ++it) {
+        printf("index = %d: ", it->first);
+        cacheLine * line = it->second;
+        for (uint32_t o = 0; o < m_words_per_line; o++) {
+            printf("%x\t", line->data[o]);        
+        }
+        printf("\n");
+    }
+    printf("\n");
 }
 
 shared_ptr<cacheLine> cache::copy_cache_line(const cacheLine &line) {
@@ -115,7 +130,17 @@ void cache::tick_positive_edge() {
         reqQueue &q = it_q->second;
         reqEntry &head = q.front();;
         shared_ptr<cacheRequest> req = head.request;
+
         if (head.status == ENTRY_DONE) {
+
+            //printf("Processing cache request @ level %d\n", m_level);
+            //printf("Request space,address: %d,%x\n", (uint32_t) req->maddr().space, (uint32_t) req->maddr().address);
+            //if (req->m_word_count == 1) 
+            //    //printf("Request data 0: %x\n", req->m_data_to_write[0]);
+            //if (req->m_word_count == 2)
+            //    //printf("Request data 1: %x\n", req->m_data_to_write[1]);
+            //if (req->m_word_count > 2) assert(false);
+
             uint32_t idx = get_index(req->m_maddr);
             maddr_t start_maddr = get_start_maddr_in_line(req->m_maddr);
             if (m_cache.count(idx) == 0) {
@@ -147,20 +172,27 @@ void cache::tick_positive_edge() {
                                ));
 
                     if (hit) {
+                        //printf("Request was a HIT in the cache\n");
+
                         req->m_status = CACHE_REQ_HIT;
                         line.last_access_time = system_time;
                         switch (req->m_request_type) {
                         case CACHE_REQ_UPDATE:
+                            //printf("\tRequest was an UPDATE\n");
                             line.valid = true;
                             line.dirty = false;
                         case CACHE_REQ_WRITE:
                             {
+                                //printf("\tRequest was an HIT\n");
+                                //printf("\tWRITING TO THE CACHE, level: %d, index: %d\n", m_level, idx);
                                 mh_assert(req->m_data_to_write);
                                 
                                 uint32_t offset = get_offset(req->m_maddr) / 4;
                                 for (uint32_t i = 0; i < req->m_word_count; ++i) {
                                     line.data[offset + i] = req->m_data_to_write[i];
+                                    //printf("\tWriting: %x\n", req->m_data_to_write[i]);
                                 }
+                                //printf("\n");
                                 if (req->m_coherence_info_to_write) {
                                     line.coherence_info = req->m_coherence_info_to_write;
                                 }
@@ -169,6 +201,9 @@ void cache::tick_positive_edge() {
                                 }
                                 written_lines.insert(start_maddr);
                                 req->m_line_copy = copy_cache_line(line);
+
+                                //print_contents();
+
                                 break;
                             }
                         case CACHE_REQ_INVALIDATE:
@@ -360,3 +395,4 @@ void cache::tick_negative_edge() {
     }
 
 }
+

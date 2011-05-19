@@ -223,6 +223,7 @@ private:
     /* instance variables */
 
     privateSharedMSICfg_t m_cfg;
+    shared_array<uint32_t> GLOB; // printf
 
     cache* m_l1;
     cache* m_l2;
@@ -263,3 +264,4 @@ private:
 };
 
 #endif
+

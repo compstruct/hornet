@@ -1,0 +1,180 @@
+darsim mcpu.img --concurrency 1
+dar version 0.06 (suisen)
+
+simulating until drained
+no concurrency
+
+[mcpu 0] Issued instruction_fetch_complete, address: 4010e4 (Hornet word address: 4010e4)
+Starting DRAM read of 8 words.
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x38} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x39} --- data: 27bdffe0
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x3a} --- data: afbf001c
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x3b} --- data: afbe0018
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x3c} --- data: 3a0f021
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x3d} --- data: 3c020040
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x3e} --- data: 24421900
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x3f} --- data: afc20010
+[mcpu 0] Completed instruction_fetch_complete, address: 4010e4, instr: 27bdffe0
+[mcpu 00] 004010e4: addiu sp, sp, -32 (instr #: 1)
+[mcpu 0] Issued instruction_fetch_complete, address: 4010e8 (Hornet word address: 4010e8)
+[mcpu 0] Completed instruction_fetch_complete, address: 4010e8, instr: afbf001c
+[mcpu 00] 004010e8: sw ra, 28(sp) (instr #: 2)
+[mcpu 0] Memory write at 415ff8
+Starting DRAM read of 8 words.
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xf8} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xf9} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xfa} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xfb} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xfc} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xfd} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xfe} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xff} --- data: 0
+
+
+
+Finished data op!
+
+
+[mcpu 0] Issued instruction_fetch_complete, address: 4010ec (Hornet word address: 4010ec)
+[mcpu 0] Completed instruction_fetch_complete, address: 4010ec, instr: afbe0018
+[mcpu 00] 004010ec: sw fp, 24(sp) (instr #: 3)
+[mcpu 0] Memory write at 415ff4
+
+
+
+Finished data op!
+
+
+[mcpu 0] Issued instruction_fetch_complete, address: 4010f0 (Hornet word address: 4010f0)
+[mcpu 0] Completed instruction_fetch_complete, address: 4010f0, instr: 3a0f021
+[mcpu 00] 004010f0: move fp, sp (instr #: 4)
+[mcpu 0] Issued instruction_fetch_complete, address: 4010f4 (Hornet word address: 4010f4)
+[mcpu 0] Completed instruction_fetch_complete, address: 4010f4, instr: 3c020040
+[mcpu 00] 004010f4: lui v0, 64 (instr #: 5)
+[mcpu 0] Issued instruction_fetch_complete, address: 4010f8 (Hornet word address: 4010f8)
+[mcpu 0] Completed instruction_fetch_complete, address: 4010f8, instr: 24421900
+[mcpu 00] 004010f8: addiu v0, v0, 6400 (instr #: 6)
+[mcpu 0] Issued instruction_fetch_complete, address: 4010fc (Hornet word address: 4010fc)
+[mcpu 0] Completed instruction_fetch_complete, address: 4010fc, instr: afc20010
+[mcpu 00] 004010fc: sw v0, 16(fp) (instr #: 7)
+[mcpu 0] Memory write at 415fec
+
+
+
+Finished data op!
+
+
+[mcpu 0] Issued instruction_fetch_complete, address: 401100 (Hornet word address: 401100)
+Starting DRAM read of 8 words.
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x40} --- data: 24040001
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x41} --- data: 27c20010
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x42} --- data: 402821
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x43} --- data: c100239
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x44} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x45} --- data: c100631
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x46} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x100400, 0x47} --- data: 0
+[mcpu 0] Completed instruction_fetch_complete, address: 401100, instr: 24040001
+[mcpu 00] 00401100: addiu a0, zero, 1 (instr #: 8)
+[mcpu 0] Issued instruction_fetch_complete, address: 401104 (Hornet word address: 401104)
+[mcpu 0] Completed instruction_fetch_complete, address: 401104, instr: 27c20010
+[mcpu 00] 00401104: addiu v0, fp, 16 (instr #: 9)
+[mcpu 0] Issued instruction_fetch_complete, address: 401108 (Hornet word address: 401108)
+[mcpu 0] Completed instruction_fetch_complete, address: 401108, instr: 402821
+[mcpu 00] 00401108: move a1, v0 (instr #: 10)
+[mcpu 0] Issued instruction_fetch_complete, address: 40110c (Hornet word address: 40110c)
+[mcpu 0] Completed instruction_fetch_complete, address: 40110c, instr: c100239
+[mcpu 00] 0040110c: jal 004008e4 (instr #: 11)
+[mcpu 0] Issued instruction_fetch_complete, address: 401110 (Hornet word address: 401110)
+[mcpu 0] Completed instruction_fetch_complete, address: 401110, instr: 0
+[mcpu 00] 00401110: nop  (instr #: 12)
+[mcpu 0] Issued instruction_fetch_complete, address: 4008e4 (Hornet word address: 4008e4)
+Starting DRAM read of 8 words.
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x38} --- data: 27bd0010
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x39} --- data: 27bdffe8
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x3a} --- data: afbf0014
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x3b} --- data: afbe0010
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x3c} --- data: 3a0f021
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x3d} --- data: c10022d
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x3e} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x3f} --- data: 402021
+[mcpu 0] Completed instruction_fetch_complete, address: 4008e4, instr: 27bdffe8
+[mcpu 00] 004008e4: addiu sp, sp, -24 (instr #: 13)
+[mcpu 0] Issued instruction_fetch_complete, address: 4008e8 (Hornet word address: 4008e8)
+[mcpu 0] Completed instruction_fetch_complete, address: 4008e8, instr: afbf0014
+[mcpu 00] 004008e8: sw ra, 20(sp) (instr #: 14)
+[mcpu 0] Memory write at 415fd8
+Starting DRAM read of 8 words.
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xf0} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xf1} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xf2} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xf3} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xf4} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xf5} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xf6} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x105700, 0xf7} --- data: 0
+
+
+
+Finished data op!
+
+
+[mcpu 0] Issued instruction_fetch_complete, address: 4008ec (Hornet word address: 4008ec)
+[mcpu 0] Completed instruction_fetch_complete, address: 4008ec, instr: afbe0010
+[mcpu 00] 004008ec: sw fp, 16(sp) (instr #: 15)
+[mcpu 0] Memory write at 415fd4
+
+
+
+Finished data op!
+
+
+[mcpu 0] Issued instruction_fetch_complete, address: 4008f0 (Hornet word address: 4008f0)
+[mcpu 0] Completed instruction_fetch_complete, address: 4008f0, instr: 3a0f021
+[mcpu 00] 004008f0: move fp, sp (instr #: 16)
+[mcpu 0] Issued instruction_fetch_complete, address: 4008f4 (Hornet word address: 4008f4)
+[mcpu 0] Completed instruction_fetch_complete, address: 4008f4, instr: c10022d
+[mcpu 00] 004008f4: jal 004008b4 (instr #: 17)
+[mcpu 0] Issued instruction_fetch_complete, address: 4008f8 (Hornet word address: 4008f8)
+[mcpu 0] Completed instruction_fetch_complete, address: 4008f8, instr: 0
+[mcpu 00] 004008f8: nop  (instr #: 18)
+[mcpu 0] Issued instruction_fetch_complete, address: 4008b4 (Hornet word address: 4008b4)
+Starting DRAM read of 8 words.
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x28} --- data: 8fb10010
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x29} --- data: 8fb0000c
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x2a} --- data: 27bd0018
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x2b} --- data: 3e00008
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x2c} --- data: 0
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x2d} --- data: 27bdfff0
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x2e} --- data: afbe000c
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x2f} --- data: 3a0f021
+[mcpu 0] Completed instruction_fetch_complete, address: 4008b4, instr: 27bdfff0
+[mcpu 00] 004008b4: addiu sp, sp, -16 (instr #: 19)
+[mcpu 0] Issued instruction_fetch_complete, address: 4008b8 (Hornet word address: 4008b8)
+[mcpu 0] Completed instruction_fetch_complete, address: 4008b8, instr: afbe000c
+[mcpu 00] 004008b8: sw fp, 12(sp) (instr #: 20)
+[mcpu 0] Memory write at 415fc0
+
+
+
+Finished data op!
+
+
+[mcpu 0] Issued instruction_fetch_complete, address: 4008bc (Hornet word address: 4008bc)
+[mcpu 0] Completed instruction_fetch_complete, address: 4008bc, instr: 3a0f021
+[mcpu 00] 004008bc: move fp, sp (instr #: 21)
+[mcpu 0] Issued instruction_fetch_complete, address: 4008c0 (Hornet word address: 4008c0)
+Starting DRAM read of 8 words.
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x30} --- data: 24020078
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x31} --- data: c
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x32} --- data: 401821
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x33} --- data: afc30000
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x34} --- data: 8fc20000
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x35} --- data: 3c0e821
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x36} --- data: 8fbe000c
+DRAM read {space,start_address,offset}: {1, 0x100200, 0x37} --- data: 3e00008
+[mcpu 0] Completed instruction_fetch_complete, address: 4008c0, instr: 24020078
+[mcpu 00] 004008c0: addiu v0, zero, 120 (instr #: 22)
+[mcpu 0] Issued instruction_fetch_complete, address: 4008c4 (Hornet word address: 4008c4)
+[mcpu 0] Completed instruction_fetch_complete, address: 4008c4, instr: c
+[mcpu 00] 004008c4: syscall  (instr #: 23)

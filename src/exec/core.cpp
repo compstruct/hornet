@@ -95,9 +95,7 @@ void core::tick_positive_edge() throw(err) {
     }
 
     execute();
-    if (m_memory != shared_ptr<memory>()) {
-        m_memory->tick_positive_edge();
-    }
+    tick_positive_edge_memory();
 
     /* receive messages in to receive queues */
     for (uint32_t it = 0; it < 32 ; ++it) {
@@ -141,7 +139,15 @@ void core::tick_positive_edge() throw(err) {
 }
 
 void core::tick_negative_edge() throw(err) {
+    tick_negative_edge_memory();
+}
 
+void core::tick_positive_edge_memory() throw(err) {
+    if (m_memory != shared_ptr<memory>()) {
+        m_memory->tick_positive_edge();
+    }
+}
+void core::tick_negative_edge_memory() throw(err) {
     /* update requests */
     update_from_memory_requests();
 

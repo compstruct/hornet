@@ -1,0 +1,218 @@
+darsim mcpu.img --concurrency 1
+hornet version 0.1 (suisen)
+
+simulating until drained
+no concurrency
+
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4010e4, instr: 27bdffe0
+[mcpu 00, 0, 0] 004010e4: addiu sp, sp, -32
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4010e8, instr: afbf001c
+[mcpu 00, 0, 0] 004010e8: sw ra, 28(sp)
+[mcpu 0, 0] Memory write request at 415ff8
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4010ec, instr: afbe0018
+[mcpu 00, 0, 0] 004010ec: sw fp, 24(sp)
+[mcpu 0, 0] Memory write request at 415ff4
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4010f0, instr: 3a0f021
+[mcpu 00, 0, 0] 004010f0: move fp, sp
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4010f4, instr: 3c020040
+[mcpu 00, 0, 0] 004010f4: lui v0, 64
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4010f8, instr: 24421900
+[mcpu 00, 0, 0] 004010f8: addiu v0, v0, 6400
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4010fc, instr: afc20010
+[mcpu 00, 0, 0] 004010fc: sw v0, 16(fp)
+[mcpu 0, 0] Memory write request at 415fec
+[mcpu 0,0] Completed instruction_fetch_complete, address: 401100, instr: 24040001
+[mcpu 00, 0, 0] 00401100: addiu a0, zero, 1
+[mcpu 0,0] Completed instruction_fetch_complete, address: 401104, instr: 27c20010
+[mcpu 00, 0, 0] 00401104: addiu v0, fp, 16
+[mcpu 0,0] Completed instruction_fetch_complete, address: 401108, instr: 402821
+[mcpu 00, 0, 0] 00401108: move a1, v0
+[mcpu 0,0] Completed instruction_fetch_complete, address: 40110c, instr: c100239
+[mcpu 00, 0, 0] 0040110c: jal 004008e4
+[mcpu 0,0] Completed instruction_fetch_complete, address: 401110, instr: 0
+[mcpu 00, 0, 0] 00401110: nop 
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4008e4, instr: 27bdffe8
+[mcpu 00, 0, 0] 004008e4: addiu sp, sp, -24
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4008e8, instr: afbf0014
+[mcpu 00, 0, 0] 004008e8: sw ra, 20(sp)
+[mcpu 0, 0] Memory write request at 415fd8
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4008ec, instr: afbe0010
+[mcpu 00, 0, 0] 004008ec: sw fp, 16(sp)
+[mcpu 0, 0] Memory write request at 415fd4
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4008f0, instr: 3a0f021
+[mcpu 00, 0, 0] 004008f0: move fp, sp
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4008f4, instr: c10002c
+[mcpu 00, 0, 0] 004008f4: jal 004000b0
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4008f8, instr: 0
+[mcpu 00, 0, 0] 004008f8: nop 
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000b0, instr: 27bdfff0
+[mcpu 00, 0, 0] 004000b0: addiu sp, sp, -16
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000b4, instr: afbe000c
+[mcpu 00, 0, 0] 004000b4: sw fp, 12(sp)
+[mcpu 0, 0] Memory write request at 415fc0
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000b8, instr: 3a0f021
+[mcpu 00, 0, 0] 004000b8: move fp, sp
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000bc, instr: 24020078
+[mcpu 00, 0, 0] 004000bc: addiu v0, zero, 120
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000c0, instr: c
+[mcpu 00, 0, 0] 004000c0: syscall 
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000c4, instr: 401821
+[mcpu 00, 0, 0] 004000c4: move v1, v0
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000c8, instr: afc30000
+[mcpu 00, 0, 0] 004000c8: sw v1, 0(fp)
+[mcpu 0, 0] Memory write request at 415fb4
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000cc, instr: 8fc20000
+[mcpu 00, 0, 0] 004000cc: lw v0, 0(fp)
+[mcpu 0, 0] Memory read request at 415fb4
+[mcpu 0] Completed load gpr[2], address: 415fb4, data: 0000000000000000
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000d0, instr: 3c0e821
+[mcpu 00, 0, 0] 004000d0: move sp, fp
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000d4, instr: 8fbe000c
+[mcpu 00, 0, 0] 004000d4: lw fp, 12(sp)
+[mcpu 0, 0] Memory read request at 415fc0
+[mcpu 0] Completed load gpr[30], address: 415fc0, data: 0000000000415FC4
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000d8, instr: 3e00008
+[mcpu 00, 0, 0] 004000d8: jr ra, zero
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000dc, instr: 27bd0010
+[mcpu 00, 0, 0] 004000dc: addiu sp, sp, 16
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4008fc, instr: 402021
+[mcpu 00, 0, 0] 004008fc: move a0, v0
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400900, instr: c100038
+[mcpu 00, 0, 0] 00400900: jal 004000e0
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400904, instr: 0
+[mcpu 00, 0, 0] 00400904: nop 
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000e0, instr: 27bdfff8
+[mcpu 00, 0, 0] 004000e0: addiu sp, sp, -8
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000e4, instr: afbe0004
+[mcpu 00, 0, 0] 004000e4: sw fp, 4(sp)
+[mcpu 0, 0] Memory write request at 415fc0
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000e8, instr: 3a0f021
+[mcpu 00, 0, 0] 004000e8: move fp, sp
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000ec, instr: afc40008
+[mcpu 00, 0, 0] 004000ec: sw a0, 8(fp)
+[mcpu 0, 0] Memory write request at 415fc4
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000f0, instr: 8fc30008
+[mcpu 00, 0, 0] 004000f0: lw v1, 8(fp)
+[mcpu 0, 0] Memory read request at 415fc4
+[mcpu 0] Completed load gpr[3], address: 415fc4, data: 0000000000000000
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000f4, instr: 602021
+[mcpu 00, 0, 0] 004000f4: move a0, v1
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000f8, instr: 1021
+[mcpu 00, 0, 0] 004000f8: move v0, zero
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4000fc, instr: c
+[mcpu 00, 0, 0] 004000fc: syscall 
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400100, instr: 3c0e821
+[mcpu 00, 0, 0] 00400100: move sp, fp
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400104, instr: 8fbe0004
+[mcpu 00, 0, 0] 00400104: lw fp, 4(sp)
+[mcpu 0, 0] Memory read request at 415fc0
+[mcpu 0] Completed load gpr[30], address: 415fc0, data: 0000000000415FC4
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400108, instr: 3e00008
+[mcpu 00, 0, 0] 00400108: jr ra, zero
+[mcpu 0,0] Completed instruction_fetch_complete, address: 40010c, instr: 27bd0008
+[mcpu 00, 0, 0] 0040010c: addiu sp, sp, 8
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400908, instr: 3c020040
+[mcpu 00, 0, 0] 00400908: lui v0, 64
+[mcpu 0,0] Completed instruction_fetch_complete, address: 40090c, instr: 244418f0
+[mcpu 00, 0, 0] 0040090c: addiu a0, v0, 6384
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400910, instr: c100044
+[mcpu 00, 0, 0] 00400910: jal 00400110
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400914, instr: 0
+[mcpu 00, 0, 0] 00400914: nop 
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400110, instr: 27bdfff8
+[mcpu 00, 0, 0] 00400110: addiu sp, sp, -8
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400114, instr: afbe0004
+[mcpu 00, 0, 0] 00400114: sw fp, 4(sp)
+[mcpu 0, 0] Memory write request at 415fc0
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400118, instr: 3a0f021
+[mcpu 00, 0, 0] 00400118: move fp, sp
+[mcpu 0,0] Completed instruction_fetch_complete, address: 40011c, instr: afc40008
+[mcpu 00, 0, 0] 0040011c: sw a0, 8(fp)
+[mcpu 0, 0] Memory write request at 415fc4
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400120, instr: 8fc30008
+[mcpu 00, 0, 0] 00400120: lw v1, 8(fp)
+[mcpu 0, 0] Memory read request at 415fc4
+[mcpu 0] Completed load gpr[3], address: 415fc4, data: 00000000004018F0
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400124, instr: 602021
+[mcpu 00, 0, 0] 00400124: move a0, v1
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400128, instr: 24020004
+[mcpu 00, 0, 0] 00400128: addiu v0, zero, 4
+[mcpu 0,0] Completed instruction_fetch_complete, address: 40012c, instr: c
+[mcpu 00, 0, 0] 0040012c: syscall 
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400130, instr: 3c0e821
+[mcpu 00, 0, 0] 00400130: move sp, fp
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400134, instr: 8fbe0004
+[mcpu 00, 0, 0] 00400134: lw fp, 4(sp)
+[mcpu 0, 0] Memory read request at 415fc0
+[mcpu 0] Completed load gpr[30], address: 415fc0, data: 0000000000415FC4
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400138, instr: 3e00008
+[mcpu 00, 0, 0] 00400138: jr ra, zero
+[mcpu 0,0] Completed instruction_fetch_complete, address: 40013c, instr: 27bd0008
+[mcpu 00, 0, 0] 0040013c: addiu sp, sp, 8
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400918, instr: 1021
+[mcpu 00, 0, 0] 00400918: move v0, zero
+[mcpu 0,0] Completed instruction_fetch_complete, address: 40091c, instr: 3c0e821
+[mcpu 00, 0, 0] 0040091c: move sp, fp
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400920, instr: 8fbf0014
+[mcpu 00, 0, 0] 00400920: lw ra, 20(sp)
+[mcpu 0, 0] Memory read request at 415fd8
+[mcpu 0] Completed load gpr[31], address: 415fd8, data: 0000000000401114
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400924, instr: 8fbe0010
+[mcpu 00, 0, 0] 00400924: lw fp, 16(sp)
+[mcpu 0, 0] Memory read request at 415fd4
+[mcpu 0] Completed load gpr[30], address: 415fd4, data: 0000000000415FDC
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400928, instr: 27bd0018
+[mcpu 00, 0, 0] 00400928: addiu sp, sp, 24
+[mcpu 0,0] Completed instruction_fetch_complete, address: 40092c, instr: 3e00008
+[mcpu 00, 0, 0] 0040092c: jr ra, zero
+[mcpu 0,0] Completed instruction_fetch_complete, address: 400930, instr: 0
+[mcpu 00, 0, 0] 00400930: nop 
+[mcpu 0,0] Completed instruction_fetch_complete, address: 401114, instr: c100631
+[mcpu 00, 0, 0] 00401114: jal 004018c4
+[mcpu 0,0] Completed instruction_fetch_complete, address: 401118, instr: 0
+[mcpu 00, 0, 0] 00401118: nop 
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4018c4, instr: 27bdffe8
+[mcpu 00, 0, 0] 004018c4: addiu sp, sp, -24
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4018c8, instr: afbf0014
+[mcpu 00, 0, 0] 004018c8: sw ra, 20(sp)
+[mcpu 0, 0] Memory write request at 415fd8
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4018cc, instr: afbe0010
+[mcpu 00, 0, 0] 004018cc: sw fp, 16(sp)
+[mcpu 0, 0] Memory write request at 415fd4
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4018d0, instr: 3a0f021
+[mcpu 00, 0, 0] 004018d0: move fp, sp
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4018d4, instr: 2402000a
+[mcpu 00, 0, 0] 004018d4: addiu v0, zero, 10
+[mcpu 0,0] Completed instruction_fetch_complete, address: 4018d8, instr: c
+[mcpu 00, 0, 0] 004018d8: syscall 
+Context 0 exit success!
+[mcpu 0 out] 0
+
+simulation ended successfully
+statistics for period [0,151)
+
+flit counts:
+    all flows counts: offered 0, sent 0, received 0 (0 in flight)
+
+in-network sent flit latencies (mean +/- s.d., [min..max] in # cycles):
+    all flows in-network flit latency: 0 +/- 0
+
+in-network sent flit collections in #cycles):
+
+link switch counts:
+    all links: bandwidths changed 0 times
+
+xbar transmission statistics (mean +/- s.d.):
+
+link transmission statistics (mean +/- s.d.):
+
+Router Power using Orion2.0: 
+Link Power using Orion2.0: 
+
+total power : 0 routers power : 0 links power : 0
+
+
+
+total simulation time:   00:00:00.008445
+total simulation cycles: 151
+total statistics cycles: 151 (statistics start after cycle 0)

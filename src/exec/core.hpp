@@ -54,6 +54,8 @@ protected:
     virtual void execute() = 0;
     /* check and update finished memory requests */
     virtual void update_from_memory_requests() = 0;
+    void tick_positive_edge_memory() throw(err);
+    void tick_negative_edge_memory() throw(err);
 
     /* use these queues to use the network */
     shared_ptr<messageQueue> receive_queue(uint32_t type);

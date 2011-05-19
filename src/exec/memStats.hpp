@@ -5,6 +5,7 @@
 #define __MEM_STATS_HPP__
 
 #include "statistics.hpp"
+#include <cstdio>
 
 class memStatsPerTile {
 public:
