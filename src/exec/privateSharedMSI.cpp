@@ -552,6 +552,14 @@ void privateSharedMSI::l1_work_table_update() {
                 line_info = shared_ptr<cacheCoherenceInfo>(new cacheCoherenceInfo);
                 line_info->directory_home = dir_rep->sender;
                 line_info->status = dir_rep->type == SH_REP? SHARED : MODIFIED;
+                shared_array<uint32_t> data = dir_rep->data;
+                if (!core_req->is_read()) {
+                    mh_assert(dir_rep->type == EX_REP);
+                    uint32_t word_offset = (core_req->maddr().address / 4) % m_cfg.words_per_cache_line;
+                    for (uint32_t i = 0; i < core_req->word_count(); ++i) {
+                        data[i + word_offset] = core_req->data()[i];
+                    }
+                }
                 l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                    m_cfg.words_per_cache_line, dir_rep->data, line_info));
                 l1_req->set_clean_write(true);
