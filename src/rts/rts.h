@@ -4,7 +4,18 @@
 #ifndef __RTS_H__
 #define __RTS_H__
 
-/* MIPS core syscall API */
+/* MIPS core syscall API 
+
+  Organization:
+    1.) Hardware
+    2.) Memory Hierarchy
+    3.) Function Intrinsics
+    4.) File I/O
+    5.) Networking
+    6.) Dynamic Memory Management
+    7.) Trace profiling / CPU state
+
+*/
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -20,6 +31,10 @@ static unsigned cpu_cycle_counter();
 
 /* returns n s.t. the CPU cycle counter is incremented every n real cycles */
 static unsigned cpu_cycle_counter_resolution() __attribute__((const));
+
+/* returns the ID of the current thread; in cases where the thread does not move 
+   from its starting core, thread_id() == cpu_id() */
+static unsigned thread_id();
 
 /* effects: checks whether an asertion is true, and throws an error if it is 
    not. */
@@ -57,6 +72,16 @@ inline static void __H_assert(int b) {
      : 
      : "r"(b)
      : "v0");
+}
+
+inline static unsigned thread_id() {
+    int ret;
+    __asm__ __volatile__
+    ("addiu $v0, $0, 0x78; syscall; move %0, $v0;"
+     : "=r"(ret)
+     : 
+     : "v0");
+    return ret;
 }
 
 inline static void __H_exit(int code) {
@@ -146,6 +171,9 @@ static void print_float(float);
 static void print_double(double);
 static void print_char(char);
 
+/* effects: can be used to prevent compiler optimizations on a variable. */
+static void print_void(int);
+
 /* effects: flush std out; 
    Note: all 'print_' functions place their output in std out. */
 static void     __H_fflush();
@@ -193,6 +221,14 @@ inline static void print_char(char c) {
          : "a0",  "v0");
 }
 
+inline static void print_void(int c) {
+    __asm__ __volatile__
+        ("move $a0, %0; addiu $v0, $0, 0x02; syscall;"
+         :
+         : "r"(c)
+         : "a0",  "v0");
+}
+
 inline static void __H_fflush() {
     __asm__ __volatile__
     ("addiu $v0, $0, 0x09; syscall;"
@@ -222,6 +258,12 @@ static float    __H_exp_s(float);
 static double   __H_sqrt_d(double);
 static double   __H_log_d(double);
 static double   __H_exp_d(double);
+//static double   __H_sin_d(double);
+//static double   __H_fabs_d(double);
+
+// Random number generation
+
+static int      __H_random_int(int);
 
 //------------------------ Implementation --------------------------------------
 
@@ -282,6 +324,16 @@ inline static double __H_exp_d(double in) {
          : "r"(bot_i), "r"(top_i)
          : "a0", "a1", "v0", "v1");
     __suffix_double__
+}
+
+inline static int __H_random_int(int in) {
+    int result;
+    __asm__ __volatile__
+        ("move $a0, %1; addiu $v0, $0, 0x53; syscall; move %0, $v0;"
+         : "=r"(result)
+         : "r"(in)
+         : "a0", "v0");
+    return result;
 }
 
 //------------------------------------------------------------------------------
@@ -651,23 +703,26 @@ static void free(void *ptr) {
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
+// Profiling / CPU State
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+
+/* effects: */
+static void reset_profile(int);
+
+inline static void reset_profile(int b) {
+    __asm__ __volatile__
+    ("move $a0, %0; addiu $v0, $0, 0x30; syscall;"
+     : 
+     : "r"(b)
+     : "v0");
+}
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Currently Unimplemented
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-
-/* returns the ID of the current thread; in cases where the thread does not move 
-   from its starting core, thread_id() == cpu_id() */
-static unsigned thread_id();
-
-inline static unsigned thread_id() {
-    int ret;
-    __asm__ __volatile__
-    ("addiu $v0, $0, 0x78; syscall; move %0, $v0;"
-     : "=r"(ret)
-     : 
-     : "v0");
-    return ret;
-}
 
 inline static int __H_printf(const char * format, ...) {
     __asm__ __volatile__
@@ -677,3 +732,4 @@ inline static int __H_printf(const char * format, ...) {
 
 //------------------------------------------------------------------------------
 #endif /* __RTS_H__ */
+

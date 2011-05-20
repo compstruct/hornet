@@ -194,15 +194,9 @@ def write_pe(out, id, core, img, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_size,
     else:
         raise Err('bad core name : %s (must be one of %s)' % (core, str(core_id.keys())))
 
-    # core specific configurations 
-    for cfg in core_cfgs:
-        out.write(w2bs(cfg))
-
-    # memory specific configurations
-    for cfg in memory_cfgs:
-        out.write(w2bs(cfg))
-
+    ## -------------------------------------------------------------------------
     # mips data
+    ## -------------------------------------------------------------------------
     if core == 'mips_mpi':
         assert(img is not None)
         file, format, entry, all_sections = \
@@ -212,6 +206,8 @@ def write_pe(out, id, core, img, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_size,
         addr_past_end = sections[-1]['lma'] + sections[-1]['size']
         size = ((addr_past_end - start) & 0xfffff000) + 0x1000 + 0x4000
         write_mem_image(out, file, start, size, entry, sections, verbose=verbose)
+    ## -------------------------------------------------------------------------
+    ## -------------------------------------------------------------------------
     if core == 'mcpu':
         file, format, entry, all_sections = \
                 read_section_headers(img, verbose=verbose)
@@ -220,6 +216,16 @@ def write_pe(out, id, core, img, n2b_bw, b2n_bw, b2n_xbar_bw, qmem_size,
         addr_past_end = sections[-1]['lma'] + sections[-1]['size']
         size = ((addr_past_end - start) & 0xfffff000) + 0x1000 + 0x4000
         write_mem_image(out, file, start, size, entry, sections, verbose=verbose)
+    ## -------------------------------------------------------------------------
+    ## -------------------------------------------------------------------------
+
+    # core specific configurations 
+    for cfg in core_cfgs:
+        out.write(w2bs(cfg))
+
+    # memory specific configurations
+    for cfg in memory_cfgs:
+        out.write(w2bs(cfg))
 
 def write_cxn(out, src, src_port, dst, dst_port, bw, xbar_bw, queues,
               verbose=False):
