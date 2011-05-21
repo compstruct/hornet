@@ -9,7 +9,7 @@
 /* 64-bit address */
 
 #define DEBUG
-#undef DEBUG
+//#undef DEBUG
 
 #ifdef DEBUG
 #define mh_log(X) if(true) cout
@@ -872,6 +872,22 @@ void privateSharedMSI::l2_work_table_update() {
             }
             m_l2_work_table.erase(it_addr++);
             continue;
+        } else if (entry->status == _L2_WORK_DRAM_WRITEBACK_AND_EVICT) {
+            if (dram_req->did_win_last_arbitration) {
+                if (entry->net_msg_to_send) {
+                    entry->net_msg_to_send = shared_ptr<message_t>();
+                }
+                dram_req->did_win_last_arbitration = false;
+                cout << "[DIRECTORY " << m_id << " @ " << system_time << " ] sent a DRAM writeback for "
+                          << dram_req->req->maddr() << endl;
+                entry->status = _L2_WORK_UPDATE_L2_AND_FINISH;
+            } else if (m_dram_controller_location == m_id) {
+                m_to_dram_req_schedule_q.push_back(entry->dram_req);
+            } else {
+                m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
+            }
+            ++it_addr;
+            continue;
         } else if (entry->status == _L2_WORK_EMPTY_LINE_TO_EVICT) {
             if (cache_rep) {
                 process_cache_rep(line, cache_rep);
@@ -884,7 +900,32 @@ void privateSharedMSI::l2_work_table_update() {
                     if (stats_enabled()) {
                         stats()->did_invalidate_caches(entry->invalidate_num_targets, system_time - entry->invalidate_begin_time);
                     }
-                    entry->status = _L2_WORK_UPDATE_L2_AND_FINISH;
+                    if (line->dirty) {
+                        dram_req = shared_ptr<dramMsg>(new dramMsg);
+                        dram_req->sender = m_id;
+                        dram_req->receiver = m_dram_controller_location;
+                        dram_req->req = shared_ptr<dramRequest>(new dramRequest(line->start_maddr,
+                                                                                DRAM_REQ_WRITE,
+                                                                                m_cfg.words_per_cache_line,
+                                                                                line->data));
+                        dram_req->did_win_last_arbitration = false;
+                        entry->dram_req = dram_req;
+                        if (m_dram_controller_location == m_id) {
+                            m_to_dram_req_schedule_q.push_back(entry->dram_req);
+                        } else {
+                            entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
+                            entry->net_msg_to_send->src = m_id;
+                            entry->net_msg_to_send->dst = m_dram_controller_location;
+                            entry->net_msg_to_send->type = MSG_DRAM_REQ;
+                            entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
+                            entry->net_msg_to_send->content = dram_req;
+                            m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
+                        }
+
+                        entry->status = _L2_WORK_DRAM_WRITEBACK_AND_EVICT;
+                    } else {
+                        entry->status = _L2_WORK_UPDATE_L2_AND_FINISH;
+                    }
                     ++it_addr;
                     continue;
                 }
@@ -1456,6 +1497,7 @@ void privateSharedMSI::schedule_requests() {
             ++count;
         } else {
             /* sorry */
+            cerr << "you have to retry" << endl;
             set_req_status(m_core_port_schedule_q.front(), REQ_RETRY);
         }
         m_core_port_schedule_q.erase(m_core_port_schedule_q.begin());
@@ -1470,6 +1512,7 @@ void privateSharedMSI::schedule_requests() {
                 static_pointer_cast<memoryRequest>(m_to_cache_req_schedule_q.front().get<1>());
             maddr_t start_maddr = get_start_maddr_in_line(req->maddr());
             if (m_l1_work_table.count(start_maddr) || m_available_core_ports == 0) {
+                cerr << "you have to retry" << endl;
                 set_req_status(req, REQ_RETRY);
                 m_to_cache_req_schedule_q.erase(m_to_cache_req_schedule_q.begin());
                 continue;
