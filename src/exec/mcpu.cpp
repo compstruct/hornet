@@ -41,6 +41,7 @@ mcpu::mcpu( const pe_id                         &new_id,
                                                 bytes_per_flit), // TODO: the 0 means no core support for EM2 
                 running(true), 
                 instr_count(0),
+                enable_memory_hierarchy(false),
                 byte_count(4), // TODO make static---move to mcpu.hpp
                 pc(entry_point), 
                 net(),
@@ -71,12 +72,15 @@ mcpu::~mcpu() throw() { }
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
 
+uint32_t mcpu::form_maddr_space(uint64_t addr) {
+    return (addr & 0x00400000) ? get_id().get_numeric_id() + 1 : 0;
+}
+
 /* 0 =  global address space, 
         thread local addresses given by thread ID + 1 */
 maddr_t mcpu::form_maddr(uint64_t addr) {
     maddr_t maddr;
-    int aspace = addr & 0x00400000; 
-    maddr.space = (aspace) ? get_id().get_numeric_id() + 1 : 0;
+    maddr.space = form_maddr_space(addr);
     maddr.address = addr;
     return maddr;
 }
@@ -127,7 +131,16 @@ inline uint32_t read_word_temp(shared_ptr<ifstream> in) throw(err) {
 /* -------------------------------------------------------------------------- */
 
 void mcpu::update_from_memory_requests() {
-    /* update waiting requests */
+    if (pending_request_instruction && 
+        pending_request_instruction->status() == REQ_RETRY) {
+        nearest_memory_instruction()->request(pending_request_instruction);
+        //printf("[mcpu 0%d] RETRYING instruction memory request!\n", get_id().get_numeric_id());     
+    }
+    if (pending_data_memory_request() && 
+        pending_request_data->status() == REQ_RETRY) {
+        nearest_memory_data()->request(pending_request_data);
+        //printf("[mcpu 0%d] RETRYING data memory request!\n", get_id().get_numeric_id());    
+    }
 }
 
 void mcpu::tick_positive_edge_memory() throw(err) {
@@ -179,7 +192,6 @@ void mcpu::execute() {
         //cout << "exec_core PID: " << get_id() << ", jump_active: " << jump_active << endl;
         data_complete();
         shared_ptr<instr> i = instruction_fetch_complete(pc);
-        printf("[mcpu %d] Running: %d\n", get_id().get_numeric_id(), running);
         if (i && !pending_data_memory_request()) {
             instr_count++;
             execute(i);
@@ -201,40 +213,56 @@ void mcpu::execute() {
 // Instructions ----------------------------------------------------------------
 
 shared_ptr<instr> mcpu::instruction_fetch_complete(uint32_t pc) {
-    if (!pending_data_memory_request() &&
-        pending_request_instruction && 
-        pending_request_instruction->status() == REQ_DONE) {
-        uint32_t raw = pending_request_instruction->data()[0];
-        printf( "[mcpu %d] Completed instruction_fetch_complete, address: %x, instr: %x\n", 
-                get_id().get_numeric_id(), pc, raw);
-        pending_request_instruction = shared_ptr<memoryRequest>(); // reset to null
-        return shared_ptr<instr> (new instr(raw));
+    if (enable_memory_hierarchy) {
+        if (!pending_data_memory_request() &&
+            pending_request_instruction && 
+            pending_request_instruction->status() == REQ_DONE) {
+            uint32_t raw = pending_request_instruction->data()[0];
+            //printf( "[mcpu 0%d] Completed instruction fetch, address: %x, instr: %x\n", 
+            //        get_id().get_numeric_id(), pc, raw);
+            pending_request_instruction = shared_ptr<memoryRequest>(); // reset to null
+            return shared_ptr<instr> (new instr(raw));
+        }
+        if (!pending_data_memory_request() && // TODO: serialize data/instr for now (fix later)
+            !pending_request_instruction) {
+            maddr_t maddr = form_maddr(pc);
+            //printf("--------------------------------------------------------------------\n");
+            //printf( "[mcpu 0%d] Issued instruction fetch, address: %x (Hornet word address: %x)\n", 
+            //        get_id().get_numeric_id(), pc, (uint32_t) maddr.address);
+            shared_ptr<memoryRequest> read_req(new memoryRequest(maddr, 1));
+            nearest_memory_instruction()->request(read_req);
+            pending_request_instruction = shared_ptr<memoryRequest>(read_req);
+        }
+        return shared_ptr<instr>();
+    } else {
+        uint32_t rdata;
+        backingDRAM->mem_read_instant(  &rdata,
+                                        form_maddr_space(pc), pc, sizeof(uint32_t),
+                                        false);
+        //printf( "[mcpu 0%d] Fetched instruction, address: %x, instruction: %x\n", 
+        //        get_id().get_numeric_id(), pc, rdata);
+        return shared_ptr<instr> (new instr(rdata));
     }
-    if (!pending_data_memory_request() && // TODO: serialize data/instr for now (fix later)
-        !pending_request_instruction) {
-        maddr_t maddr = form_maddr(pc);
-        printf("--------------------------------------------------------------------\n");
-        printf( "[mcpu %d] Issued instruction_fetch_complete, address: %x (Hornet word address: %x)\n", 
-                get_id().get_numeric_id(), pc, (uint32_t) maddr.address);
-        shared_ptr<memoryRequest> read_req(new memoryRequest(maddr, 1));
-        nearest_memory_instruction()->request(read_req);
-        pending_request_instruction = shared_ptr<memoryRequest>(read_req);
-    }
-    return shared_ptr<instr>();
 }
 
 // Data complete ---------------------------------------------------------------
 
 void mcpu::data_complete() {
-    if (!pending_request_instruction &&  // TODO: serialize data/instr for now (fix later)
-        pending_data_memory_request() &&
-        pending_request_data->status() == REQ_DONE) {
-        if (pending_request_data->is_read()) data_complete_helper(pending_request_data);
-        close_memory_op();
+    if (enable_memory_hierarchy) {
+        if (!pending_request_instruction &&  // TODO: serialize data/instr for now (fix later)
+            pending_data_memory_request() &&
+            pending_request_data->status() == REQ_DONE) {
+            if (pending_request_data->is_read()) 
+                data_complete_helper(pending_request_data->data(), pending_request_data->maddr().address);
+            else {
+                //printf("[mcpu 0%d] Completed data memory write!\n", get_id().get_numeric_id());        
+            }
+            close_memory_op();
+        }
     }
 }
 
-void mcpu::data_complete_helper(const shared_ptr<memoryRequest> &req) {
+void mcpu::data_complete_helper(shared_array<uint32_t> req_data, uint32_t address) {
     uint64_t m;
     switch (pending_request_byte_count) { 
         case 1: m = 0xFFULL; break;  
@@ -247,11 +275,11 @@ void mcpu::data_complete_helper(const shared_ptr<memoryRequest> &req) {
     uint64_t raw;
     if (pending_request_byte_count == 8) {
         // this order corresponds to what is written in the .o file
-        uint64_t bot = req->data()[1]; 
-        uint64_t top = ((uint64_t) req->data()[0]) << 32;
+        uint64_t bot = req_data[1]; 
+        uint64_t top = ((uint64_t) req_data[0]) << 32;
         raw = bot | top;
     } else {
-        raw = req->data()[0];
+        raw = req_data[0];
     }
     raw = raw & m;
     if (pending_lw_sign_extend) {
@@ -262,14 +290,14 @@ void mcpu::data_complete_helper(const shared_ptr<memoryRequest> &req) {
     if (pending_request_read_gpr) {
         //if (get_id() == 0) 
         //    printf("[mcpu %d] Completed load gpr[%d], address: %x, data: %016llX\n", 
-        //            get_id().get_numeric_id(), pending_lw_gpr.get_no(), (uint32_t) req->maddr().address, 
+        //            get_id().get_numeric_id(), pending_lw_gpr.get_no(), address, 
         //            (long long unsigned int) raw); 
         set(gpr(pending_lw_gpr), raw);
     } else {
         assert(pending_request_read_fpr);
         //if (get_id() == 0) 
         //    printf("[mcpu %d] Completed load fpr[%d], address: %x, data: %f (%016llX)\n", 
-        //            get_id().get_numeric_id(), pending_lw_fpr.get_no(), (uint32_t) req->maddr().address,
+        //            get_id().get_numeric_id(), pending_lw_fpr.get_no(), address,
         //            intBitsToDouble(raw), (long long unsigned int) raw);            
         if (pending_request_byte_count == 4) set_s(fpr(pending_lw_fpr), raw);
         else if (pending_request_byte_count == 8) set_d(fpr(pending_lw_fpr), raw);
@@ -284,35 +312,61 @@ void mcpu::data_complete_helper(const shared_ptr<memoryRequest> &req) {
                                 else if (bytes <= 8) words = 2; \
                                 else assert(false);
 
+//
+// Reads
+//
+
 void mcpu::data_fetch_to_gpr(   const gpr dst,
                                 const uint32_t &addr, 
                                 const uint32_t &bytes,
                                 bool sign_extend) throw(err) {
-    data_fetch_read(addr, bytes, sign_extend);
+    assert(!pending_data_memory_request());
+    
     pending_lw_gpr = dst;
     pending_request_read_gpr = true;
+    data_fetch_read(addr, bytes, sign_extend);
 }
 void mcpu::data_fetch_to_fpr(   const fpr dst,
                                 const uint32_t &addr, 
                                 const uint32_t &bytes) throw(err) {
-    data_fetch_read(addr, bytes, false);
+    assert(!pending_data_memory_request());
+    
     pending_lw_fpr = dst;
     pending_request_read_fpr = true;
+    data_fetch_read(addr, bytes, false);
 }
 void mcpu::data_fetch_read( const uint32_t &addr, 
                             const uint32_t &bytes,
                             bool sign_extend) throw(err) {
-    assert(!pending_data_memory_request());
     //printf("--------------------------------------------------------------------\n");
-    //printf("[mcpu %d] Memory read at %x\n", get_id().get_numeric_id(), addr);
 
     __BYTES_TO_WORDS__
 
     pending_request_byte_count = bytes;
-    pending_request_data = shared_ptr<memoryRequest> (new memoryRequest(form_maddr(addr), words));
-    nearest_memory_data()->request(pending_request_data);
     pending_lw_sign_extend = sign_extend;
+
+    if (enable_memory_hierarchy) {
+        //printf("[mcpu 0%d] Memory read at %x\n", get_id().get_numeric_id(), addr);    
+        pending_request_data = shared_ptr<memoryRequest> (new memoryRequest(form_maddr(addr), words));
+        nearest_memory_data()->request(pending_request_data);
+    } else {
+        uint32_t * read_data_inner = new uint32_t[words];
+        shared_array<uint32_t> read_data(read_data_inner);
+        backingDRAM->mem_read_instant(  read_data_inner,
+                                        form_maddr_space(addr), addr, sizeof(uint32_t),
+                                        false);
+
+        //if (words == 1) printf("[mcpu 0%d] Memory read at %x, data: %x\n", get_id().get_numeric_id(), addr, read_data_inner[0]); 
+        //else printf("[mcpu 0%d] Memory read at %x, data: {%x, %x}\n", get_id().get_numeric_id(), addr, read_data_inner[1], read_data_inner[0]);
+
+        data_complete_helper(read_data, addr);
+        close_memory_op();
+    }
 }
+
+//
+// Writes
+//
 
 void mcpu::data_fetch_write(    const uint32_t &addr, 
                                 const uint64_t &val,
@@ -322,22 +376,31 @@ void mcpu::data_fetch_write(    const uint32_t &addr,
     __BYTES_TO_WORDS__
 
     //printf("--------------------------------------------------------------------\n");
-    shared_array<uint32_t> wdata(new uint32_t[words]);
+    uint32_t * write_data_inner = new uint32_t[words];
+    shared_array<uint32_t> write_data(write_data_inner);
     if (bytes != 8) {
         assert(bytes <= 4);
-        wdata[0] = (uint32_t) val;
-        //printf( "[mcpu %d] Memory write at %x, data: %x\n", 
-        //        get_id().get_numeric_id(), addr, wdata[0]);
+        write_data[0] = (uint32_t) val;
+        //printf( "[mcpu 0%d] Memory write at %x, data: %x\n", 
+        //        get_id().get_numeric_id(), addr, write_data[0]);
     } else {
-        wdata[0] = (uint32_t) (val >> 32);
-        wdata[1] = (uint32_t) val;
-        //printf( "[mcpu %d] Memory write at %x, data: {%x, %x} \n", 
-        //        get_id().get_numeric_id(), addr, wdata[1], wdata[0]);
+        write_data[0] = (uint32_t) (val >> 32);
+        write_data[1] = (uint32_t) val;
+        //printf( "[mcpu 0%d] Memory write at %x, data: {%x, %x} \n", 
+        //        get_id().get_numeric_id(), addr, write_data[1], write_data[0]);
     }
 
-    pending_request_data = shared_ptr<memoryRequest> (new memoryRequest(form_maddr(addr), words, wdata));
-    nearest_memory_data()->request(pending_request_data);
     pending_request_memory_write = true;
+
+    if (enable_memory_hierarchy) {
+        pending_request_data = shared_ptr<memoryRequest> (new memoryRequest(form_maddr(addr), words, write_data));
+        nearest_memory_data()->request(pending_request_data);
+    } else {
+        backingDRAM->mem_write_instant( write_data_inner,
+                                        form_maddr_space(addr), addr, bytes, 
+                                        false);
+        close_memory_op();
+    }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -413,9 +476,9 @@ inline uint32_t check_align(uint32_t addr, uint32_t mask) {
 
 void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     instr i = *ip;
-    cout << "[mcpu " << get_id() << "] "
-         << hex << setfill('0') << setw(8) << pc << ": "
-         << i << " (instr #: " << instr_count << ")" << endl;
+    //cout << "[mcpu " << get_id() << "] "
+    //     << hex << setfill('0') << setw(8) << pc << ": "
+    //     << i << " (instr #: " << instr_count << ")" << endl;
     instr_code code = i.get_opcode();
     switch (code) {
     case IC_ABS_D: unimplemented_instr(i, pc);
@@ -831,6 +894,7 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
 }
 
 void mcpu::syscall(uint32_t call_no) throw(err) {
+    //printf("Executing syscall no. %x\n", call_no);
     switch (call_no) {
     // Single precision intrinsics ---------------------------------------------
     case SYSCALL_SQRT_S: {
@@ -870,20 +934,21 @@ void mcpu::syscall(uint32_t call_no) throw(err) {
     // File I/O ----------------------------------------------------------------
     case SYSCALL_FOPEN: {
         // 1.) build file name from memory
-        /*maddr_t fname_start = form_maddr(get(gpr(4)));
-        uint32_t * fname_buffer = (uint32_t *) malloc(sizeof(uint32_t) * MAX_BUFFER_SIZE);
-        backingDRAM->mem_read_instant(  fname_buffer, fname_start,
+        maddr_t fname_start = form_maddr(get(gpr(4)));
+        char * fname_buffer = (char *) malloc(sizeof(char) * MAX_BUFFER_SIZE);
+        backingDRAM->mem_read_instant(  (uint32_t *) fname_buffer, 
+                                        fname_start.space, fname_start.address,
                                         MAX_BUFFER_SIZE, true);
-        assert(false);
+        //printf("Opening file: %s\n", fname_buffer);
         // 2.) open the file & return a key
         fid_value = fopen(fname_buffer, "r");
         fid_key = (fid_value == NULL) ? 0 : 1; // TODO: turn into map for multi-file support
         free(fname_buffer);
-        set(gpr(2), fid_key);*/
+        set(gpr(2), fid_key);
         break;
     }
     case SYSCALL_READ_LINE: {
-        /*// 1.) inputs
+        // 1.) inputs
         int fid_key_temp = get(gpr(4));
         if (fid_key_temp == -1 || fid_key_temp != fid_key)
             err_panic("MCPU: SYSCALL_FSCANF BAD FILE.");      
@@ -897,16 +962,14 @@ void mcpu::syscall(uint32_t call_no) throw(err) {
         for (write_count = 0; write_count < count; write_count++) {
             if (feof(fid_value)) break;
             lc = fgetc(fid_value);
-            //if (get_id() == 0)
-            //    printf("Just read: %1x\n", (unsigned)(unsigned char) lc);
+            //printf("Just read: %1x\n", (unsigned)(unsigned char) lc);
             *walk = lc; walk++;
         }
-        backingDRAM->mem_write_instant(get_id().get_numeric_id(), 
-                                            data_buffer, dest, 
-                                            write_count, false);
+        backingDRAM->mem_write_instant( data_buffer,
+                                        form_maddr_space(dest), dest, write_count, 
+                                        false);
         free(data_buffer);
-        set(gpr(2), write_count);*/
-        assert(false);
+        set(gpr(2), write_count);
         break;
     }
     case SYSCALL_FCLOSE: {
@@ -917,27 +980,12 @@ void mcpu::syscall(uint32_t call_no) throw(err) {
         set(gpr(2), ret);    
         break;
     }
-    // Unached LW/SW -----------------------------------------------------------
-    /*case SYSCALL_UNCACHED_LOAD_WORD: {
-        maddr_t addr = form_maddr(get(gpr(4)));
-        int loaded;
-        backingDRAM->mem_read_instant( get_id().get_numeric_id(), 
-                                            &loaded, addr, 4, true);
-        set(gpr(2), loaded);
-        break;
-    }
-    case SYSCALL_UNCACHED_SET_BIT: {
-        maddr_t addr = (maddr_t) get(gpr(4));
-        uint32_t position = get(gpr(5));
-        uint32_t mask = 0x1 << position;
-        int loaded;
-        backingDRAM->mem_read_instant( get_id().get_numeric_id(), 
-                                            &loaded, addr, 4, true);
-        loaded = loaded | mask;
-        backingDRAM->mem_write_instant(get_id().get_numeric_id(), 
-                                            &loaded, addr, 4, true);
+    // Memory Hierarchy Helpers-------------------------------------------------
+    case SYSCALL_ENABLE_MEMORY_HIERARCHY: {
+        assert(!enable_memory_hierarchy);
+        enable_memory_hierarchy = true;        
         break;    
-    }*/
+    }
     // Printers ----------------------------------------------------------------
     case SYSCALL_PRINT_CHAR: {
         char p = (char) get(gpr(4));
@@ -976,12 +1024,12 @@ void mcpu::syscall(uint32_t call_no) throw(err) {
     // Exits -------------------------------------------------------------------
     case SYSCALL_EXIT_SUCCESS:
         flush_stdout(); 
-        printf("CPU %d exited successfully!\n", get_id().get_numeric_id());
+        //printf("CPU %d exited successfully!\n", get_id().get_numeric_id());
         running = false; break;
     case SYSCALL_EXIT: {
         int code = get(gpr(4));
         flush_stdout();
-        printf("CPU %d exited!\n", get_id().get_numeric_id());
+        //printf("CPU %d exited!\n", get_id().get_numeric_id());
         running = false;
         exit(code);
     }

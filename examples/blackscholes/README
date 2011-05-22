@@ -1,0 +1,10 @@
+To run blackscholes, run the following commands:
+
+> make
+> make run
+
+setup.py is responsible for translating familiar blackscholes input files into a 
+packed binary representation that can be used by the Hornet file I/O operations.
+
+blackscholes_model.cpp provides a golden reference for a C++ implementation of 
+the same algorithm.

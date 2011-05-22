@@ -101,22 +101,15 @@ inline static void __H_exit(int code) {
 /* effects: turns on the Hornet memory hierarchy.  Before this function is 
    called, all loads and stores are magic single-cycle operations. This magic 
    mode is convenient when performing startup operations such as file I/O, as a 
-   means of speeding up the simulation. */
+   means of speeding up the simulation. 
+
+   For example, without __H_enable_memory_hierarchy, reading lines from a file 
+   would require many accesses to the Hornet memory hierarchy, which is very 
+   slow.  If we read lines from a file and write DIRECTLY to DRAM, however, we 
+   aren't necessarily coherent.  In order to write to dram (fast) and maintain 
+   coherency, we need to have the memory hierarchy disabled when we are doing 
+   the read line operation. */
 static void     __H_enable_memory_hierarchy();
-
-/* effects: loads a word directly from backing store (DRAM), bypassing the 
-   memory hierarchy (regardless of whether __H_enable_memory_hierarchy has been 
-   called.  This can be used by a master thread to check whether a set of slave 
-   threads have finished a computation.
-   returns: the loaded word. */
-static int      __H_ucLoadWord(int *);
-
-/* effects: sets a specified bit (given by its position relative to the LSB) in 
-   the word specified by the address. The bit is set in a way that bypasses the 
-   memory hierarchy, regardless of whether __H_enable_memory_hierarchy has been 
-   called.  This can be used by slave threads to announce that they have 
-   finished a task. */
-static void     __H_ucSetBit(int *, int);
 
 //------------------------ Implementation --------------------------------------
 
@@ -126,23 +119,6 @@ inline static void __H_enable_memory_hierarchy() {
      : 
      : 
      : "v0");
-}
-
-inline static int __H_ucLoadWord(int * addr) {
-    int ret;
-    __asm__ __volatile__
-    ("move $a0, %1; addiu $v0, $0, 0x70; syscall; move %0, $v0;"
-     : "=r"(ret)
-     : "r"(addr)
-     : "a0", "v0");
-    return ret;
-}
-inline static void __H_ucSetBit(int * addr, int position) {
-    __asm__ __volatile__
-    ("move $a0, %0; move $a1, %1; addiu $v0, $0, 0x72; syscall;"
-     : 
-     : "r"(addr), "r"(position)
-     : "a0", "a1", "v0");
 }
 
 //------------------------------------------------------------------------------

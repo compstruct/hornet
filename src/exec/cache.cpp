@@ -59,14 +59,19 @@ cache::~cache() {
 
 // pretty printer
 void cache::print_contents() {
-    printf("\nPrinting cache contents, level: %d\n", m_level);
+    printf("\n[cache 0%d] Printing cache contents, level: %d\n", m_id, m_level);
     for (cacheTable::iterator it = m_cache.begin(); it != m_cache.end(); ++it) {
-        printf("index = %d: ", it->first);
-        cacheLine * line = it->second;
-        for (uint32_t o = 0; o < m_words_per_line; o++) {
-            printf("%x\t", line->data[o]);        
+        uint32_t index = it->first;
+
+        for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
+            if (m_cache[index][it_way].valid) {
+                printf("index = %d, way = %d: ", index, it_way);
+                for (uint32_t o = 0; o < m_words_per_line; o++) {
+                    printf("%x\t", m_cache[index][it_way].data[o]);        
+                }
+                printf("\n");
+            }
         }
-        printf("\n");
     }
     printf("\n");
 }
@@ -226,6 +231,7 @@ void cache::tick_positive_edge() {
                                 break;
                             }
                         case CACHE_REQ_READ:
+                            //printf("\t[cache 0%d] Request was an READ\n",  m_id);
                             req->m_line_copy = copy_cache_line(line);
                             break;
                         }
@@ -233,6 +239,7 @@ void cache::tick_positive_edge() {
                         break;
                     } else {
                         /* it's either invalid, or a coherence miss */
+                        //printf("\t[cache 0%d] Request was INVALID or a COHERENCE MISS\n",  m_id);
                         req->m_status = CACHE_REQ_MISS;
                         line.last_access_time = system_time;
                         req->m_line_copy = copy_cache_line(line);

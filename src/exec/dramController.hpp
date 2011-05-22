@@ -87,6 +87,7 @@ private:
 
 public:
     void mem_read_instant(uint32_t *, uint32_t, uint32_t, uint32_t, bool);
+    void mem_write_instant(void * source, uint32_t mem_space, uint32_t mem_start, uint32_t mem_size, bool endianc);
     void mem_write_instant(shared_ptr<mem>, uint32_t, uint32_t, uint32_t);
 };
 

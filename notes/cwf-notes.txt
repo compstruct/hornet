@@ -4,6 +4,11 @@ Checkout (when logged into login.csail.mit.edu):
 git clone file:///afs/csail.mit.edu/group/csg/gitroots/dar.git
 
 --------------------------------------------------------------------------------
+Pulling a new branch out for the first time
+
+git checkout -b newShMem origin/newShMem
+
+--------------------------------------------------------------------------------
 Dependancies:
 
 - a C++ compiler
@@ -16,7 +21,11 @@ Dependancies:
 Setup: 
 
 sh bootstrap
+
 ./configure --prefix=$HORNET_HOME --enable-mips-rts --enable-testsuite=no CFLAGS="-g -O0 -DEM2_PURE" CXXFLAGS="-g -O0 -DEM2_PURE"
+--- or ---
+./configure --prefix=$HORNET_HOME --enable-mips-rts --enable-testsuite=no CFLAGS="-g -O0" CXXFLAGS="-g -O0"
+
 sudo make
 sudo make install
 

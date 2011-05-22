@@ -117,6 +117,8 @@ void dramController::dram_access(shared_ptr<dramRequest> req) {
     }
     uint32_t space = req->m_maddr.space;
     uint32_t word_address = req->m_maddr.address >> 2;
+    //if (req->is_read()) printf("Starting DRAM read (addr: %d:%x) of %d words.\n", space, (uint32_t) req->m_maddr.address, req->m_word_count);
+    //else if (req->is_read()) printf("Starting DRAM write (addr: %d:%x) of %d words.\n", space, (uint32_t) req->m_maddr.address, req->m_word_count);    
     for (uint32_t it_word = 0; it_word != req->m_word_count; ++it_word) {        
         uint64_t address = word_address + it_word;
         uint64_t offset = address & DRAM_INDEX_MASK;
@@ -125,7 +127,6 @@ void dramController::dram_access(shared_ptr<dramRequest> req) {
             // C F FIX 2011.5.17
             // Added && it_word == 0 so that memory is allocated only once
             // If this is not done, only the last loop iteration's data gets read on read operations           
-            //printf("Starting DRAM read of %d words.\n", req->m_word_count);
             req->m_data = shared_array<uint32_t>(new uint32_t[req->m_word_count]);
         }
         if (m_dram->m_memory[space].count(start_address) == 0) {
@@ -156,8 +157,7 @@ void dramController::dram_access(shared_ptr<dramRequest> req) {
 /* The below calls are used by the mcpu custom core for direct-from-dram 
    accesses. (Used primarily for binary loading and syscalls). */
 
-/* effects: memcpy from this dram's backing store to a specified buffer 
-            (transfers are in bytes) */
+/* Used by syscalls */
 void dram::mem_read_instant(    uint32_t * dst, 
                                 uint32_t mem_space,
                                 uint32_t mem_start,
@@ -166,7 +166,6 @@ void dram::mem_read_instant(    uint32_t * dst,
     mem_size = mem_size/4; // mem_size was in bytes  
     for (uint32_t it_word = 0; it_word != mem_size; ++it_word) {
         uint64_t address = (mem_start >> 2) + it_word;
-        //uint64_t address_byte = mem_start + (it_word * 4);
         uint64_t offset = address & DRAM_INDEX_MASK;
         uint64_t start_address = address - offset;
         if (m_memory[mem_space].count(start_address) == 0) {
@@ -179,11 +178,47 @@ void dram::mem_read_instant(    uint32_t * dst,
         uint32_t src = m_memory[mem_space][start_address][offset];
         if (endianc) src = endian(src);
         dst[it_word] = src;
+        //printf( "DRAM read {mem_start, mem_size}: {%x, %d}, {space,start_address,offset}: {%d, 0x%x, 0x%x} --- data: %x\n", 
+        //        mem_start, mem_size,
+        //        mem_space, (uint32_t) start_address, (uint32_t) offset, 
+        //        dst[it_word]);
     }
 }
 
+/* Used by syscalls */
+void dram::mem_write_instant(   void * source,
+                                uint32_t mem_space,
+                                uint32_t mem_start,
+                                uint32_t mem_size,
+                                bool endianc) {
+    mem_size = mem_size/4; // mem_size was in bytes
+    for (uint32_t it_word = 0; it_word != mem_size; ++it_word) {
+        uint64_t address = (mem_start >> 2) + it_word;
+        uint64_t offset = address & DRAM_INDEX_MASK;
+        uint64_t start_address = address - offset;
+        if (m_memory[mem_space].count(start_address) == 0) {
+            m_memory[mem_space][start_address] = shared_array<uint32_t>(new uint32_t[WORDS_IN_DRAM_BLOCK]);
+            for (uint32_t i = 0; i < WORDS_IN_DRAM_BLOCK; ++i) {
+                // some initialization (garbage - doesn't matter)
+                m_memory[mem_space][start_address][i] = i;
+            }
+        }
+        uint32_t src = *( ((uint32_t *) source) + it_word );
+        if (endianc) src = endian(src);
+        m_memory[mem_space][start_address][offset] = src;
+        //printf( "DRAM write {mem_start, mem_size}: {%x, %d}, {space,start_address,offset}: {%d, 0x%x, 0x%x} --- data: %x\n", 
+        //        mem_start, mem_size,
+        //        mem_space, (uint32_t) start_address, (uint32_t) offset, 
+        //        m_memory[mem_space][start_address][offset]);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
 /* This method is used to initialize instruction memory with data from a binary 
-at startup.  (Used by mcpu custom core) */
+at startup. */
 void dram::mem_write_instant(   shared_ptr<mem> source,
                                 uint32_t mem_space,
                                 uint32_t mem_start,

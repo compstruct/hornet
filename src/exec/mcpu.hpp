@@ -90,6 +90,7 @@ private:
 private:
     bool running;
     uint64_t instr_count;
+    bool enable_memory_hierarchy;
     int32_t byte_count; // for the MIPS ISA (= 4)    
     uint32_t pc;
     uint32_t gprs[32];
@@ -139,7 +140,7 @@ private: // instruction/data interface
 
     // data {read,write}{fetch,complete} interface
     void data_complete();
-    void data_complete_helper(const shared_ptr<memoryRequest> &req);
+    void data_complete_helper(shared_array<uint32_t>, uint32_t);
     inline bool pending_data_memory_request() { 
         return  pending_request_read_gpr | 
                 pending_request_read_fpr | 
@@ -173,6 +174,7 @@ protected: // memory hierarchy processing & inherited members
         return m_memory;
     }
     virtual maddr_t form_maddr(uint64_t);
+    virtual uint32_t form_maddr_space(uint64_t addr);
 
 /* utility  ----------------------------------------------------------------- */
 
@@ -223,8 +225,8 @@ inline bool mcpu::get_cp1_cf(const cfr &r) const throw() {
 
 inline void mcpu::set(const gpr &r, uint32_t v) throw() {
     if (r.get_no() != 0) {
-        LOG(log,5) << "[mcpu " << get_id() << "]     " << r << " <- "
-            << hex << setfill('0') << setw(8) << v << endl;
+        //cout << "[mcpu " << get_id() << "]     " << r << " <- "
+        //    << hex << setfill('0') << setw(8) << v << endl;
         gprs[r.get_no()] = v;
     }
 }
