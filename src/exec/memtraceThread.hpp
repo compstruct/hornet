@@ -7,8 +7,7 @@
 #include <boost/shared_ptr.hpp>
 #include "memory.hpp"
 #include "logger.hpp"
-
-typedef uint32_t mth_id_t;
+#include "memtraceThreadStats.hpp"
 
 class memtraceThread {
 public:
@@ -19,10 +18,10 @@ public:
     } inst_type_t;
 
 public:
-    memtraceThread(mth_id_t id, const uint64_t &system_time, logger &l);
+    memtraceThread(uint32_t id, const uint64_t &system_time, logger &l);
     ~memtraceThread();
 
-    inline mth_id_t get_id() { return m_id; }
+    inline uint32_t get_id() { return m_id; }
 
     bool finished();
 
@@ -43,18 +42,22 @@ public:
     inline uint64_t memory_issued_time() { return m_cur.memory_issued_time; }
 
     /* read from current instruction - valid for INST_MEMORY only */
-    mreq_type_t rw();
-    maddr_t addr();
-    uint32_t byte_count();
-    int home();
+    bool is_read();
+    maddr_t maddr();
+    uint32_t word_count();
 
     /* for now, one native core per thread */
     inline int native_core() { return m_native_core; }
     inline void set_native_core(int core) { m_native_core = core; }
 
     /* add instructions */
-    void add_mem_inst(uint32_t alu_cost, bool write, maddr_t addr, int home, uint32_t byte_count);
+    void add_mem_inst(uint32_t alu_cost, bool write, maddr_t maddr, uint32_t word_count);
     void add_non_mem_inst(uint32_t repeats);
+
+    /* set stats */
+    inline void set_per_thread_stats(shared_ptr<memtraceThreadStatsPerThread> stats) { m_stats = stats; }
+    inline bool stats_enabled() { return (m_stats != shared_ptr<memtraceThreadStatsPerThread>()); }
+    inline shared_ptr<memtraceThreadStatsPerThread> stats() { return m_stats; }
 
 private:
     typedef struct {
@@ -62,22 +65,42 @@ private:
         uint32_t alu_cost;
         uint32_t remaining_alu_cost;
         inst_type_t type;
-        mreq_type_t rw;
-        maddr_t addr;
-        int home;
-        uint32_t byte_count;
+        bool is_read;
+        maddr_t maddr;
+        uint32_t word_count;
         /* stats */
         uint64_t memory_issued_time;
     } inst_t;
 
-    mth_id_t m_id;
+    uint32_t m_id;
     const uint64_t &system_time;
     logger &log;
+    shared_ptr<memtraceThreadStatsPerThread> m_stats;
 
     inst_t m_cur;
     vector<inst_t> m_insts;
 
     int m_native_core;
+};
+
+class memtraceThreadPool {
+public:
+    memtraceThreadPool();
+    ~memtraceThreadPool();
+
+    void add_thread(memtraceThread* p);
+    memtraceThread* find(uint32_t id);
+    memtraceThread* thread_at(uint32_t n);
+    unsigned int size();
+
+    bool empty();
+
+private:
+    /* memtraceThreadPool class has the following restrictions for the performance reason */
+    /* 1. no thread is added to the pool during simulation */
+    /* 2. no thread is removed from the pool during simulation */
+    map<uint32_t, memtraceThread*> m_threads;
+    mutable recursive_mutex memtraceThreadPool_mutex;
 };
 
 #endif

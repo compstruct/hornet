@@ -19,8 +19,6 @@ typedef enum {
     SYSCALL_FCLOSE = 0x62,    
 
     // Uncached accesses
-    SYSCALL_UNCACHED_LOAD_WORD = 0x70,
-    SYSCALL_UNCACHED_SET_BIT = 0x72,
     SYSCALL_ENABLE_MEMORY_HIERARCHY = 0x77,
     SYSCALL_THREAD_ID = 0x78,
 

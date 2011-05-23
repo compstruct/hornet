@@ -105,7 +105,6 @@ typedef struct OptionData_ {
 } OptionData;
 
 int		 * 	__H_MUTEX_BARRIER_START = 	0x003ffffc;
-int		 * 	__H_MUTEX_BARRIER_FINISH = 	0x003efff8; // TID0 doesn't scale beyond 32 cores!
 
 int		 ** __PROXY_numOptions = 				0x003ffff4;
 fptype ** __PROXY_prices = 						0x003ffff0;
@@ -279,7 +278,13 @@ int bs_thread(void *tid_ptr) {
     BARRIER(barrier);
 #endif
 #ifdef ENABLE_THREADS_HORNET
-		while (!__H_ucLoadWord(__H_MUTEX_BARRIER_START)) { /* spin */ };
+		while (!*__H_MUTEX_BARRIER_START) { 
+			/* spin while the master thread works on loading the run data */ 
+			/*print_string("Spinning thread # ");
+			print_int(*(int *)tid_ptr);
+			print_string("\n");
+			__H_fflush();*/
+		};
 #endif
 
     int i, j;
@@ -376,9 +381,6 @@ int bs_thread(void *tid_ptr) {
 		//print_string(" done\n");
     BARRIER(barrier);
 #else//ENABLE_THREADS
-#ifdef ENABLE_THREADS_HORNET
-		//__H_ucSetBit(__H_MUTEX_BARRIER_FINISH, tid); TODO: re-enable join
-#endif//ENABLE_THREADS_HORNET
 #endif//ENABLE_THREADS
 
     return 0;
@@ -388,9 +390,14 @@ int bs_thread(void *tid_ptr) {
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
-int main(int argc, char **argv)
-{
-	unsigned id = thread_id();
+int main(int argc, char **argv) {
+
+	// initialize the master thread barrier
+	if (cpu_id() == 0) {	
+		*__H_MUTEX_BARRIER_START = 0;
+	}
+
+	unsigned id = cpu_id();
 
 #ifdef ENABLE_THREADS_HORNET
 	nThreads = 4;
@@ -624,6 +631,8 @@ int main(int argc, char **argv)
 		//__H_fflush();
 
 #ifdef ENABLE_THREADS_HORNET
+	} else {
+		__H_enable_memory_hierarchy();	
 	}
 #endif
 
@@ -645,13 +654,17 @@ int main(int argc, char **argv)
     WAIT_FOR_END(nThreads);
 #else//ENABLE_THREADS
 #ifdef ENABLE_THREADS_HORNET
+		/*	
+
+		This is the block that is relevant for Hornet developers/users
+
+		*/		
 		if (id == 0) {
-			__H_ucSetBit(__H_MUTEX_BARRIER_START, 0);
-			__H_enable_memory_hierarchy(); // Initialization is done!
+			__H_enable_memory_hierarchy();	
+			*__H_MUTEX_BARRIER_START = 1;					
 		}
 		int tid=id;
 		bs_thread(&tid);
-		//while (__H_ucLoadWord(__H_MUTEX_BARRIER_FINISH) != nThreadsMask) { }; TODO: re-enable join -- [but note that] this doesn't really matter for blackscholes
 #else//ENABLE_THREADS_HORNET
 #ifdef ENABLE_OPENMP
     {
@@ -692,7 +705,8 @@ int main(int argc, char **argv)
 
 /*
 
-	SKIP THE POST PROCESSING
+	After all threads finish their jobs...
+	SKIP THE POST PROCESSING AND TERMINATE EXECUTION
 
 	//Write prices to output file
 	file = __H_fopen(outputFile, "w");
@@ -732,7 +746,11 @@ int main(int argc, char **argv)
 
 	*/
 
+	print_string("Thread # ");
+	print_int(id);
+	print_string(" completed!\n");
+	__H_fflush();
+
 	return 0;
 }
-
 

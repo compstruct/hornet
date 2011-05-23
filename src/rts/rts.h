@@ -4,7 +4,18 @@
 #ifndef __RTS_H__
 #define __RTS_H__
 
-/* MIPS core syscall API */
+/* MIPS core syscall API 
+
+  Organization:
+    1.) Hardware
+    2.) Memory Hierarchy
+    3.) Function Intrinsics
+    4.) File I/O
+    5.) Networking
+    6.) Dynamic Memory Management
+    7.) Trace profiling / CPU state
+
+*/
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -90,22 +101,15 @@ inline static void __H_exit(int code) {
 /* effects: turns on the Hornet memory hierarchy.  Before this function is 
    called, all loads and stores are magic single-cycle operations. This magic 
    mode is convenient when performing startup operations such as file I/O, as a 
-   means of speeding up the simulation. */
+   means of speeding up the simulation. 
+
+   For example, without __H_enable_memory_hierarchy, reading lines from a file 
+   would require many accesses to the Hornet memory hierarchy, which is very 
+   slow.  If we read lines from a file and write DIRECTLY to DRAM, however, we 
+   aren't necessarily coherent.  In order to write to dram (fast) and maintain 
+   coherency, we need to have the memory hierarchy disabled when we are doing 
+   the read line operation. */
 static void     __H_enable_memory_hierarchy();
-
-/* effects: loads a word directly from backing store (DRAM), bypassing the 
-   memory hierarchy (regardless of whether __H_enable_memory_hierarchy has been 
-   called.  This can be used by a master thread to check whether a set of slave 
-   threads have finished a computation.
-   returns: the loaded word. */
-static int      __H_ucLoadWord(int *);
-
-/* effects: sets a specified bit (given by its position relative to the LSB) in 
-   the word specified by the address. The bit is set in a way that bypasses the 
-   memory hierarchy, regardless of whether __H_enable_memory_hierarchy has been 
-   called.  This can be used by slave threads to announce that they have 
-   finished a task. */
-static void     __H_ucSetBit(int *, int);
 
 //------------------------ Implementation --------------------------------------
 
@@ -115,23 +119,6 @@ inline static void __H_enable_memory_hierarchy() {
      : 
      : 
      : "v0");
-}
-
-inline static int __H_ucLoadWord(int * addr) {
-    int ret;
-    __asm__ __volatile__
-    ("move $a0, %1; addiu $v0, $0, 0x70; syscall; move %0, $v0;"
-     : "=r"(ret)
-     : "r"(addr)
-     : "a0", "v0");
-    return ret;
-}
-inline static void __H_ucSetBit(int * addr, int position) {
-    __asm__ __volatile__
-    ("move $a0, %0; move $a1, %1; addiu $v0, $0, 0x72; syscall;"
-     : 
-     : "r"(addr), "r"(position)
-     : "a0", "a1", "v0");
 }
 
 //------------------------------------------------------------------------------
@@ -159,6 +146,9 @@ static void print_string(const char *);
 static void print_float(float);
 static void print_double(double);
 static void print_char(char);
+
+/* effects: can be used to prevent compiler optimizations on a variable. */
+static void print_void(int);
 
 /* effects: flush std out; 
    Note: all 'print_' functions place their output in std out. */
@@ -207,6 +197,14 @@ inline static void print_char(char c) {
          : "a0",  "v0");
 }
 
+inline static void print_void(int c) {
+    __asm__ __volatile__
+        ("move $a0, %0; addiu $v0, $0, 0x02; syscall;"
+         :
+         : "r"(c)
+         : "a0",  "v0");
+}
+
 inline static void __H_fflush() {
     __asm__ __volatile__
     ("addiu $v0, $0, 0x09; syscall;"
@@ -236,6 +234,12 @@ static float    __H_exp_s(float);
 static double   __H_sqrt_d(double);
 static double   __H_log_d(double);
 static double   __H_exp_d(double);
+//static double   __H_sin_d(double);
+//static double   __H_fabs_d(double);
+
+// Random number generation
+
+static int      __H_random_int(int);
 
 //------------------------ Implementation --------------------------------------
 
@@ -296,6 +300,16 @@ inline static double __H_exp_d(double in) {
          : "r"(bot_i), "r"(top_i)
          : "a0", "a1", "v0", "v1");
     __suffix_double__
+}
+
+inline static int __H_random_int(int in) {
+    int result;
+    __asm__ __volatile__
+        ("move $a0, %1; addiu $v0, $0, 0x53; syscall; move %0, $v0;"
+         : "=r"(result)
+         : "r"(in)
+         : "a0", "v0");
+    return result;
 }
 
 //------------------------------------------------------------------------------
@@ -661,6 +675,23 @@ static void free(void *ptr) {
 			NextFree(prev) = NextFree(p);
 		}
 	}
+}
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Profiling / CPU State
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+
+/* effects: */
+static void reset_profile(int);
+
+inline static void reset_profile(int b) {
+    __asm__ __volatile__
+    ("move $a0, %0; addiu $v0, $0, 0x30; syscall;"
+     : 
+     : "r"(b)
+     : "v0");
 }
 
 //------------------------------------------------------------------------------

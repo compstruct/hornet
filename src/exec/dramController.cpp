@@ -2,305 +2,244 @@
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
 #include "dramController.hpp"
-#include "error.hpp"
+#include "stdio.h"
 
-dram::dram() {}
-dram::~dram() {
-    for (map<uint32_t, map<uint64_t, uint32_t* > >::iterator i = space.begin(); i != space.end(); ++i) {
-        for (map<uint64_t, uint32_t*>::iterator j = space[i->first].begin(); j != space[i->first].end(); ++j) {
-            delete[] j->second;
-        }
-    }
+dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count) :
+    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_aux_word_size(0), m_status(DRAM_REQ_NEW), 
+    m_data(shared_array<uint32_t>()), m_aux_data(shared_ptr<void>()) 
+{
+    assert(m_request_type == DRAM_REQ_READ);
 }
 
-dramController::dramController(const uint32_t id, const uint32_t level, const uint64_t &t, 
-                               shared_ptr<tile_statistics> st, logger &log, shared_ptr<random_gen> ran,
-                               shared_ptr<dram> dram,
-                               dramController_cfg_t cfgs)
-: memory(id, level, t, st, log, ran), m_dram(dram), m_cfgs(cfgs), m_to_dram_in_transit(0), m_from_dram_in_transit(0) {
-    m_channel_width = m_cfgs.bytes_per_cycle * m_cfgs.off_chip_latency;
+dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_array<uint32_t> wdata) :
+    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_aux_word_size(0), m_status(DRAM_REQ_NEW), 
+    m_data(wdata), m_aux_data(shared_ptr<void>()) 
+{
+    assert(m_request_type == DRAM_REQ_WRITE);
+}
+
+dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_array<uint32_t> wdata,
+                         uint32_t aux_word_size, shared_ptr<void> aux_data) :
+    m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_aux_word_size(0), m_status(DRAM_REQ_NEW), 
+    m_data(shared_array<uint32_t>()), m_aux_data(aux_data) 
+{
+    assert(m_request_type == DRAM_REQ_WRITE);
+}
+
+dram::dram() {}
+
+dram::~dram() {}
+
+dramController::dramController(uint32_t id, const uint64_t &t,
+                               shared_ptr<tile_statistics> st, logger &l, shared_ptr<random_gen> r,
+                               shared_ptr<dram> connected_dram,
+                               uint32_t dram_controller_latency, uint32_t offchip_oneway_latency, uint32_t dram_latency,
+                               uint32_t msg_header_size_in_words,
+                               uint32_t max_requests_in_flight, uint32_t bandwidth_in_words_per_cycle, bool use_lock) :
+    m_id(id), system_time(t), stats(st), log(l), ran(r), m_dram(connected_dram), m_use_lock(use_lock),
+    m_total_latency(dram_controller_latency + 2*offchip_oneway_latency + dram_latency),
+    m_msg_header_size_in_words(msg_header_size_in_words),
+    m_number_of_free_ports(max_requests_in_flight), m_bandwidth_in_words_per_cycle(bandwidth_in_words_per_cycle)
+{
+    assert(m_bandwidth_in_words_per_cycle > 0);
+    assert(m_number_of_free_ports > 0);
 }
 
 dramController::~dramController() {}
 
-mreq_id_t dramController::request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t target_level) {
-    LOG(log,3) << "[dramController " << m_id << " @ " << system_time 
-               << " ] received a request " << endl;
-    mreq_id_t new_id = take_new_mreq_id();
-    in_req_entry_t new_entry;
-    new_entry.status = REQ_INIT;
-    new_entry.req = req;
-    m_in_req_table[new_id] = new_entry;
-    return new_id;
-}
-
-shared_ptr<memoryRequest> dramController::get_req(mreq_id_t id) {
-    if (m_in_req_table.count(id) > 0) {
-        return m_in_req_table[id].req;
-    }
-    return shared_ptr<memoryRequest>();
-}
-
-bool dramController::ready(mreq_id_t id) {
-    return (m_in_req_table.count(id) > 0 && m_in_req_table[id].status == REQ_DONE);
-}
-
-bool dramController::finish(mreq_id_t id) {
-    if (m_in_req_table.count(id) == 0) {
-        return true;
-    } else if (m_in_req_table[id].status != REQ_DONE) {
-        return false;
+void dramController::request(shared_ptr<dramRequest> req) {
+    assert(available());
+    req->m_status = DRAM_REQ_WAIT;
+    shared_ptr<entry_t> new_entry = shared_ptr<entry_t>(new entry_t);
+    new_entry->status = ENTRY_PORT;
+    new_entry->request = req;
+    --m_number_of_free_ports;
+    req->m_status = DRAM_REQ_WAIT;
+    new_entry->remaining_words_to_transfer = req->m_word_count + 2 * m_msg_header_size_in_words;
+    if (m_total_latency > 0) {
+        new_entry->status = ENTRY_LATENCY;
+        new_entry->remaining_latency_cycles = m_total_latency;
     } else {
-        m_in_req_table.erase(id);
-        return_mreq_id(id);
+        new_entry->status = ENTRY_BANDWIDTH;
     }
-    return true;
+    m_entry_queue.push_back(new_entry);
 }
 
-void dramController::initiate() {
-    for (map<mreq_id_t, in_req_entry_t>::iterator i = m_in_req_table.begin(); i != m_in_req_table.end(); ++i) {
-        if (i->second.status == REQ_INIT) {
-            i->second.status = REQ_DC_PROCESS;
-            i->second.remaining_process_time = m_cfgs.dc_process_time;
+void dramController::tick_positive_edge() {
+    uint32_t available_bandwidth = m_bandwidth_in_words_per_cycle;
+    /* bandwidth constraints */
+    for (entryQueue::iterator it_entry = m_entry_queue.begin(); 
+         it_entry != m_entry_queue.end() && (*it_entry)->status == ENTRY_BANDWIDTH && available_bandwidth > 0; ++it_entry) {
+        if (available_bandwidth < (*it_entry)->remaining_words_to_transfer) {
+            (*it_entry)->remaining_words_to_transfer -= available_bandwidth;
+            break;
+        } else {
+            (*it_entry)->status = ENTRY_DONE;
+            available_bandwidth -= (*it_entry)->remaining_words_to_transfer;
         }
     }
+    /* process */
+    while (!m_entry_queue.empty() && m_entry_queue.front()->status == ENTRY_DONE) {
+        if (m_use_lock) {
+            dram_access_safe(m_entry_queue.front()->request);
+        } else {
+            dram_access(m_entry_queue.front()->request);
+        }
+        m_entry_queue.front()->request->m_status = DRAM_REQ_DONE;
+        m_entry_queue.erase(m_entry_queue.begin());
+        ++m_number_of_free_ports;
+    }
+
 }
 
-void dramController::update() {
-    for (map<mreq_id_t, in_req_entry_t>::iterator i = m_in_req_table.begin(); i != m_in_req_table.end(); ++i) {
+void dramController::tick_negative_edge() {
 
-        in_req_entry_t &entry = i->second;
-
-        if (entry.status == REQ_TO_DRAM || entry.status == REQ_FROM_DRAM) {
-            int done = 0;
-            for (vector<on_the_fly_t>::iterator j = entry.packets.begin(); j != entry.packets.end(); ++j) {
-                /* if data arrived on dram, release bandwidth */
-                if ((*j).time_to_arrive <= system_time) {
-                    if (entry.status == REQ_TO_DRAM) {
-                        m_to_dram_in_transit -= (*j).byte_count;
-                    } else {
-                        m_from_dram_in_transit -= (*j).byte_count;
-                    }
-                    ++done;
-                } else {
-                    break;
-                }
-            }
-            for (; done > 0; --done) {
-                entry.packets.erase(entry.packets.begin());
-            }
+    /* advance */
+    for (entryQueue::iterator it_entry = m_entry_queue.begin(); 
+         it_entry != m_entry_queue.end() && (*it_entry)->status == ENTRY_LATENCY; ++it_entry) {
+        if (--((*it_entry)->remaining_latency_cycles) == 0) {
+            (*it_entry)->status = ENTRY_BANDWIDTH;
         }
     }
+
 }
 
-void dramController::process() {
-    for (map<mreq_id_t, in_req_entry_t>::iterator i = m_in_req_table.begin(); i != m_in_req_table.end(); ++i) {
-
-        in_req_entry_t &entry = i->second;
-
-        /* process time */
-        if (entry.status == REQ_DC_PROCESS || entry.status == REQ_DRAM_PROCESS) {
-            --(entry.remaining_process_time);
-            if (entry.remaining_process_time == 0) {
-                if (entry.status == REQ_DRAM_PROCESS) {
-                    (m_cfgs.use_lock) ? mem_access_safe(entry.req) : mem_access(entry.req);
-                }
-                entry.status = (entry.status == REQ_DC_PROCESS) ? REQ_TO_DRAM : REQ_FROM_DRAM;
-                entry.bytes_to_send = m_cfgs.header_size_bytes;
-                if ( (entry.req->rw() == MEM_WRITE && entry.status == REQ_TO_DRAM) ||
-                     (entry.req->rw() == MEM_READ && entry.status == REQ_FROM_DRAM) ) {
-                    entry.bytes_to_send += entry.req->byte_count();
-                }
-            }
-        }
-
-        /* send/receive from dram */
-        if (entry.status == REQ_TO_DRAM || entry.status == REQ_FROM_DRAM) {
-            uint32_t &in_transit = (entry.status == REQ_TO_DRAM) ? m_to_dram_in_transit : m_from_dram_in_transit;
-            if (entry.bytes_to_send == 0 && entry.packets.empty()) {
-                entry.status = (entry.status == REQ_TO_DRAM) ? REQ_DRAM_PROCESS : REQ_DONE;
-                if (entry.status == REQ_DRAM_PROCESS) {
-                    entry.remaining_process_time = m_cfgs.dram_process_time;
-                }
-            } else if (entry.bytes_to_send > 0 && m_channel_width > in_transit) {
-                /* fairness is not guaranteed */
-                uint32_t send_this_time;
-                if (m_channel_width - in_transit < entry.bytes_to_send) {
-                    send_this_time = m_channel_width - in_transit;
-                } else {
-                    send_this_time = entry.bytes_to_send;
-                }
-                entry.bytes_to_send -= send_this_time;
-                in_transit += send_this_time;
-                on_the_fly_t new_fly;
-                new_fly.byte_count = send_this_time;
-                new_fly.time_to_arrive = system_time + m_cfgs.off_chip_latency;
-                entry.packets.push_back(new_fly);
-            }
-        }
-    }
-}
-
-void dramController::mem_access(shared_ptr<memoryRequest> req) {
-    int tid_index = get_tid(req->addr(), req->tid());    
-    for (uint32_t i = 0; i < req->byte_count(); i += 4) {
-        uint64_t offset = (req->addr() + i) % DRAM_BLOCK_SIZE;
-        uint64_t index = (req->addr() + i) - offset;
-        if (m_dram->space[tid_index].count(index) == 0) {
-            uint32_t *line = new uint32_t[DRAM_BLOCK_SIZE/4];
-            if (!line) {
-                throw err_out_of_mem();
-            }
-            /* initialize to 0 for now */
-            for (uint32_t j = 0; j < DRAM_BLOCK_SIZE/4; ++j) {
-                *(line+j) = 0;
-            }
-            m_dram->space[tid_index][index] = line; 
-        }
-        uint32_t *src = (req->rw() == MEM_READ)? (m_dram->space[tid_index][index]) + offset/4 : req->data() + i/4;
-        uint32_t *tgt = (req->rw() == MEM_READ)? req->data() + i/4: (m_dram->space[tid_index][index]) + offset/4;
-        (*tgt) = (*src);
-
-        //printf("read DRAM[%d][%x] == %x\n", tid_index, (unsigned int) req->addr() + i, *src);
-        /*int id = get_id();
-        if (req->rw() == MEM_READ)
-            printf("read DRAM[%d][%d][%llu][%llu] %x --> %x\n", id, tid_index, (long long unsigned int) index, (long long unsigned int)  offset/4, *src, *tgt);
-        else
-            printf("write DRAM[%d][%d][%llu][%llu] %x <-- %x\n", id, tid_index, (long long unsigned int) index, (long long unsigned int)  offset/4, *tgt, *src);
-        */
-        //mem_access_tester(req);
-    }
-}
-
-/* this was used to help scan across TIDs, which helped in debugging a memory problem
-
-void dramController::mem_access_tester(shared_ptr<memoryRequest> req) {
-    for (int tid_index = 0; tid_index < 4; tid_index++) {   
-        for (uint32_t i = 0; i < req->byte_count(); i += 4) {
-            uint64_t offset = (req->addr() + i) % DRAM_BLOCK_SIZE;
-            uint64_t index = (req->addr() + i) - offset;
-            if (m_dram->space[tid_index].count(index) == 0) {
-                uint32_t *line = new uint32_t[DRAM_BLOCK_SIZE/4];
-                if (!line) {
-                    throw err_out_of_mem();
-                }
-                for (uint32_t j = 0; j < DRAM_BLOCK_SIZE/4; ++j) {
-                    *(line+j) = 0;
-                }
-                m_dram->space[tid_index][index] = line; 
-            }
-            uint32_t *src = (req->rw() == MEM_READ)? (m_dram->space[tid_index][index]) + offset/4 : req->data() + i/4;
-            int id = get_id();
-            if (req->rw() == MEM_READ)
-                printf("read DRAM TEST[%d][%d][%llu][%llu] %x\n", id, tid_index, (long long unsigned int) index, (long long unsigned int)  offset/4, *src);
-            else
-                printf("write DRAM TEST[%d][%d][%llu][%llu] %x\n", id, tid_index, (long long unsigned int) index, (long long unsigned int)  offset/4, *src);
-        }
-    }
-}
-*/
-
-void dramController::mem_access_safe(shared_ptr<memoryRequest> req) {
+void dramController::dram_access_safe(shared_ptr<dramRequest> req) {
     unique_lock<recursive_mutex> lock(m_dram->dram_mutex);
-    mem_access(req);
+    dram_access(req);
 }
 
-// -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------
-
-// Addendum for MIPS frontend (CF 2/5/11)
-
-/* effects: memcpy from this dram's backing store to a specified buffer 
-            (transfers are in bytes) */
-void dramController::mem_read_instant(  int proposed_tid,
-                                        void * destination, 
-                                        maddr_t mem_start, 
-                                        size_t count,
-                                        bool endianc) {
-    int tid_index = get_tid(mem_start, proposed_tid);    
-    for (uint32_t i = 0; i < count; i+=4) {
-        uint64_t offset = (mem_start + i) % DRAM_BLOCK_SIZE;
-        uint64_t index = (mem_start + i) - offset;
-        uint32_t src;        
-        if (m_dram->space[tid_index].count(index) > 0) 
-            src = *((m_dram->space[tid_index][index]) + offset/4);
-        else /* makes uncached loads/stores easier to implement */
-            src = 0x0; 
-        if (endianc) src = endian(src);
-        uint32_t * tgt = ((uint32_t *) destination) + i/4;
-        *tgt = src;
-
-        /* Temporary debugging
-        printf("%d:\n", src);
-        printf("%c", (char) src);
-        printf("%c", (char) (src >> 8));
-        printf("%c", (char) (src >> 16));
-        printf("%c\n\n", (char) (src >> 24));
-        */
-        //printf("read DRAM[%d][%d][%x] == %x\n", get_id(), tid_index, (unsigned int) mem_start + i, src);
+void dramController::dram_access(shared_ptr<dramRequest> req) {
+    if (req->is_read() && m_dram->m_aux_memory.count(req->m_maddr) > 0) {
+        req->m_aux_data = m_dram->m_aux_memory[req->m_maddr];
+    } else if (!req->is_read() && req->m_aux_data) {
+        m_dram->m_aux_memory[req->m_maddr] = req->m_aux_data;
+    }
+    uint32_t space = req->m_maddr.space;
+    uint32_t word_address = req->m_maddr.address >> 2;
+    //if (req->is_read()) printf("Starting DRAM read (addr: %d:%x) of %d words.\n", space, (uint32_t) req->m_maddr.address, req->m_word_count);
+    //else if (req->is_read()) printf("Starting DRAM write (addr: %d:%x) of %d words.\n", space, (uint32_t) req->m_maddr.address, req->m_word_count);    
+    for (uint32_t it_word = 0; it_word != req->m_word_count; ++it_word) {        
+        uint64_t address = word_address + it_word;
+        uint64_t offset = address & DRAM_INDEX_MASK;
+        uint64_t start_address = address - offset;
+        if (req->is_read() && it_word == 0) {
+            // C F FIX 2011.5.17
+            // Added && it_word == 0 so that memory is allocated only once
+            // If this is not done, only the last loop iteration's data gets read on read operations           
+            req->m_data = shared_array<uint32_t>(new uint32_t[req->m_word_count]);
+        }
+        if (m_dram->m_memory[space].count(start_address) == 0) {
+            m_dram->m_memory[space][start_address] = shared_array<uint32_t>(new uint32_t[WORDS_IN_DRAM_BLOCK]);
+            for (uint32_t i = 0; i < WORDS_IN_DRAM_BLOCK; ++i) {
+                /* some initialization (garbage - doesn't matter) */
+                m_dram->m_memory[space][start_address][i] = i;
+            }
+        }
+        if (req->is_read()) {
+            req->m_data[it_word] = m_dram->m_memory[space][start_address][offset];
+            //printf( "DRAM read {space,start_address,offset}: {%d, 0x%x, 0x%x} --- data: %x\n", 
+            //        space, (uint32_t) start_address, (uint32_t) offset, 
+            //        req->m_data[it_word]);
+        } else {
+            m_dram->m_memory[space][start_address][offset] = req->m_data[it_word];
+            //printf( "DRAM write {space,start_address,offset}: {%d, 0x%x, 0x%x} --- data: %x\n", 
+            //        space, (uint32_t) start_address, (uint32_t) offset, 
+            //        req->m_data[it_word]);
+        }
     }
 }
 
-/* effects: Initializes the DRAM with data stored in source.  This function 
-            should only be used to initialize memory before the program starts 
-            -- i.e. used by sys.cpp. */
-void dramController::mem_write_instant( int proposed_tid,
-                                        shared_ptr<mem> source,
-                                        uint32_t mem_start,
-                                        uint32_t mem_size) {
-    int tid_index = get_tid(mem_start, proposed_tid);
-    for (uint32_t i = 0; i < mem_size; i += 4) {
-        uint64_t offset = (mem_start + i) % DRAM_BLOCK_SIZE;
-        uint64_t index = (mem_start + i) - offset;
-        if (m_dram->space[tid_index].count(index) == 0) {
-            uint32_t *line = new uint32_t[DRAM_BLOCK_SIZE/4];
-            if (!line) throw err_out_of_mem();
-            for (uint32_t j = 0; j < DRAM_BLOCK_SIZE/4; ++j)  *(line+j) = 0;
-            m_dram->space[tid_index][index] = line; 
-        }
-        uint32_t src = source->load<uint32_t>(mem_start + i);
-        uint32_t *tgt = (m_dram->space[tid_index][index]) + offset/4;
-        (*tgt) = src;
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 
-        // Temporary debugging
-        //printf("write init DRAM[%d][%x] <- %x\n", tid_index, (unsigned int) mem_start + i, src);
-        //printf( "write init DRAM[%d][%d][%llu][%llu] == %x\n", get_id(), tid_index, 
-        //        (long long unsigned int) index, (long long unsigned int)  offset/4, src);
+/* The below calls are used by the mcpu custom core for direct-from-dram 
+   accesses. (Used primarily for binary loading and syscalls). */
+
+/* Used by syscalls */
+void dram::mem_read_instant(    uint32_t * dst, 
+                                uint32_t mem_space,
+                                uint32_t mem_start,
+                                uint32_t mem_size,
+                                bool endianc) {  
+    mem_size = mem_size/4; // mem_size was in bytes  
+    for (uint32_t it_word = 0; it_word != mem_size; ++it_word) {
+        uint64_t address = (mem_start >> 2) + it_word;
+        uint64_t offset = address & DRAM_INDEX_MASK;
+        uint64_t start_address = address - offset;
+        if (m_memory[mem_space].count(start_address) == 0) {
+            m_memory[mem_space][start_address] = shared_array<uint32_t>(new uint32_t[WORDS_IN_DRAM_BLOCK]);
+            for (uint32_t i = 0; i < WORDS_IN_DRAM_BLOCK; ++i) {
+                // makes uncached loads/stores easier to implement
+                m_memory[mem_space][start_address][i] = 0;
+            }
+        }
+        uint32_t src = m_memory[mem_space][start_address][offset];
+        if (endianc) src = endian(src);
+        dst[it_word] = src;
+        //printf( "DRAM read {mem_start, mem_size}: {%x, %d}, {space,start_address,offset}: {%d, 0x%x, 0x%x} --- data: %x\n", 
+        //        mem_start, mem_size,
+        //        mem_space, (uint32_t) start_address, (uint32_t) offset, 
+        //        dst[it_word]);
+    }
+}
+
+/* Used by syscalls */
+void dram::mem_write_instant(   void * source,
+                                uint32_t mem_space,
+                                uint32_t mem_start,
+                                uint32_t mem_size,
+                                bool endianc) {
+    mem_size = mem_size/4; // mem_size was in bytes
+    for (uint32_t it_word = 0; it_word != mem_size; ++it_word) {
+        uint64_t address = (mem_start >> 2) + it_word;
+        uint64_t offset = address & DRAM_INDEX_MASK;
+        uint64_t start_address = address - offset;
+        if (m_memory[mem_space].count(start_address) == 0) {
+            m_memory[mem_space][start_address] = shared_array<uint32_t>(new uint32_t[WORDS_IN_DRAM_BLOCK]);
+            for (uint32_t i = 0; i < WORDS_IN_DRAM_BLOCK; ++i) {
+                // some initialization (garbage - doesn't matter)
+                m_memory[mem_space][start_address][i] = i;
+            }
+        }
+        uint32_t src = *( ((uint32_t *) source) + it_word );
+        if (endianc) src = endian(src);
+        m_memory[mem_space][start_address][offset] = src;
+        //printf( "DRAM write {mem_start, mem_size}: {%x, %d}, {space,start_address,offset}: {%d, 0x%x, 0x%x} --- data: %x\n", 
+        //        mem_start, mem_size,
+        //        mem_space, (uint32_t) start_address, (uint32_t) offset, 
+        //        m_memory[mem_space][start_address][offset]);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+/* This method is used to initialize instruction memory with data from a binary 
+at startup. */
+void dram::mem_write_instant(   shared_ptr<mem> source,
+                                uint32_t mem_space,
+                                uint32_t mem_start,
+                                uint32_t mem_size) {
+    mem_size = mem_size/4; // mem_size was in bytes  
+    for (uint32_t it_word = 0; it_word != mem_size; ++it_word) {
+        uint64_t address = (mem_start >> 2) + it_word;
+        uint64_t address_byte = mem_start + (it_word * 4);
+        uint64_t offset = address & DRAM_INDEX_MASK;
+        uint64_t start_address = address - offset;
+        if (m_memory[mem_space].count(start_address) == 0) {
+            m_memory[mem_space][start_address] = shared_array<uint32_t>(new uint32_t[WORDS_IN_DRAM_BLOCK]);
+            for (uint32_t i = 0; i < WORDS_IN_DRAM_BLOCK; ++i) {
+                // some initialization (garbage - doesn't matter)
+                m_memory[mem_space][start_address][i] = i;
+            }
+        }
+        uint32_t src = source->load<uint32_t>(address_byte);
+        m_memory[mem_space][start_address][offset] = src;
         
-        //uint32_t *second_tgt = (m_dram->space[tid_index][index]) + (offset/4 - 1);
-        //printf("Target (%p): %x, previous target (%p): %x\n", tgt, *tgt, second_tgt, *second_tgt);        
+        //printf("DRAM direct write %d {space,start_address,offset}: %d, %x, %llu gets data %x from mem @ address %x (word address: %x) \n", 
+        //        it_word, mem_space, (uint32_t) start_address, (long long unsigned int) offset, (uint32_t) src, (uint32_t) address_byte, (uint32_t) address_byte >> 2);
     }
 }
-
-/* effects: Writes data to backing store while the program is running.  The 
-            memory hierarchy must a.) be disabled or b.) support memory 
-            coherence for this function to not garble system state. */
-void dramController::mem_write_instant( int proposed_tid,
-                                        void * source,
-                                        uint32_t mem_start,
-                                        uint32_t mem_size,
-                                        bool endianc) {
-    int tid_index = get_tid(mem_start, proposed_tid);
-    for (uint32_t i = 0; i < mem_size; i += 4) {
-        uint64_t offset = (mem_start + i) % DRAM_BLOCK_SIZE;
-        uint64_t index = (mem_start + i) - offset;
-        if (m_dram->space[tid_index].count(index) == 0) {
-            uint32_t *line = new uint32_t[DRAM_BLOCK_SIZE/4];
-            if (!line) throw err_out_of_mem();
-            for (uint32_t j = 0; j < DRAM_BLOCK_SIZE/4; ++j)  *(line+j) = 0;
-            m_dram->space[tid_index][index] = line; 
-        }
-        uint32_t src = *(((uint32_t *) source) + i/4);
-        if (endianc) src = endian(src);
-        uint32_t *tgt = (m_dram->space[tid_index][index]) + offset/4;
-        (*tgt) = src;
-
-        // Temporary debugging
-        //printf("%d\n", src);
-        //printf("write DRAM[%d][%d][%llu][%llu] == %x\n", get_id(), tid_index, 
-        //       (long long unsigned int) index, (long long unsigned int)  offset/4, src);
-    }
-}
-
-// -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------

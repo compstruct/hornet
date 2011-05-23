@@ -3,38 +3,51 @@
 
 #include "memory.hpp"
 
-memory::memory(const uint32_t id, const uint32_t level,
-               const uint64_t &t, shared_ptr<tile_statistics> st,
-               logger &l,
-               shared_ptr<random_gen> r)
-    : m_id(id), m_level(level),
-      system_time(t),
-      stats(st),
-      log(l),
-      ran(r), 
-      m_max_mreq_id(MAX_INVALID_MREQ_ID) { 
+/*****************/
+/* memoryRequest */
+/*****************/
+
+memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count) :
+    m_status(REQ_NEW), m_is_read(true), m_maddr(maddr), m_word_count(word_count),
+    m_data(shared_array<uint32_t>()) 
+{}
+
+memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count, shared_array<uint32_t> wdata) :
+    m_status(REQ_NEW), m_is_read(false), m_maddr(maddr), m_word_count(word_count),m_data(wdata) 
+{}
+
+memoryRequest::~memoryRequest() {}
+
+/*****************/
+/* memory        */
+/*****************/
+
+memory::memory(uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, logger &l, shared_ptr<random_gen> r) :
+    m_id(id), system_time(t), stats(st), log(l), ran(r), m_dram_controller(NULL), m_dram_controller_location(id) 
+{ }
+
+memory::~memory() { 
+    delete m_dram_controller;
 }
 
-memory::~memory() {}
+void memory::add_local_dram_controller(shared_ptr<dram> connected_dram,
+                                        uint32_t dram_controller_latency, uint32_t offchip_oneway_latency, uint32_t dram_latency,
+                                        uint32_t msg_header_size_in_words, uint32_t max_requests_in_flight,
+                                        uint32_t bandwidth_in_words_per_cycle, bool use_lock) {
+    m_dram_controller_location = m_id;
+    if (m_dram_controller != NULL) {
+        delete m_dram_controller;
+    } 
+    m_dram_controller = new dramController(m_id, system_time, stats, log, ran,
+                                           connected_dram, dram_controller_latency, offchip_oneway_latency, dram_latency,
+                                           msg_header_size_in_words, max_requests_in_flight, bandwidth_in_words_per_cycle,
+                                           use_lock);
+}
 
-mreq_id_t memory::take_new_mreq_id() {
-    if (m_mreq_id_pool.empty()) {
-        return ++m_max_mreq_id;
-    } else {
-        mreq_id_t ret = m_mreq_id_pool.front();
-        m_mreq_id_pool.erase(m_mreq_id_pool.begin());
-        return ret;
+void memory::set_remote_dram_controller(uint32_t location) {
+    if (m_dram_controller != NULL) {
+        delete m_dram_controller;
     }
+    m_dram_controller_location = location;
 }
 
-void memory::return_mreq_id(mreq_id_t old_id) {
-    if (false) {
-        /* temporarily disable reusing mreq_id to process memory requests in order */
-        /* TODO : inside memory classes, replace map with two vectors */
-        m_mreq_id_pool.push_back(old_id);
-    }
-}
-
-mreq_id_t memory::request(shared_ptr<memoryRequest> req) {
-    return request(req, m_id, m_level);
-}

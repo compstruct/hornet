@@ -5,79 +5,86 @@
 #define __MEMORY_HPP__
 
 #include <boost/shared_ptr.hpp>
-#include "bridge.hpp"
+#include <boost/shared_array.hpp>
+#include "statistics.hpp"
 #include "logger.hpp"
 #include "random.hpp"
-#include "memoryRequest.hpp"
+#include "dramController.hpp"
+#include "messages.hpp"
+
+#include "memory_types.hpp"
 
 using namespace std;
 using namespace boost;
 
+class memoryRequest {
+public:
+    /* for reads */
+    memoryRequest(maddr_t maddr, uint32_t word_count);
+    /* for writes */
+    memoryRequest(maddr_t maddr, uint32_t word_count, shared_array<uint32_t> wdata);
+    ~memoryRequest();
+
+    inline memReqStatus_t status() { return m_status; }
+    inline maddr_t maddr() { return m_maddr; }
+    inline shared_array<uint32_t> data() { return m_data; }
+    inline bool is_read() { return m_is_read; }
+    inline uint32_t home() { return m_home; }
+    inline uint32_t word_count() { return m_word_count; }
+
+    friend class memory;
+
+private:
+
+    memReqStatus_t m_status;
+    bool m_is_read;
+    maddr_t m_maddr;
+    uint32_t m_word_count;
+    shared_array<uint32_t> m_data;
+    uint32_t m_home;
+
+};
+
 class memory {
 public:
-    memory(const uint32_t numeric_id, uint32_t level,
+    memory(uint32_t numeric_id, 
            const uint64_t &system_time,
            shared_ptr<tile_statistics> stats,
            logger &log,
            shared_ptr<random_gen> ran);
     virtual ~memory();
 
-    /* Memory operations - users only use these functions */
-    virtual mreq_id_t request(shared_ptr<memoryRequest> req);
-    virtual mreq_id_t request(shared_ptr<memoryRequest> req, uint32_t location, uint32_t target_level) = 0;
-    virtual bool ready(mreq_id_t id) = 0;
-    virtual shared_ptr<memoryRequest> get_req(mreq_id_t id) = 0;
-    virtual bool finish(mreq_id_t id) = 0;
+    virtual void request(shared_ptr<memoryRequest> req) = 0;
+    virtual void tick_positive_edge() = 0;
+    virtual void tick_negative_edge() = 0;
 
-    /* Ticking - base class (core) sends ticks first-level memory components */
-    /* if a memory component has sub-level components, it is responsible to tick them */
-    virtual void initiate() = 0;
-    virtual void update() = 0;
-    virtual void process() = 0;
+    virtual uint32_t number_of_mem_msg_types() = 0;
 
-    inline uint32_t get_id() {return m_id;}
+    void add_local_dram_controller(shared_ptr<dram> connected_dram, 
+                                   uint32_t dram_controller_latency, uint32_t offchip_oneway_latency, uint32_t dram_latency,
+                                   uint32_t msg_header_size_in_words, uint32_t max_requests_in_flight, 
+                                   uint32_t bandwidth_in_words_per_cycle, bool use_lock);
+    void set_remote_dram_controller(uint32_t location);
 
-protected:
-    mreq_id_t take_new_mreq_id();
-    void return_mreq_id(mreq_id_t old_id);
+    inline void set_core_send_queues(map<uint32_t, shared_ptr<messageQueue> > queues) { m_core_send_queues = queues; }
+    inline void set_core_receive_queues(map<uint32_t, shared_ptr<messageQueue> > queues) { m_core_receive_queues = queues; }
 
 protected:
-    /* location id */
+    inline void set_req_status(shared_ptr<memoryRequest> req, memReqStatus_t status) { req->m_status = status; }
+    inline void set_req_data(shared_ptr<memoryRequest> req, shared_array<uint32_t> data) { req->m_data = data; }
+
     uint32_t m_id;
-
-    /* level id */
-    uint32_t m_level;
-
-    /* Global time */
     const uint64_t &system_time;
-
-    /* Aux */
     shared_ptr<tile_statistics> stats;
     logger &log;
     shared_ptr<random_gen> ran;
 
-    /* mreq_id */
-    mreq_id_t m_max_mreq_id;
-    vector<mreq_id_t> m_mreq_id_pool;
+    dramController* m_dram_controller;
+    uint32_t m_dram_controller_location;
 
-protected:
-/*  decides whether to keep the input tid (if the memory access is to a per-
-    thread private address space) or map the request to the shared address space 
-    (arbitrarily set to -1). */
-    int get_tid(maddr_t addr, int proposed_tid) {
-        int tid;
-        int aspace = addr & 0x00400000;    
-        if (aspace) {
-            // private -- map to bins based on thread
-            tid = proposed_tid;    
-        } else {
-            // shared -- always map to same bin
-            tid = -1;
-        }
-        return tid;
-    }
+    map<uint32_t/*msg type*/, shared_ptr<messageQueue> > m_core_send_queues;
+    map<uint32_t/*msg type*/, shared_ptr<messageQueue> > m_core_receive_queues;
+
 };
-
-/* TODO (Phase 4) : Design memory stats */
 
 #endif

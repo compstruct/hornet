@@ -4,6 +4,11 @@ Checkout (when logged into login.csail.mit.edu):
 git clone file:///afs/csail.mit.edu/group/csg/gitroots/dar.git
 
 --------------------------------------------------------------------------------
+Pulling a new branch out for the first time
+
+git checkout -b newShMem origin/newShMem
+
+--------------------------------------------------------------------------------
 Dependancies:
 
 - a C++ compiler
