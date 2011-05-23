@@ -381,9 +381,6 @@ int bs_thread(void *tid_ptr) {
 		//print_string(" done\n");
     BARRIER(barrier);
 #else//ENABLE_THREADS
-#ifdef ENABLE_THREADS_HORNET
-		//__H_ucSetBit(__H_MUTEX_BARRIER_FINISH, tid); TODO: re-enable join
-#endif//ENABLE_THREADS_HORNET
 #endif//ENABLE_THREADS
 
     return 0;
@@ -634,6 +631,8 @@ int main(int argc, char **argv) {
 		//__H_fflush();
 
 #ifdef ENABLE_THREADS_HORNET
+	} else {
+		__H_enable_memory_hierarchy();	
 	}
 #endif
 
@@ -661,8 +660,8 @@ int main(int argc, char **argv) {
 
 		*/		
 		if (id == 0) {
-			__H_enable_memory_hierarchy();
-			*__H_MUTEX_BARRIER_START = 1;
+			__H_enable_memory_hierarchy();	
+			*__H_MUTEX_BARRIER_START = 1;					
 		}
 		int tid=id;
 		bs_thread(&tid);
@@ -746,6 +745,11 @@ int main(int argc, char **argv) {
 #endif
 
 	*/
+
+	print_string("Thread # ");
+	print_int(id);
+	print_string(" completed!\n");
+	__H_fflush();
 
 	return 0;
 }
