@@ -527,7 +527,7 @@ this means that two flits can be transferred from one node to another at one cyc
 </section> <!--End of Network-only Mode-->
 
 <section><title>Running an Instrumented Application (native x86 executables) using the Pin Instrumentation Tool</title>
-<para><emphasis>This section will be updated in mid-April.</emphasis></para>
+<para><emphasis>This feature will be included in the next release..</emphasis></para>
 <para>
 HORNET can also be used to instrument native x86 executables using Pin. In this case, the application of interest is run under Pin, and its threads are mapped 1:1 to the simulated tiles as they are spawned. Each instruction executed by the application is intercepted and its memory accesses handled by the memory hierarchy configured in HORNET; timing consists of a table-driven model for the non-memory portion of each instruction plus the memory access latencies reported by HORNET. In this mode, direct application access to the network is not available, and simulation relies on HORNET's coherent memory hierarchy to generate traffic on the network.
 </para>
@@ -535,10 +535,80 @@ HORNET can also be used to instrument native x86 executables using Pin. In this 
 
 <section><title>Running an Application using a MIPS Core Simulator</title>
 <para>
-Each tile can be configured to simulate a built-in single-cycle in-order MIPS core, which can be loaded with statically linked binaries compiled with a MIPS cross-compiler such as GCC. The MIPS core is connected to a configurable memory hierarchy which supports an arbitrary number of private or shared cache levels backed by a shared main memory. Memory coherence among the caches is ensured either by an implementation of the MSI cache coherence protocol or via a NUCA-style distributed shared memory with remote-access reads and stores; either option uses the configured on-chip network to communicate with main memories, directories, and other caches.
+Each tile can be configured to simulate a built-in single-cycle in-order MIPS core, which can be loaded with statically linked binaries compiled with a MIPS cross-compiler such as GCC. The MIPS core is connected to a memory hierarchy which consists of a local L1/L2 cache. Memory coherence among the caches is ensured by an implementation of the MSI/MESI cache coherence protocol. Before moving on to how to use the MIPS core, it is important to know how the memory subsystem and cache coherence are supported by HORNET. 
+</para>
+
+<section><title>Shared Memory Support (private-L1 and shared-L2 MSI/MESI)</title>
+<para>
+In Hornet shared memory framework, each tile has its own local L1 cache and local L2 cache. Although these local caches are directly connected to the attached core only, L1 and/or L2 caches could be connected to other cores through the Hornet on-chip network. Our first release supports a configuration of  private-L1 and shared-L2 MSI/MESI memory, where both L1 and L2 (combined with a directory) can send and receive cache coherence messages to/from any cores. 
+The type of memory subsystem is also specified in the Hornet configuration script. Below are all common parameters of all memory types, which is defined in [memory] section.
+<informalexample><programlisting>
+	[memory]
+	architecture = private-shared MSI/MESI
+	dram controller location = top and bottom
+	core address translation = stripe
+	core address translation latency = 1
+	core address translation allocation unit in bytes = 4096
+	core address synch delay = 0
+	core address number of ports = 0
+	dram controller latency = 2
+	one-way offchip latency = 150
+	dram latency = 50
+	dram message header size in words = 4
+	maximum requests in flight per dram controller = 256
+	bandwidth in words per dram controller = 4
+</programlisting></informalexample>
+</para>
+
+<para>
+The first line tells which memory architecture the simulation is going to use. In order to use MSI/MESI protocol with private-L1 shared-L2 configuration, use private-shared MSI/MESI architecture. Memory-specific configurations are given similarly to the core configurations. For example, detailed parameters of private-shared MSI/MESI memory is defined in [memory::private-shared MSI/MESI] section.
+<informalexample><programlisting>
+	[memory::private-shared MSI/MESI]
+	use Exclusive state = no
+	words per cache line = 8
+	memory access ports for local core = 2
+	L1 work table size = 4
+	shared L2 work table size = 4
+	reserved L2 work table size for cache replies = 1
+	reserved L2 work table size for line eviction = 1
+	total lines in L1 = 256
+	associativity in L1 = 2 
+	hit test latency in L1 = 2
+	read ports in L1 = 2
+	write ports in L1 = 1
+	replacement policy in L1 = LRU
+	total lines in L2 = 4096
+	associativity in L2 = 4 
+	hit test latency in L2 = 4
+	read ports in L2 = 2
+	write ports in L2 = 1
+	replacement policy in L2 = LRU
+</programlisting></informalexample>
+</para>
+</section>
+
+<section><title>Network configuration</title>
+<para>
+Network is configured in the same way how original Hornet simulator is configured. However, the network must provide enough number of disjoint virtual channel sets to support the total number of message channels that core and memory models need to use. The best practice is to have different flow IDs for different message channels by adding prefix to it. Configure your Hornet routing configuration in such a way that the flows with the same prefix in their flow IDs will use the same virtual channel set. To make your life easier, dar/scripts/config/xy-shmem.py script helps creating the routing configuration with the following parameters.
+<informalexample><programlisting>
+	-x (arg) : network width (8)
+	-y (arg) : network height (8)
+	-v (arg) : number of virtual channels per set (1)
+	-q (arg) : capacity of each virtual channel in flits(4)
+	-c (arg) : core type (memtraceCore)
+	-m (arg) : memory type (privateSharedMSI)
+	-n (arg) : number of VC sets
+	-o (arg) : output filename (output.cfg)
+</programlisting></informalexample>
 </para>
 <para>
-An example application (blackscholes stock option valuation) running on MIPS cores is given in <filename>/examples/blackscholes</filename>. In general: in order to run a MIPS core simulation, you must add:
+This script will generate routing configurations as well as the list of default parameters of given core/memory types. Make sure the -n option specifies no less than the total number of message channels being used by the core and memory model.
+</para>
+</section>
+
+<section><title>Running an application</title>
+<para>
+Now, with the shared memory configured, let's move on to the MIPS core. An example application (blackscholes stock option valuation) running on MIPS cores is given in <filename>/examples/blackscholes</filename>. In general: in order to run a MIPS core simulation, you must add:
 <itemizedlist>
 <listitem><para><filename>--enable-mips-rts</filename> flag to the <filename>./configure</filename> (which is discussed in <xref linkend="sec:install"/>).</para></listitem>
 <listitem><para>The following lines to your application's configuration (*.cfg) file:</para></listitem>
@@ -546,11 +616,11 @@ An example application (blackscholes stock option valuation) running on MIPS cor
 </para>
 <para>
 <informalexample><programlisting>
-[core]
-default = mcpu
+	[core]
+	default = mcpu
 
-[code]
-default = X.mips 
+	[code]
+	default = X.mips 
 </programlisting></informalexample>
 </para>
 <para>
@@ -571,6 +641,7 @@ More generally, the system call API (API descriptions are given in <filename>/sr
 	<listitem><para>[Dynamic Memory Management] Malloc and friends. Note that when using malloc, if threads, <emphasis>other than the thread that made the malloc call</emphasis>, refer to the memory allocated by the malloc, a static address that points to the malloced memory must be made and used by those other threads. This workaround is exemplified in the blackscholes example through the double pointers whose names are prefixed by <filename>__PROXY_</filename>.</para></listitem>
 </itemizedlist>
 </para>
+</section>
 <section><title>Troubleshooting</title>
 <para>
 If when running a MIPS core simulation you see an error labeled: 
