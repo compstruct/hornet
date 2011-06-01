@@ -1,4 +1,4 @@
-<?xml version="1.0" ?><!DOCTYPE extension  PUBLIC '-//QM/2.6/Extension//EN'  'http://www.codesourcery.com/qm/dtds/2.6/-//qm/2.6/extension//en.dtd'><extension class="command.ShellCommandTest" kind="test"><argument name="stdin"><text/></argument><argument name="timeout"><integer>-1</integer></argument><argument name="stdout"><text>hornet version 0.1 (suisen)
+<?xml version="1.0" ?><!DOCTYPE extension  PUBLIC '-//QM/2.6/Extension//EN'  'http://www.codesourcery.com/qm/dtds/2.6/-//qm/2.6/extension//en.dtd'><extension class="command.ShellCommandTest" kind="test"><argument name="stdin"><text/></argument><argument name="timeout"><integer>-1</integer></argument><argument name="stdout"><text>hornet version 1.0 (suisen)
 
 simulating until drained
 no concurrency
