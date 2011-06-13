@@ -34,6 +34,7 @@ void catStripe::request(shared_ptr<catRequest> req) {
     }
     entry_t new_entry = { req, system_time + m_latency };
     m_entry_queue.push_back(new_entry);
+    set_req_status(req, CAT_REQ_WAIT);
 }
 
 void catStripe::tick_positive_edge() {}
@@ -68,6 +69,11 @@ void catStatic::set(maddr_t maddr, uint32_t home, bool delay_to_synch) {
 }
 
 void catStatic::request(shared_ptr<catRequest> req) {
+    assert(available());
+    if (m_num_ports > 0) {
+        --m_num_free_ports;
+    }
+
     request_entry_t new_req_entry = { req, 0 };
     maddr_t start_maddr = get_start_maddr_in_unit(req_maddr(req));
     if (m_map.count(start_maddr) > 0) {
@@ -82,6 +88,7 @@ void catStatic::request(shared_ptr<catRequest> req) {
         new_req_entry.available_time = system_time + m_synch_delay + m_latency;
         set_req_home(req, 0);
     }
+    set_req_status(req, CAT_REQ_WAIT);
 }
 
 void catStatic::tick_positive_edge() {}
@@ -137,6 +144,7 @@ void catFirstTouch::request(shared_ptr<catRequest> req) {
             new_req_entry.available_time = m_map[start_maddr].available_time + m_latency;
         }
     }
+    set_req_status(req, CAT_REQ_WAIT);
     m_req_entry_queue.push_back(new_req_entry);
 }
 

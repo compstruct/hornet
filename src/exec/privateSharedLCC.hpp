@@ -86,11 +86,9 @@ public:
         uint64_t expiration_time;
         shared_ptr<uint64_t> synched_expiration_time; /* only used in idealized timestamp logic */
         shared_ptr<uint64_t> first_read_time_since_last_expiration;  /* this is supposed to be updated on the cache, but for now assumes thie information is kept somehow */
-
-        /* only used in L2 with some timestamp logic */
-        shared_ptr<bool> in_large_mode;
-        shared_ptr<uint64_t> timestamp_delta_small; 
-        shared_ptr<uint64_t> timestamp_delta_large; 
+        shared_ptr<uint64_t> last_read_time;
+        shared_ptr<uint64_t> num_reads_in_phase;
+        shared_ptr<set<uint32_t> > directory;
 
     } coherenceInfo;
 
@@ -117,6 +115,10 @@ public:
 
         /* debug purpose - erase later */
         uint64_t waited;
+
+        /* cost breakdown study */
+        uint64_t initiated_time;
+        
     } coherenceMsg;
 
     typedef struct {
@@ -124,6 +126,10 @@ public:
         uint32_t receiver;
         shared_ptr<dramRequest> req;
         bool did_win_last_arbitration;
+
+        /* cost breakdown study */
+        uint64_t initiated_time;
+        
     } dramMsg;
 
 private:
@@ -148,6 +154,9 @@ private:
 
         /* for performance */
         shared_ptr<message_t> net_msg_to_send;
+
+        /* cost breakdown study */
+        uint64_t milestone_time;
 
     } toL1Entry;
 
@@ -184,6 +193,10 @@ private:
 
         /* for performance */
         shared_ptr<message_t> net_msg_to_send;
+
+        /* cost breakdown study */
+        uint64_t milestone_time;
+
     } toL2Entry;
 
     typedef struct {
@@ -191,6 +204,10 @@ private:
         shared_ptr<dramMsg> dram_rep;
         /* for performance */
         shared_ptr<message_t> net_msg_to_send;
+
+        /* cost breakdown study */
+        uint64_t milestone_time;
+        
     } toDRAMEntry;
 
     typedef map<maddr_t, shared_ptr<toL1Entry> > toL1Table;

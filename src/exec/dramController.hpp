@@ -55,6 +55,10 @@ public:
     inline bool is_read() { return m_request_type == DRAM_REQ_READ; }
     inline maddr_t maddr() { return m_maddr; }
 
+    /* cost breakdown study */
+    inline void set_milestone_time(uint64_t time) { m_milestone_time = time; }
+    inline uint64_t milestone_time() { return m_milestone_time; }
+
     friend class dramController;
 
 private:
@@ -65,6 +69,9 @@ private:
     dramReqStatus_t m_status;
     shared_array<uint32_t> m_data;
     shared_ptr<void> m_aux_data;
+
+    /* cost breakdown study */
+    uint64_t m_milestone_time;
 
 };
 

@@ -11,6 +11,8 @@
 #define DEBUG
 //#undef DEBUG
 
+#define PRINT_PROGRESS
+//#undef PRINT_PROGRESS
 
 #ifdef DEBUG
 //#define mh_log(X) if(true) mh_log(X)
@@ -157,28 +159,32 @@ void privateSharedMSI::request(shared_ptr<memoryRequest> req) {
 
 void privateSharedMSI::tick_positive_edge() {
     /* schedule and make requests */
-#if 1
+#ifdef PRINT_PROGRESS
     static uint64_t last_served[64];
     if (system_time % 100000 == 0) {
-        LOG(log,4) << "[MEM " << m_id << " @ " << system_time << " ]";
-        LOG(log,4) << "[MEM " << m_id << " @ " << system_time << " ]";
+        cerr << "[MEM " << m_id << " @ " << system_time << " ]";
+        cerr << "[MEM " << m_id << " @ " << system_time << " ]";
         if (stats_enabled()) {
-            LOG(log,4) << " total served : " << stats()->total_served();
-            LOG(log,4) << " since last : " << stats()->total_served() - last_served[m_id];
-            LOG(log,4) << " total served : " << stats()->total_served();
-            LOG(log,4) << " since last : " << stats()->total_served() - last_served[m_id];
+            cerr << " total served : " << stats()->total_served();
+            cerr << " since last : " << stats()->total_served() - last_served[m_id];
+            cerr << " total served : " << stats()->total_served();
+            cerr << " since last : " << stats()->total_served() - last_served[m_id];
             last_served[m_id] = stats()->total_served();
         }
-        LOG(log,4) << " in L1 work table : " << m_l1_work_table.size() << " in L2 work table : " << m_l2_work_table.size() << endl;
-        LOG(log,4) << " in L1 work table : " << m_l1_work_table.size() << " in L2 work table : " << m_l2_work_table.size() << endl;
+        cerr << " in L1 work table : " << m_l1_work_table.size() << " in L2 work table : " << m_l2_work_table.size() << endl;
+        cerr << " in L1 work table : " << m_l1_work_table.size() << " in L2 work table : " << m_l2_work_table.size() << endl;
     }
 #endif
+
 
     schedule_requests();
 
     m_l1->tick_positive_edge();
+
     m_l2->tick_positive_edge();
+     
     m_cat->tick_positive_edge();
+
     if(m_dram_controller) {
         m_dram_controller->tick_positive_edge();
     }
@@ -232,6 +238,14 @@ void privateSharedMSI::l1_work_table_update() {
                 ++it_addr;
                 continue;
             }
+
+            /* cost breakdown study */
+            if (l1_req->milestone_time() != UINT64_MAX) {
+                if (stats_enabled()) {
+                    stats()->add_l1_action_cost(system_time - l1_req->milestone_time());
+                }
+            }
+
             if (dir_req) {
                 /* entry for a directory request */
                 if (l1_req->status() == CACHE_REQ_MISS) {
@@ -247,6 +261,10 @@ void privateSharedMSI::l1_work_table_update() {
                     cache_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
                     cache_rep->sender = m_id;
                     cache_rep->receiver = dir_home;
+
+                    /* cost breakdown study */
+                    cache_rep->milestone_time = UINT64_MAX; /* will not count */
+
                     uint32_t data_size = 0;
                     switch (dir_req->type) {
                     case INV_REQ:
@@ -322,6 +340,10 @@ void privateSharedMSI::l1_work_table_update() {
                         mh_assert(line_info->status == SHARED && !core_req->is_read());
                         l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_INVALIDATE));
                         l1_req->set_reserve(true); /* reserve the line after invalidation so it could get a exclusive copy */
+
+                        /* cost breakdown study */
+                        l1_req->set_milestone_time(system_time);
+
                         entry->l1_req = l1_req;
                         entry->status = _L1_WORK_INVALIDATE_SHARED_LINE;
                     } else if (line) {
@@ -334,6 +356,10 @@ void privateSharedMSI::l1_work_table_update() {
                             cache_rep->sender = m_id;
                             cache_rep->receiver = dir_home;
                             cache_rep->waited = 0; /* for debugging only - erase later */
+
+                            /* cost breakdown study */
+                            cache_rep->milestone_time = system_time;
+
                             if (victim_info->status == SHARED) {
                                 cache_rep->type = INV_REP;
                             } else {
@@ -375,6 +401,10 @@ void privateSharedMSI::l1_work_table_update() {
                                 cache_req->waited = 0; /* for debugging only - erase later */
                                 /* only for debugging - erase later */
                                 cache_req->waited = 0;
+
+                                /* cost breakdown study */
+                                cache_req->milestone_time = system_time;
+
                                 entry->cache_req = cache_req;
                                 if (dir_home == m_id) {
                                     m_to_directory_req_schedule_q.push_back(cache_req);
@@ -391,21 +421,39 @@ void privateSharedMSI::l1_work_table_update() {
                                 entry->status = _L1_WORK_SEND_CACHE_REQ;
                             } else {
                                 entry->status = _L1_WORK_READ_CAT;
+
+                                /* cost breakdown study */
+                                cat_req->set_milestone_time(system_time);
+
                             }
                         }
                     } else {
                         /* has to wait until some lines get directory replies and become evictable. just retry */
                         l1_req->reset();
+
+                        /* cost breakdown study */
+                        if (l1_req->milestone_time() != UINT64_MAX) {
+                            l1_req->set_milestone_time(system_time);
+                        }
+
                     }
                     ++it_addr;
                     continue;
                 }
             }
         } else if (entry->status == _L1_WORK_INVALIDATE_SHARED_LINE) {
+
             if (l1_req->status() == CACHE_REQ_NEW || l1_req->status() == CACHE_REQ_WAIT) {
                 ++it_addr;
                 continue;
             }
+
+            /* cost breakdown study */
+            if (stats_enabled()) {
+                mh_assert(l1_req->milestone_time() != UINT64_MAX);
+                stats()->add_l1_action_cost(system_time - l1_req->milestone_time());
+            }
+            
             mh_assert(l1_req->status() == CACHE_REQ_HIT);
             uint32_t dir_home = line_info->directory_home;
             cache_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
@@ -416,6 +464,10 @@ void privateSharedMSI::l1_work_table_update() {
             cache_rep->data = shared_array<uint32_t>();
             cache_rep->did_win_last_arbitration = false;
             cache_rep->waited = 0; /* for debugging only - erase later */
+
+            /* cost breakdown study */
+            cache_rep->milestone_time = system_time;
+            
             entry->cache_rep = cache_rep;
             if (dir_home == m_id) {
                 m_to_directory_rep_schedule_q.push_back(cache_rep);
@@ -434,6 +486,14 @@ void privateSharedMSI::l1_work_table_update() {
             continue;
         } else if (entry->status == _L1_WORK_SEND_CACHE_REP) {
             if (cache_rep->did_win_last_arbitration) {
+
+                /* cost breakdown study */
+                if (cache_rep->milestone_time != UINT64_MAX) {
+                    if (stats_enabled()) {
+                        stats()->add_l2_invalidation_cost(system_time - cache_rep->milestone_time);
+                    }
+                }
+
                 if (entry->net_msg_to_send) {
                     entry->net_msg_to_send = shared_ptr<message_t>();
                 }
@@ -468,6 +528,10 @@ void privateSharedMSI::l1_work_table_update() {
                         cache_req->data = shared_array<uint32_t>();
                         cache_req->did_win_last_arbitration = false;
                         cache_req->waited = 0; /* for debugging only - erase later */
+
+                        /* cost breakdown study */
+                        cache_req->milestone_time = system_time;;
+
                         entry->cache_req = cache_req;
                         if (dir_home == m_id) {
                             m_to_directory_req_schedule_q.push_back(cache_req);
@@ -484,6 +548,10 @@ void privateSharedMSI::l1_work_table_update() {
                         entry->status = _L1_WORK_SEND_CACHE_REQ;
                     } else {
                         entry->status = _L1_WORK_READ_CAT;
+
+                        /* cost breakdown study */
+                        cat_req->set_milestone_time(system_time);
+
                     }
                     ++it_addr;
                     continue;
@@ -499,6 +567,14 @@ void privateSharedMSI::l1_work_table_update() {
             }
         } else if (entry->status == _L1_WORK_READ_CAT) {
             if (cat_req->status() == CAT_REQ_DONE) {
+
+                /* cost breakdown study */
+                if (cat_req->milestone_time() != UINT64_MAX) {
+                    if (stats_enabled()) {
+                        stats()->add_cat_action_cost(system_time - cat_req->milestone_time());
+                    }
+                }
+
                 uint32_t dir_home = cat_req->home();
                 if (stats_enabled()) {
                     stats()->did_read_cat(dir_home == m_id);
@@ -530,6 +606,12 @@ void privateSharedMSI::l1_work_table_update() {
             continue;
         } else if (entry->status == _L1_WORK_SEND_CACHE_REQ) {
             if (cache_req->did_win_last_arbitration) {
+
+                /* cost breakdown study */
+                if (stats_enabled()) {
+                    stats()->add_l2_network_plus_serialization_cost(system_time - cache_req->milestone_time);
+                }
+
                 LOG(log,4) << "[L1 " << m_id << " @ " << system_time << " ] sent a cache request (" << cache_req->type 
                     << ") for " << cache_req->maddr << " to directory " << cache_req->receiver << endl;
                 if (entry->net_msg_to_send) {
@@ -548,6 +630,12 @@ void privateSharedMSI::l1_work_table_update() {
             continue;
         } else if (entry->status == _L1_WORK_WAIT_DIRECTORY_REP) {
             if (dir_rep) {
+
+                /* cost breakdown study */
+                if (stats_enabled()) {
+                    stats()->add_l2_network_plus_serialization_cost(system_time - dir_rep->milestone_time);
+                }
+
                 LOG(log,4) << "[L1 " << m_id << " @ " << system_time << " ] received a directory reply ("
                     << dir_rep->type << ") for " << start_maddr << endl;
                 line_info = shared_ptr<cacheCoherenceInfo>(new cacheCoherenceInfo);
@@ -564,6 +652,10 @@ void privateSharedMSI::l1_work_table_update() {
                 l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                    m_cfg.words_per_cache_line, dir_rep->data, line_info));
                 l1_req->set_clean_write(true);
+
+                /* cost breakdown study */
+                l1_req->set_milestone_time(system_time);
+
                 entry->l1_req = l1_req;
                 entry->status = _L1_WORK_FEED_L1_AND_FINISH;
             } 
@@ -574,6 +666,13 @@ void privateSharedMSI::l1_work_table_update() {
                 ++it_addr;
                 continue;
             }
+
+            /* cost breakdown study */
+            mh_assert(l1_req->milestone_time() != UINT64_MAX);
+            if (stats_enabled()) {
+                stats()->add_l1_action_cost(system_time - l1_req->milestone_time());
+            }
+
             mh_assert(l1_req->status() == CACHE_REQ_HIT);
             if (stats_enabled()) {
                 if (core_req->is_read()) {
@@ -661,6 +760,14 @@ void privateSharedMSI::l2_work_table_update() {
                 ++it_addr;
                 continue;
             }
+
+            /* cost breakdown study */
+            if (l2_req->milestone_time() != UINT64_MAX) {
+                if (stats_enabled()) {
+                    stats()->add_l2_action_cost(system_time - l2_req->milestone_time());
+                }
+            }
+
             if (!cache_req) {
                 mh_assert(cache_rep);
                 mh_assert(line_info->directory.count(cache_rep->sender));
@@ -670,6 +777,10 @@ void privateSharedMSI::l2_work_table_update() {
                                                                    line->dirty? m_cfg.words_per_cache_line : 0,
                                                                    line->data,
                                                                    line_info));
+
+                /* cost breakdown study */
+                l2_req->set_milestone_time(UINT64_MAX);
+
                 l2_req->set_clean_write(!line->dirty);
                 entry->l2_req = l2_req;
                 entry->status = _L2_WORK_UPDATE_L2_AND_FINISH;
@@ -696,6 +807,10 @@ void privateSharedMSI::l2_work_table_update() {
                         l2_req->set_reserve(false);
                         entry->l2_req = l2_req;
                         entry->status = _L2_WORK_UPDATE_L2_AND_FINISH;
+
+                        /* cost breakdown study */
+                        l2_req->set_milestone_time(UINT64_MAX);
+
                     } else {
                         for (set<uint32_t>::iterator it = line_info->directory.begin(); it != line_info->directory.end(); ++it) {
                             shared_ptr<coherenceMsg> dir_req(new coherenceMsg);
@@ -713,6 +828,7 @@ void privateSharedMSI::l2_work_table_update() {
                         entry->invalidate_num_targets = entry->dir_reqs.size();
                         entry->accept_cache_replies = true;
                         entry->status = _L2_WORK_EMPTY_LINE_TO_EVICT;
+
                     }
                     ++it_addr;
                     continue;
@@ -727,6 +843,11 @@ void privateSharedMSI::l2_work_table_update() {
                         LOG(log,4) << "[DIRECTORY " << m_id << " @ " << system_time << " received a request for " << start_maddr
                                   << " while " << sender << " is still in the directory. waiting for the reply" << endl;
                         entry->accept_cache_replies = true;
+
+                        /* cost breakdown study */
+                        entry->milestone_time = system_time;
+                        l2_req->set_milestone_time(UINT64_MAX);
+
                         ++it_addr;
                         continue;
                     }
@@ -745,6 +866,10 @@ void privateSharedMSI::l2_work_table_update() {
                                                                                line_info));
                             l2_req->set_clean_write(line->dirty);
                             l2_req->set_reserve(true);
+
+                            /* cost breakdown study */
+                            l2_req->set_milestone_time(system_time);
+
                             entry->l2_req = l2_req;
                             entry->status = _L2_WORK_UPDATE_L2_AND_SEND_REP;
                         } else {
@@ -766,6 +891,10 @@ void privateSharedMSI::l2_work_table_update() {
                             entry->status = _L2_WORK_INVALIDATE_CACHES;
                             entry->invalidate_begin_time = system_time;
                             entry->invalidate_num_targets = entry->dir_reqs.size();
+
+                            /* cost breakdown study */
+                            entry->milestone_time = system_time;
+
                         }
                     } else {
                         mh_assert(line_info->status == WRITER);
@@ -783,6 +912,10 @@ void privateSharedMSI::l2_work_table_update() {
                         entry->status = _L2_WORK_INVALIDATE_CACHES;
                         entry->invalidate_begin_time = system_time;
                         entry->invalidate_num_targets = entry->dir_reqs.size();
+
+                        /* cost breakdown study */
+                        entry->milestone_time = system_time;
+
                     }
                     ++it_addr;
                     continue;
@@ -803,6 +936,10 @@ void privateSharedMSI::l2_work_table_update() {
                                                                                     m_cfg.words_per_cache_line,
                                                                                     victim->data));
                             dram_req->did_win_last_arbitration = false;
+
+                            /* cost breakdown study */
+                            dram_req->milestone_time = system_time;
+
                             entry->dram_req = dram_req;
                             if (m_dram_controller_location == m_id) {
                                 m_to_dram_req_schedule_q.push_back(entry->dram_req);
@@ -825,6 +962,10 @@ void privateSharedMSI::l2_work_table_update() {
                                                                                     m_cfg.words_per_cache_line));
                             dram_req->did_win_last_arbitration = false;
                             entry->dram_req = dram_req;
+
+                            /* cost breakdown study */
+                            dram_req->milestone_time = system_time;
+
                             if (m_dram_controller_location == m_id) {
                                 m_to_dram_req_schedule_q.push_back(entry->dram_req);
                             } else {
@@ -852,6 +993,10 @@ void privateSharedMSI::l2_work_table_update() {
                             new_msg->waited = 0; /* debugging only. erase later */
                             m_to_directory_req_schedule_q.push_back(new_msg);
                         }
+                        
+                        /* cost breakdown study */
+                        l2_req->set_milestone_time(system_time);
+                        
                         l2_req->reset();
                     }
                     ++it_addr;
@@ -863,6 +1008,14 @@ void privateSharedMSI::l2_work_table_update() {
                 ++it_addr;
                 continue;
             }
+
+            /* cost breakdown study */
+            if (l2_req->milestone_time() != UINT64_MAX) {
+                if (stats_enabled()) {
+                    stats()->add_l2_action_cost(system_time - l2_req->milestone_time());
+                }
+            }
+
             mh_assert(l2_req->status() == CACHE_REQ_HIT);
             if (entry->using_space_for_evict) {
                 ++m_l2_work_table_vacancy_evict;
@@ -878,6 +1031,7 @@ void privateSharedMSI::l2_work_table_update() {
                 if (entry->net_msg_to_send) {
                     entry->net_msg_to_send = shared_ptr<message_t>();
                 }
+
                 dram_req->did_win_last_arbitration = false;
                 LOG(log,4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] sent a DRAM writeback for "
                           << dram_req->req->maddr() << endl;
@@ -897,6 +1051,10 @@ void privateSharedMSI::l2_work_table_update() {
                     entry->accept_cache_replies = false;
                     l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_INVALIDATE));
                     l2_req->set_reserve(false);
+
+                    /* cost breakdown study */
+                    l2_req->set_milestone_time(UINT64_MAX);
+
                     entry->l2_req = l2_req;
                     if (stats_enabled()) {
                         stats()->did_invalidate_caches(entry->invalidate_num_targets, system_time - entry->invalidate_begin_time);
@@ -910,6 +1068,10 @@ void privateSharedMSI::l2_work_table_update() {
                                                                                 m_cfg.words_per_cache_line,
                                                                                 line->data));
                         dram_req->did_win_last_arbitration = false;
+
+                        /* cost breakdown study */
+                        dram_req->milestone_time = UINT64_MAX;
+
                         entry->dram_req = dram_req;
                         if (m_dram_controller_location == m_id) {
                             m_to_dram_req_schedule_q.push_back(entry->dram_req);
@@ -970,6 +1132,12 @@ void privateSharedMSI::l2_work_table_update() {
                 process_cache_rep(line, cache_rep);
                 entry->cache_rep = shared_ptr<coherenceMsg>();
                 if (line_info->directory.count(cache_req->sender) == 0) {
+
+                    /* cost breakdown study */
+                    if (stats_enabled()) {
+                        stats()->add_l2_network_plus_serialization_cost(system_time - entry->milestone_time);
+                    }
+
                     entry->accept_cache_replies = false;
                     entry->status = _L2_WORK_READ_L2;
                 }
@@ -982,6 +1150,12 @@ void privateSharedMSI::l2_work_table_update() {
                 entry->cache_rep = shared_ptr<coherenceMsg>();
                 if ((cache_req->type == SH_REQ && line_info->status == READERS) ||
                     line_info->directory.empty()) {
+
+                    /* cost breakdown study */
+                    if (stats_enabled()) {
+                        stats()->add_l2_invalidation_cost(system_time - entry->milestone_time);
+                    }
+
                     uint32_t sender = cache_req->sender;
                     entry->accept_cache_replies = false;
                     if (cache_req->type == EX_REQ || (m_cfg.use_mesi && line_info->directory.empty())) {
@@ -994,6 +1168,10 @@ void privateSharedMSI::l2_work_table_update() {
                                                                        line_info));
                     l2_req->set_clean_write(line->dirty);
                     l2_req->set_reserve(true);
+
+                    /* cost breakdown study */
+                    l2_req->set_milestone_time(system_time);
+
                     entry->l2_req = l2_req;
                     entry->status = _L2_WORK_UPDATE_L2_AND_SEND_REP;
                     if (stats_enabled()) {
@@ -1063,6 +1241,14 @@ void privateSharedMSI::l2_work_table_update() {
                 ++it_addr;
                 continue;
             }
+
+            /* cost breakdown study */
+            if (l2_req->milestone_time() != UINT64_MAX) {
+                if (stats_enabled()) {
+                    stats()->add_l2_action_cost(system_time - l2_req->milestone_time());
+                }
+            }
+
             if (l2_req->status() == CACHE_REQ_HIT) {
                 uint32_t sender = cache_req->sender;
                 dir_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
@@ -1073,6 +1259,10 @@ void privateSharedMSI::l2_work_table_update() {
                 dir_rep->data = line->data;
                 dir_rep->did_win_last_arbitration = false;
                 dir_rep->waited = 0; /* debugging only. erase later */
+
+                /* cost breakdown study */
+                dir_rep->milestone_time = system_time;
+
                 entry->dir_rep = dir_rep;
                 if (sender == m_id) {
                     mh_assert(m_l1_work_table.count(start_maddr) &&
@@ -1116,6 +1306,10 @@ void privateSharedMSI::l2_work_table_update() {
                                                                                 m_cfg.words_per_cache_line,
                                                                                 victim->data));
                         dram_req->did_win_last_arbitration = false;
+
+                        /* cost breakdown study */
+                        dram_req->milestone_time = system_time;
+
                         entry->dram_req = dram_req;
                         if (m_dram_controller_location == m_id) {
                             m_to_dram_req_schedule_q.push_back(entry->dram_req);
@@ -1130,6 +1324,10 @@ void privateSharedMSI::l2_work_table_update() {
                         }
                         entry->status = _L2_WORK_DRAM_WRITEBACK_AND_UPDATE;
                     } else {
+
+                        /* cost breakdown study */
+                        l2_req->set_milestone_time(system_time);
+
                         l2_req->reset(); /* retry */
                     }
                 } else {
@@ -1144,6 +1342,10 @@ void privateSharedMSI::l2_work_table_update() {
                         new_msg->waited = 0; /* debugging only. erase later */
                         m_to_directory_req_schedule_q.push_back(new_msg);
                     }
+
+                    /* cost breadown study */
+                    l2_req->set_milestone_time(system_time);
+
                     l2_req->reset();
                 }
                 ++it_addr;
@@ -1151,6 +1353,13 @@ void privateSharedMSI::l2_work_table_update() {
             }
         } else if (entry->status == _L2_WORK_DRAM_WRITEBACK_AND_UPDATE) {
             if (dram_req->did_win_last_arbitration) {
+
+                /* cost breakdown study */
+                if (stats_enabled()) {
+                    stats()->add_dram_network_plus_serialization_cost(system_time - dram_req->milestone_time);
+                }
+                l2_req->set_milestone_time(system_time);
+
                 if (entry->net_msg_to_send) {
                     entry->net_msg_to_send = shared_ptr<message_t>();
                 }
@@ -1168,6 +1377,12 @@ void privateSharedMSI::l2_work_table_update() {
             continue;
         } else if (entry->status == _L2_WORK_DRAM_WRITEBACK_AND_REQUEST) {
             if (dram_req->did_win_last_arbitration) {
+
+                /* cost breakdown study */
+                if (stats_enabled()) {
+                    stats()->add_dram_network_plus_serialization_cost(system_time - dram_req->milestone_time);
+                }
+
                 if (entry->net_msg_to_send) {
                     entry->net_msg_to_send = shared_ptr<message_t>();
                 }
@@ -1183,6 +1398,10 @@ void privateSharedMSI::l2_work_table_update() {
                                                                         DRAM_REQ_READ,
                                                                         m_cfg.words_per_cache_line));
                 dram_req->did_win_last_arbitration = false;
+
+                /* cost breakdown study */
+                dram_req->milestone_time = system_time;
+
                 entry->dram_req = dram_req;
                 if (m_dram_controller_location == m_id) {
                     m_to_dram_req_schedule_q.push_back(entry->dram_req);
@@ -1205,6 +1424,12 @@ void privateSharedMSI::l2_work_table_update() {
             continue;
         } else if (entry->status == _L2_WORK_SEND_DRAM_FEED_REQ) {
             if (dram_req->did_win_last_arbitration) {
+
+                /* cost breakdown study */
+                if (stats_enabled()) {
+                    stats()->add_dram_network_plus_serialization_cost(system_time - dram_req->milestone_time);
+                }
+
                 if (entry->net_msg_to_send) {
                     entry->net_msg_to_send = shared_ptr<message_t>();
                 }
@@ -1223,6 +1448,12 @@ void privateSharedMSI::l2_work_table_update() {
             continue;
         } else if (entry->status == _L2_WORK_WAIT_DRAM_FEED) {
             if (dram_rep) {
+
+                /* cost breakdown study */
+                if (stats_enabled()) {
+                    stats()->add_dram_network_plus_serialization_cost(system_time - dram_rep->milestone_time);
+                }
+
                 LOG(log,4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] received a DRAM reply for "
                           << dram_rep->req->maddr() << endl;
                 line_info = shared_ptr<directoryCoherenceInfo>(new directoryCoherenceInfo);
@@ -1237,6 +1468,10 @@ void privateSharedMSI::l2_work_table_update() {
                                                                    m_cfg.words_per_cache_line,
                                                                    dram_rep->req->read(), line_info));
                 l2_req->set_clean_write(true);
+
+                /* cost breakdown study */
+                l2_req->set_milestone_time(system_time);
+
                 entry->l2_req = l2_req;
                 entry->status = _L2_WORK_UPDATE_L2_AND_SEND_REP;
             }
@@ -1273,11 +1508,21 @@ void privateSharedMSI::dram_work_table_update() {
     for (toDRAMTable::iterator it_addr = m_dram_work_table.begin(); it_addr != m_dram_work_table.end(); ) {
         shared_ptr<toDRAMEntry> entry = it_addr->second;
         if (entry->dram_req->req->status() == DRAM_REQ_DONE) {
+
+            /* cost breakdown study */
+            if (stats_enabled()) {
+                stats()->add_dram_offchip_network_plus_dram_action_cost(system_time - entry->milestone_time);
+            }
+
             if (!entry->dram_rep) {
                 entry->dram_rep = shared_ptr<dramMsg>(new dramMsg);
                 entry->dram_rep->sender = m_id;
                 entry->dram_rep->req = entry->dram_req->req;
                 entry->dram_rep->did_win_last_arbitration = false;
+
+                /* cost breakdown study */
+                entry->dram_rep->milestone_time = system_time;
+
             }
             if (entry->dram_req->sender == m_id) {
                 /* guaranteed to have an active entry in l2 work table */
@@ -1493,6 +1738,7 @@ void privateSharedMSI::schedule_requests() {
     random_shuffle(m_core_port_schedule_q.begin(), m_core_port_schedule_q.end(), rr_fn);
     uint32_t count = 0;
     while (m_core_port_schedule_q.size()) {
+
         if (count < m_available_core_ports) {
             m_to_cache_req_schedule_q.push_back(make_tuple(true, m_core_port_schedule_q.front()));
             ++count;
@@ -1500,6 +1746,12 @@ void privateSharedMSI::schedule_requests() {
             /* sorry */
             LOG(log,4) << "you have to retry" << endl;
             set_req_status(m_core_port_schedule_q.front(), REQ_RETRY);
+
+            /* cost breakdown study */
+            if (stats_enabled()) {
+                stats()->add_memory_subsystem_serialization_cost(system_time - m_core_port_schedule_q.front()->initiated_time());
+            }
+
         }
         m_core_port_schedule_q.erase(m_core_port_schedule_q.begin());
     }
@@ -1515,6 +1767,12 @@ void privateSharedMSI::schedule_requests() {
             if (m_l1_work_table.count(start_maddr) || m_available_core_ports == 0) {
                 LOG(log,4) << "you have to retry" << endl;
                 set_req_status(req, REQ_RETRY);
+
+                /* cost breakdown study */
+                if (stats_enabled()) {
+                    stats()->add_memory_subsystem_serialization_cost(system_time - req->initiated_time());
+                }
+
                 m_to_cache_req_schedule_q.erase(m_to_cache_req_schedule_q.begin());
                 continue;
             }
@@ -1528,9 +1786,17 @@ void privateSharedMSI::schedule_requests() {
                                   req->is_read()? CACHE_REQ_READ : CACHE_REQ_WRITE,
                                   req->word_count(),
                                   req->is_read()? shared_array<uint32_t>() : req->data()));
+
+            /* cost breakdown study */
+            l1_req->set_milestone_time(system_time);
+
             new_entry->l1_req = l1_req;
            
             shared_ptr<catRequest> cat_req(new catRequest(req->maddr(), m_id));
+
+            /* cost breakdown study */
+            cat_req->set_milestone_time(UINT64_MAX);
+
             new_entry->cat_req = cat_req;
 
             new_entry->dir_req = shared_ptr<coherenceMsg>();
@@ -1582,6 +1848,11 @@ void privateSharedMSI::schedule_requests() {
                     l1_req = shared_ptr<cacheRequest>(new cacheRequest(msg->maddr, CACHE_REQ_INVALIDATE));
                 }
                 l1_req->set_reserve(false);
+
+                /* cost breakdown study */
+                /* directory request cost is all considered as invalidation cost */
+                l1_req->set_milestone_time(UINT64_MAX); /* will not count */
+
                 new_entry->l1_req = l1_req;
 
                 new_entry->cat_req = shared_ptr<catRequest>();
@@ -1628,6 +1899,9 @@ void privateSharedMSI::schedule_requests() {
             l2_req->set_reserve(true);
             new_entry->l2_req = l2_req;
 
+            /* cost breakdown study */
+            l2_req->set_milestone_time(UINT64_MAX);
+
             new_entry->cache_req = shared_ptr<coherenceMsg>();
             new_entry->dir_rep = shared_ptr<coherenceMsg>();
             new_entry->dram_req = shared_ptr<dramMsg>();
@@ -1652,6 +1926,9 @@ void privateSharedMSI::schedule_requests() {
             shared_ptr<cacheRequest> l2_req(new cacheRequest(msg->maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
             l2_req->set_reserve(true);
             new_entry->l2_req = l2_req;
+
+            /* cost breakdown study */
+            l2_req->set_milestone_time(UINT64_MAX);
 
             new_entry->cache_req = shared_ptr<coherenceMsg>();
             new_entry->dir_rep = shared_ptr<coherenceMsg>();
@@ -1698,6 +1975,9 @@ void privateSharedMSI::schedule_requests() {
 
             msg->did_win_last_arbitration = true;
 
+            /* cost breakdown study */
+            l2_req->set_milestone_time(UINT64_MAX);
+
             m_l2_work_table[start_maddr] = new_entry;
             --m_l2_work_table_vacancy_evict;
         } else if (m_l2_work_table_vacancy_shared) {
@@ -1721,6 +2001,12 @@ void privateSharedMSI::schedule_requests() {
 
             msg->did_win_last_arbitration = true;
 
+            /* cost breakdown study */
+            l2_req->set_milestone_time(system_time);
+            if (stats_enabled()) {
+                stats()->add_l2_network_plus_serialization_cost(system_time - msg->milestone_time);
+            }
+
             m_l2_work_table[start_maddr] = new_entry;
             --m_l2_work_table_vacancy_shared;
         }
@@ -1734,11 +2020,21 @@ void privateSharedMSI::schedule_requests() {
         shared_ptr<dramMsg> msg = m_to_dram_req_schedule_q.front();
         if (m_dram_controller->available()) {
             if (msg->req->is_read()) {
+
+                /* cost breakdown study */
+                if (stats_enabled()) {
+                    stats()->add_dram_network_plus_serialization_cost(system_time - msg->milestone_time);
+                }
+
                 mh_assert(!m_dram_work_table.count(msg->req->maddr()));
                 shared_ptr<toDRAMEntry> new_entry(new toDRAMEntry);
                 new_entry->dram_req = msg;
                 new_entry->dram_rep = shared_ptr<dramMsg>();
                 new_entry->net_msg_to_send = shared_ptr<message_t>();
+
+                /* cost breakdown study */
+                new_entry->milestone_time = system_time;
+
                 m_dram_work_table[msg->req->maddr()] = new_entry;
             }
                 /* if write, make a request and done */
@@ -1787,6 +2083,15 @@ void privateSharedMSI::schedule_requests() {
     random_shuffle(m_cat_req_schedule_q.begin(), m_cat_req_schedule_q.end(), rr_fn);
     while (m_cat->available() && m_cat_req_schedule_q.size()) {
         m_cat->request(m_cat_req_schedule_q.front());
+
+        /* cost breakdown study */
+        if (m_cat_req_schedule_q.front()->milestone_time() != UINT64_MAX) {
+            if (stats_enabled()) {
+                stats()->add_cat_serialization_cost(system_time - m_cat_req_schedule_q.front()->milestone_time());
+            }
+            m_cat_req_schedule_q.front()->set_milestone_time(system_time);
+        }
+
         m_cat_req_schedule_q.erase(m_cat_req_schedule_q.begin());
     }
     m_cat_req_schedule_q.clear();
@@ -1795,6 +2100,18 @@ void privateSharedMSI::schedule_requests() {
     random_shuffle(m_l1_read_req_schedule_q.begin(), m_l1_read_req_schedule_q.end(), rr_fn);
     while (m_l1->read_port_available() && m_l1_read_req_schedule_q.size()) {
         m_l1->request(m_l1_read_req_schedule_q.front());
+
+        /* cost breakdown study */
+        if (stats_enabled()) {
+            stats()->add_l1_action();
+        }
+        if (m_l1_read_req_schedule_q.front()->milestone_time() != UINT64_MAX) {
+            if (stats_enabled()) {
+                stats()->add_l1_serialization_cost(system_time - m_l1_read_req_schedule_q.front()->milestone_time());
+            }
+            m_l1_read_req_schedule_q.front()->set_milestone_time(system_time);
+        }
+
         m_l1_read_req_schedule_q.erase(m_l1_read_req_schedule_q.begin());
     }
     m_l1_read_req_schedule_q.clear();
@@ -1803,6 +2120,18 @@ void privateSharedMSI::schedule_requests() {
     random_shuffle(m_l1_write_req_schedule_q.begin(), m_l1_write_req_schedule_q.end(), rr_fn);
     while (m_l1->write_port_available() && m_l1_write_req_schedule_q.size()) {
         m_l1->request(m_l1_write_req_schedule_q.front());
+
+        /* cost breakdown study */
+        if (stats_enabled()) {
+            stats()->add_l1_action();
+        }
+        if (m_l1_write_req_schedule_q.front()->milestone_time() != UINT64_MAX) {
+            if (stats_enabled()) {
+                stats()->add_l1_serialization_cost(system_time - m_l1_write_req_schedule_q.front()->milestone_time());
+            }
+            m_l1_write_req_schedule_q.front()->set_milestone_time(system_time);
+        }
+
         m_l1_write_req_schedule_q.erase(m_l1_write_req_schedule_q.begin());
     }
     m_l1_write_req_schedule_q.clear();
@@ -1816,6 +2145,18 @@ void privateSharedMSI::schedule_requests() {
         if (issued_start_maddrs.count(start_maddr) == 0) {
             m_l2->request(req);
             issued_start_maddrs.insert(start_maddr);
+
+            /* cost breakdown study */
+            if (stats_enabled()) {
+                stats()->add_l2_action();
+            }
+            if (req->milestone_time() != UINT64_MAX) {
+                if (stats_enabled()) {
+                    stats()->add_l2_network_plus_serialization_cost(system_time - req->milestone_time());
+                }
+                req->set_milestone_time(system_time);
+            }
+
         }
         m_l2_read_req_schedule_q.erase(m_l2_read_req_schedule_q.begin());
     }
@@ -1828,6 +2169,18 @@ void privateSharedMSI::schedule_requests() {
         shared_ptr<cacheRequest> req = m_l2_write_req_schedule_q.front();
         maddr_t start_maddr = get_start_maddr_in_line(req->maddr());
         m_l2->request(req);
+        
+        /* cost breakdown study */
+        if (stats_enabled()) {
+            stats()->add_l2_action();
+        }
+        if (req->milestone_time() != UINT64_MAX) {
+            if (stats_enabled()) {
+                stats()->add_l2_network_plus_serialization_cost(system_time - req->milestone_time());
+            }
+            req->set_milestone_time(system_time);
+        }
+
         m_l2_write_req_schedule_q.erase(m_l2_write_req_schedule_q.begin());
     }
     m_l2_write_req_schedule_q.clear();

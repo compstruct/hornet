@@ -22,6 +22,20 @@ public:
 
     void did_read_cat(bool hit);
 
+    /* cost breakdown study */
+    inline void add_memory_subsystem_serialization_cost(uint64_t cost) { m_memory_subsystem_serialization_cost += cost; }
+    inline void add_cat_serialization_cost(uint64_t cost) { m_cat_serialization_cost += cost; }
+    inline void add_cat_action_cost(uint64_t cost) { m_cat_action_cost += cost; }
+    inline void add_l1_serialization_cost(uint64_t cost) { m_l1_serialization_cost += cost; }
+    inline void add_l1_action_cost(uint64_t cost) { m_l1_action_cost += cost; }
+    inline void add_l2_network_plus_serialization_cost(uint64_t cost) { m_l2_network_plus_serialization_cost += cost; }
+    inline void add_l2_action_cost(uint64_t cost) { m_l2_action_cost += cost; }
+    inline void add_l2_write_block_cost(uint64_t cost) { m_l2_write_block_cost += cost; }
+    inline void add_dram_network_plus_serialization_cost(uint64_t cost) { m_dram_network_plus_serialization_cost += cost; }
+    inline void add_dram_offchip_network_plus_dram_action_cost(uint64_t cost) { m_dram_offchip_network_plus_dram_action_cost += cost; }
+    inline void add_l1_action() { ++m_l1_action; }
+    inline void add_l2_action() { ++m_l2_action; }
+
     friend class privateSharedLCCStats;
 
 private:
@@ -38,6 +52,20 @@ private:
     bool m_record_ideal_timestamp_delta;
     map<maddr_t, running_stats> m_ideal_delta;
     map<maddr_t, vector<uint64_t> > m_ideal_delta_samples;
+
+    /* cost breakdown study */
+    uint64_t m_memory_subsystem_serialization_cost;
+    uint64_t m_cat_serialization_cost;
+    uint64_t m_cat_action_cost;
+    uint64_t m_l1_serialization_cost;
+    uint64_t m_l1_action_cost;
+    uint64_t m_l2_network_plus_serialization_cost;
+    uint64_t m_l2_action_cost;
+    uint64_t m_l2_write_block_cost;
+    uint64_t m_dram_network_plus_serialization_cost;
+    uint64_t m_dram_offchip_network_plus_dram_action_cost;
+    uint64_t m_l1_action;
+    uint64_t m_l2_action;
 
 };
 

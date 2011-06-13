@@ -32,6 +32,10 @@ public:
     inline uint32_t home() { return m_home; }
     inline uint32_t word_count() { return m_word_count; }
 
+    /* cost breakdown study */
+    uint64_t initiated_time() { return m_initiated_time; }
+    inline void set_initiated_time(uint64_t time) { m_initiated_time = time; }
+
     friend class memory;
 
 private:
@@ -43,6 +47,7 @@ private:
     shared_array<uint32_t> m_data;
     uint32_t m_home;
 
+    uint64_t m_initiated_time;
 };
 
 class memory {

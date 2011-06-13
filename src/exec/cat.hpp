@@ -34,6 +34,10 @@ public:
     inline uint32_t home() { return m_home; }
     inline maddr_t maddr() { return m_maddr; }
 
+    /* cost breakdown study */
+    inline void set_milestone_time(uint64_t time) { m_milestone_time = time; }
+    inline uint64_t milestone_time() { return m_milestone_time; }
+
     friend class cat;
 
 private:
@@ -41,6 +45,10 @@ private:
     maddr_t m_maddr;
     uint32_t m_sender;
     uint32_t m_home;
+
+    /* cost breakdown study */
+    uint64_t m_milestone_time;
+
 };
 
 /* simple performance model : unlimited read ports */

@@ -4,7 +4,14 @@
 #include "privateSharedMSIStats.hpp"
 
 privateSharedMSIStatsPerTile::privateSharedMSIStatsPerTile(uint32_t id, const uint64_t &t) :
-    memStatsPerTile(id, t) { }
+    memStatsPerTile(id, t), 
+    /* cost breakdown study */
+    m_memory_subsystem_serialization_cost(0),
+    m_cat_serialization_cost(0), m_cat_action_cost(0),
+    m_l1_serialization_cost(0), m_l1_action_cost(0),
+    m_l2_network_plus_serialization_cost(0), m_l2_action_cost(0), m_l2_invalidation_cost(0),
+    m_dram_network_plus_serialization_cost(0), m_dram_offchip_network_plus_dram_action_cost(0),
+    m_l1_action(0), m_l2_action(0) { }
 
 privateSharedMSIStatsPerTile::~privateSharedMSIStatsPerTile() {}
 
@@ -60,6 +67,20 @@ void privateSharedMSIStats::print_stats(ostream &out) {
     double total_inv_penalty = 0.0;
     double total_cat_hits = 0.0;
 
+    /* cost breakdown study */
+    uint64_t total_memory_subsystem_serialization_cost = 0;
+    uint64_t total_cat_serialization_cost = 0;
+    uint64_t total_cat_action_cost = 0;
+    uint64_t total_l1_serialization_cost = 0;
+    uint64_t total_l1_action_cost = 0;
+    uint64_t total_l2_network_plus_serialization_cost = 0;
+    uint64_t total_l2_action_cost = 0;
+    uint64_t total_l2_invalidation_cost = 0;
+    uint64_t total_dram_network_plus_serialization_cost = 0;
+    uint64_t total_dram_offchip_network_plus_dram_action_cost = 0;
+    uint64_t total_l1_action = 0;
+    uint64_t total_l2_action = 0;
+
     perTileStats_t::iterator it;
     uint32_t num_tiles = 0;
     for (it = m_per_tile_stats.begin(); it != m_per_tile_stats.end(); ++it) {
@@ -104,6 +125,20 @@ void privateSharedMSIStats::print_stats(ostream &out) {
         total_inv_caches += inv_caches;
         total_inv_penalty += inv_penalty;
 
+        /* cost breakdown study */
+        total_memory_subsystem_serialization_cost += st->m_memory_subsystem_serialization_cost;
+        total_cat_serialization_cost += st->m_cat_serialization_cost;
+        total_cat_action_cost += st->m_cat_action_cost;
+        total_l1_serialization_cost += st->m_l1_serialization_cost;
+        total_l1_action_cost += st->m_l1_action_cost;
+        total_l2_network_plus_serialization_cost += st->m_l2_network_plus_serialization_cost;
+        total_l2_action_cost += st->m_l2_action_cost;
+        total_l2_invalidation_cost += st->m_l2_invalidation_cost;
+        total_dram_network_plus_serialization_cost += st->m_dram_network_plus_serialization_cost;
+        total_dram_offchip_network_plus_dram_action_cost += st->m_dram_offchip_network_plus_dram_action_cost;
+        total_l1_action += st->m_l1_action;
+        total_l2_action += st->m_l2_action;
+
         char str[1024];
         sprintf(str, "[Private-shared-MSI/MESI %4d ] L1hit%%: %.2f read%%: %.2f write%%: %.2f "
                      "L2hit%%: %.2f inv%%: %.2f #targets/inv: %.2f avg-inv-latency: %.2f CAThit%%: %.2f",
@@ -118,7 +153,7 @@ void privateSharedMSIStats::print_stats(ostream &out) {
 
     char str[1024];
     sprintf(str, "[Summary: Private-shared-MSI/MESI ] L1hit%%: %.2f read%%: %.2f write%%: %.2f "
-            "L2hit%%: %.2f inv%%: %.2f #targets/inv: %.2f avg-inv-penalty: %.2f CAThit%%: %.2f",
+            "L2hit%%: %.2f inv%%: %.2f #cores/inv: %.2f avg-inv-cost: %.2f CAThit%%: %.2f L1act: %ld L2act: %ld",
             100.0*total_l1_hits/total_l1,
             100.0*total_l1_read_hits/total_l1_reads,
             100.0*total_l1_write_hits/total_l1_writes,
@@ -126,8 +161,18 @@ void privateSharedMSIStats::print_stats(ostream &out) {
             (double)total_invs/total_l2*100.0,
             total_inv_caches/total_invs, 
             total_inv_penalty/total_invs,
-            100.0*total_cat_hits/total_cat_lookups);
+            100.0*total_cat_hits/total_cat_lookups, total_l1_action, total_l2_action);
 
+    out << str << endl;
+
+    /* cost breakdown study */
+    sprintf(str, "[Cost] MEM-S: %ld L1-N&S: %ld L1: %ld CAT-S: %ld CATL %ld L2-N&S: %ld L2-Inv: %ld L2: %ld "
+                 "DRAM-N&S: %ld DRAM-Offchip: %ld", total_memory_subsystem_serialization_cost,
+                 total_l1_serialization_cost, total_l1_action_cost,
+                 total_cat_serialization_cost, total_cat_action_cost,
+                 total_l2_network_plus_serialization_cost, total_l2_invalidation_cost, total_l2_action_cost,
+                 total_dram_network_plus_serialization_cost, total_dram_offchip_network_plus_dram_action_cost);
+    
     out << str << endl;
 
     out << endl;

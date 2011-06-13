@@ -145,11 +145,16 @@ void memtraceCore::execute() {
                 if (cur.thread->type() == memtraceThread::INST_MEMORY) {
                     if (cur.thread->is_read()) {
                         cur.req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), cur.thread->word_count()));
+
                     } else {
                         /* this core model doesn't care data */
                         shared_array<uint32_t> dummy = shared_array<uint32_t>(new uint32_t[cur.thread->word_count()]);
                         cur.req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), cur.thread->word_count(), dummy));
                     }
+
+                    /* cost breakdown study */
+                    cur.req->set_initiated_time(system_time);
+
                     m_memory->request(cur.req);
                     cur.status = LANE_WAIT;
                     LOG(log,4) << "[thread " << cur.thread->get_id() << " @ " << system_time 
@@ -213,6 +218,7 @@ void memtraceCore::update_from_memory_requests() {
                 entry.status = LANE_IDLE;
             } else if (i->req->status() == REQ_RETRY) {
                 /* the memory couldn't accept the last request */
+                i->req->set_initiated_time(system_time);
                 m_memory->request(i->req); /* it's supposed to be in the positive tick of the next cycle, but doing here is equivalent */             
             } else if (support_em() && entry.req->status() == REQ_MIGRATE) {
                 entry.thread->reset_current_instruction();
