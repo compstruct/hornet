@@ -776,41 +776,46 @@ void privateSharedLCC::l2_work_table_update() {
                         *line_info->in_large_mode = false;
                         *line_info->first_read_time_since_last_expiration = UINT64_MAX;
                     }
-                } else if (victim && (victim->dirty || m_cfg.save_timestamp_in_dram)) {
-                    dram_req = shared_ptr<dramMsg>(new dramMsg);
-                    dram_req->sender = m_id;
-                    dram_req->receiver = m_dram_controller_location;
-                    uint32_t data_size = 0;
-                    if (m_cfg.save_timestamp_in_dram) {
-                        dram_req->req = shared_ptr<dramRequest>(new dramRequest(victim->start_maddr,
-                                                                                DRAM_REQ_WRITE, 
-                                                                                m_cfg.words_per_cache_line, 
-                                                                                victim->data,
-                                                                                TIMESTAMP_WORDS,
-                                                                                victim_info));
-                        data_size = (m_cfg.words_per_cache_line + TIMESTAMP_WORDS) * 4;
-                    } else {
-                        dram_req->req = shared_ptr<dramRequest>(new dramRequest(victim->start_maddr,
-                                                                                DRAM_REQ_WRITE, 
-                                                                                m_cfg.words_per_cache_line, 
-                                                                                victim->data));
-                        data_size = m_cfg.words_per_cache_line * 4;
+                } else if (victim) {
+                    if (victim_info->synched_expiration_time) {
+                        *victim_info->synched_expiration_time = system_time;
                     }
-                    dram_req->did_win_last_arbitration = false;
-                    entry->dram_req = dram_req;
-                    if (m_dram_controller_location == m_id) {
-                        m_to_dram_req_schedule_q.push_back(dram_req);
-                    } else {
-                        msg_to_send = shared_ptr<message_t>(new message_t);
-                        msg_to_send->src = m_id;
-                        msg_to_send->dst = m_dram_controller_location;
-                        msg_to_send->type = MSG_DRAM_REQ;
-                        msg_to_send->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + data_size);
-                        msg_to_send->content = dram_req;
-                        entry->net_msg_to_send = msg_to_send;
-                        m_to_network_schedule_q[MSG_DRAM_REQ].push_back(msg_to_send);
+                    if (victim->dirty || m_cfg.save_timestamp_in_dram) {
+                        dram_req = shared_ptr<dramMsg>(new dramMsg);
+                        dram_req->sender = m_id;
+                        dram_req->receiver = m_dram_controller_location;
+                        uint32_t data_size = 0;
+                        if (m_cfg.save_timestamp_in_dram) {
+                            dram_req->req = shared_ptr<dramRequest>(new dramRequest(victim->start_maddr,
+                                                                                    DRAM_REQ_WRITE, 
+                                                                                    m_cfg.words_per_cache_line, 
+                                                                                    victim->data,
+                                                                                    TIMESTAMP_WORDS,
+                                                                                    victim_info));
+                            data_size = (m_cfg.words_per_cache_line + TIMESTAMP_WORDS) * 4;
+                        } else {
+                            dram_req->req = shared_ptr<dramRequest>(new dramRequest(victim->start_maddr,
+                                                                                    DRAM_REQ_WRITE, 
+                                                                                    m_cfg.words_per_cache_line, 
+                                                                                    victim->data));
+                            data_size = m_cfg.words_per_cache_line * 4;
+                        }
+                        dram_req->did_win_last_arbitration = false;
+                        entry->dram_req = dram_req;
+                        if (m_dram_controller_location == m_id) {
+                            m_to_dram_req_schedule_q.push_back(dram_req);
+                        } else {
+                            msg_to_send = shared_ptr<message_t>(new message_t);
+                            msg_to_send->src = m_id;
+                            msg_to_send->dst = m_dram_controller_location;
+                            msg_to_send->type = MSG_DRAM_REQ;
+                            msg_to_send->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + data_size);
+                            msg_to_send->content = dram_req;
+                            entry->net_msg_to_send = msg_to_send;
+                            m_to_network_schedule_q[MSG_DRAM_REQ].push_back(msg_to_send);
+                        }
+                        entry->status = _L2_WORK_SEND_DRAM_WRITEBACK_THEN_FEED;
                     }
-                    entry->status = _L2_WORK_SEND_DRAM_WRITEBACK_THEN_FEED;
                 } else {
                     dram_req = shared_ptr<dramMsg>(new dramMsg);
                     dram_req->sender = m_id;
