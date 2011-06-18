@@ -9,7 +9,7 @@
 #define TIMESTAMP_WORDS 2
 
 #define MAX_IDEAL 1000
-//#undef MAX_IDEAL
+#undef MAX_IDEAL
 
 #define PRINT_PROGRESS
 //#undef PRINT_PROGRESS
@@ -623,6 +623,7 @@ void privateSharedLCC::l2_work_table_update() {
                     /* LOGIC: this is where a write happens */
                     if (line_info->synched_expiration_time) {
                         /* TIMESTAMP_IDEAL */
+                        *line_info->synched_expiration_time = system_time;
                         if (*line_info->first_read_time_since_last_expiration != UINT64_MAX) {
 #ifdef PRINT_IDEAL
                             cout << "(w) " << start_maddr << " @ " << system_time << " " 
@@ -638,7 +639,6 @@ void privateSharedLCC::l2_work_table_update() {
                                      *line_info->last_read_time - *line_info->first_read_time_since_last_expiration);
                             }
                         }
-                        *line_info->synched_expiration_time = system_time;
 
                         mh_log(4) << "[LCC " << m_id << " @ " << system_time << " ] has invalidated all shared lines for "
                                   << start_maddr << " due to a write." << " firt read time since last expiration : " 
