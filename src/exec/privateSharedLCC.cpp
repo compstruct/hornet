@@ -1095,9 +1095,9 @@ void privateSharedLCC::l2_work_table_update() {
                     msg_to_send->src = m_id;
                     msg_to_send->dst = lcc_rep->receiver;
                     if (lcc_rep->type == READ_REP) {
-                        msg_to_send->flit_count += get_flit_count(1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
+                        msg_to_send->flit_count += get_flit_count(1 + (TIMESTAMP_WORDS + m_cfg.words_per_cache_line) * 4);
                     } else {
-                        msg_to_send->flit_count += get_flit_count(1 + m_cfg.address_size_in_bytes);
+                        msg_to_send->flit_count += get_flit_count(1);
                     }
                     msg_to_send->content = lcc_rep;
                     entry->net_msg_to_send = msg_to_send;
@@ -1367,7 +1367,7 @@ void privateSharedLCC::l2_work_table_update() {
                     msg_to_send->type = MSG_LCC_REP;
                     msg_to_send->src = m_id;
                     msg_to_send->dst = lcc_rep->receiver;
-                    msg_to_send->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
+                    msg_to_send->flit_count = get_flit_count(1 + (m_cfg.words_per_cache_line + TIMESTAMP_WORDS) * 4);
                     msg_to_send->content = lcc_rep;
                     entry->net_msg_to_send = msg_to_send;
                     m_to_network_schedule_q[MSG_LCC_REP].push_back(msg_to_send);
