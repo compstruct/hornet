@@ -116,6 +116,10 @@ public:
 
         /* debug purpose - erase later */
         uint64_t waited;
+
+        /* cost breakdown study */
+        uint64_t milestone_time;
+
     } coherenceMsg;
 
     typedef struct {
@@ -123,6 +127,10 @@ public:
         uint32_t receiver;
         shared_ptr<dramRequest> req;
         bool did_win_last_arbitration;
+
+        /* cost breakdown study */
+        uint64_t milestone_time;
+
     } dramMsg;
 
 private:
@@ -151,6 +159,9 @@ private:
 
         /* for performance */
         shared_ptr<message_t> net_msg_to_send;
+
+        /* cost breakdown study */
+        uint64_t milestone_time;
 
     } toL1Entry;
 
@@ -190,6 +201,11 @@ private:
 
         /* for performance */
         shared_ptr<message_t> net_msg_to_send;
+
+        /* cost breakdown study */
+        uint64_t milestone_time;
+        bool waiting_for_evictions;
+
     } toL2Entry;
 
     typedef struct {
@@ -197,6 +213,10 @@ private:
         shared_ptr<dramMsg> dram_rep;
         /* for performance */
         shared_ptr<message_t> net_msg_to_send;
+
+        /* cost breakdown study */
+        uint64_t milestone_time;
+
     } toDRAMEntry;
 
     typedef map<maddr_t, shared_ptr<toL1Entry> > toL1Table;

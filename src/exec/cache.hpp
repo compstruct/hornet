@@ -73,6 +73,10 @@ public:
     inline void set_clean_write(bool enable = true) { m_do_clean_write = enable; }
     inline void set_reserve(bool enable) { m_do_reserve= enable; }
 
+    /* cost breakdown study */
+    inline void set_milestone_time(uint64_t time) { m_milestone_time = time; }
+    inline uint64_t milestone_time(){ return m_milestone_time; }
+
     friend class cache;
 
 private:
@@ -91,6 +95,9 @@ private:
 
     bool m_do_clean_write;
     bool m_do_reserve;
+
+    /* cost breakdown study */
+    uint64_t m_milestone_time;;
 
 };
 

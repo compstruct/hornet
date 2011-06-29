@@ -32,6 +32,10 @@ public:
     inline uint32_t home() { return m_home; }
     inline uint32_t word_count() { return m_word_count; }
 
+    /* cost breakdown study */
+    uint64_t milestone_time() { return m_milestone_time; }
+    inline void set_milestone_time(uint64_t time) { m_milestone_time = time; }
+
     friend class memory;
 
 private:
@@ -42,6 +46,8 @@ private:
     uint32_t m_word_count;
     shared_array<uint32_t> m_data;
     uint32_t m_home;
+
+    uint64_t m_milestone_time;
 
 };
 

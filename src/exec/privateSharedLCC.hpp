@@ -27,7 +27,7 @@ public:
 
     typedef struct {
         timestampLogic_t logic;
-        bool save_timestamp_in_dram; /* saving timestamp in DRAM is NEVER tested and probably (99%) woudln't work */
+        bool save_timestamp_in_dram; /* only experimental */
         bool use_separate_vc_for_writes;
         uint32_t default_timestamp_delta;
         uint32_t num_nodes;
@@ -85,12 +85,11 @@ public:
     typedef struct {
         uint64_t expiration_time;
         shared_ptr<uint64_t> synched_expiration_time; /* only used in idealized timestamp logic */
-        shared_ptr<uint64_t> first_read_time_since_last_expiration;  /* this is supposed to be updated on the cache, but for now assumes thie information is kept somehow */
-
-        /* only used in L2 with some timestamp logic */
-        shared_ptr<bool> in_large_mode;
-        shared_ptr<uint64_t> timestamp_delta_small; 
-        shared_ptr<uint64_t> timestamp_delta_large; 
+        shared_ptr<uint64_t> first_read_time_in_phase;  /* this is supposed to be updated on the cache, but for now assumes thie information is kept somehow */
+        shared_ptr<uint64_t> last_read_time;
+        shared_ptr<uint64_t> last_write_time;
+        shared_ptr<uint64_t> num_reads_in_phase;
+        shared_ptr<set<uint32_t> > directory;
 
     } coherenceInfo;
 
@@ -117,6 +116,10 @@ public:
 
         /* debug purpose - erase later */
         uint64_t waited;
+
+        /* cost breakdown study */
+        uint64_t milestone_time;
+
     } coherenceMsg;
 
     typedef struct {
@@ -124,6 +127,10 @@ public:
         uint32_t receiver;
         shared_ptr<dramRequest> req;
         bool did_win_last_arbitration;
+
+        /* cost breakdown study */
+        uint64_t milestone_time;
+
     } dramMsg;
 
 private:
@@ -148,6 +155,9 @@ private:
 
         /* for performance */
         shared_ptr<message_t> net_msg_to_send;
+
+        /* cost breakdown study */
+        uint64_t milestone_time;
 
     } toL1Entry;
 
@@ -179,11 +189,15 @@ private:
         bool using_space_for_reads;
 
         /* for stats */
-        uint32_t write_blocked_time;
         bool did_miss_on_first;
 
         /* for performance */
         shared_ptr<message_t> net_msg_to_send;
+
+        /* cost breakdown study */
+        uint64_t milestone_time;
+        bool waiting_for_evictions;
+
     } toL2Entry;
 
     typedef struct {
@@ -191,6 +205,10 @@ private:
         shared_ptr<dramMsg> dram_rep;
         /* for performance */
         shared_ptr<message_t> net_msg_to_send;
+
+        /* cost breakdown study */
+        uint64_t milestone_time;
+        
     } toDRAMEntry;
 
     typedef map<maddr_t, shared_ptr<toL1Entry> > toL1Table;
