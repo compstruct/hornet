@@ -1319,6 +1319,7 @@ void privateSharedLCC::l2_work_table_update() {
                     } else if (m_cfg.logic == TIMESTAMP_FIXED) {
 
                         if (lcc_write_req) {
+                            line_info->expiration_time = system_time;
                         } else {
                             line_info->expiration_time = system_time + m_cfg.default_timestamp_delta;
                         }
