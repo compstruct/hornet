@@ -5,6 +5,7 @@
 #define __CAT_HPP__
 
 #include <boost/shared_ptr.hpp>
+#include <boost/thread.hpp>
 #include <vector>
 #include <map>
 
@@ -51,7 +52,30 @@ private:
 
 };
 
-/* simple performance model : unlimited read ports */
+class SynchedCATModel {
+public:
+    SynchedCATModel();
+    ~SynchedCATModel();
+
+    bool lock();
+    void unlock();
+
+    void set(maddr_t tag, uint64_t available_time, uint32_t core);
+    bool has_tag(maddr_t tag);
+    uint32_t core_for_tag(maddr_t tag);
+    uint64_t available_time_for_tag(maddr_t tag);
+
+private:
+    typedef struct {
+        uint32_t home;
+        uint64_t available_time;
+    } map_entry_t;
+
+    uint32_t m_semaphore;
+    mutable recursive_mutex m_mutex;
+    map<maddr_t, map_entry_t> m_map;
+
+};
 
 class cat {
 public:
@@ -107,7 +131,8 @@ protected:
 class catStatic : public cat {
 public:
     catStatic(uint32_t num_nodes, const uint64_t& system_time, uint32_t num_ports, 
-              uint32_t latency, uint32_t allocation_unit_in_bytes, uint32_t synch_delay);
+              uint32_t latency, uint32_t allocation_unit_in_bytes, uint32_t synch_delay,
+              shared_ptr<SynchedCATModel> model);
     virtual ~catStatic();
 
     virtual void request(shared_ptr<catRequest> req);
@@ -127,17 +152,19 @@ protected:
         uint64_t available_time;
     } map_entry_t;
 
-
+    shared_ptr<SynchedCATModel> m_model;
     uint32_t m_synch_delay;
     map<maddr_t, map_entry_t> m_map;
     //map<uint32_t/*space*/, map<uint64_t/*index*/, map_entry_t> > m_map;
     vector<request_entry_t> m_req_entry_queue;
+
 };
 
 class catFirstTouch : public cat {
 public:
     catFirstTouch(uint32_t num_nodes, const uint64_t& system_time, uint32_t num_port, 
-                  uint32_t latency, uint32_t allocation_unit_in_bytes, uint32_t synch_delay);
+                  uint32_t latency, uint32_t allocation_unit_in_bytes, uint32_t synch_delay,
+                  shared_ptr<SynchedCATModel> model);
     virtual ~catFirstTouch();
 
     virtual void request(shared_ptr<catRequest> req);
@@ -155,9 +182,11 @@ protected:
         uint64_t available_time;
     } map_entry_t;
 
+    shared_ptr<SynchedCATModel> m_model;
     uint32_t m_synch_delay;
     map<maddr_t, map_entry_t> m_map;
     vector<request_entry_t> m_req_entry_queue;
+
 };
 
 #endif

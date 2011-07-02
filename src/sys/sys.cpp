@@ -72,7 +72,8 @@ static void read_mem(uint8_t *ptr, uint32_t num_bytes,
 }
 
 static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_ptr<memtraceThreadPool> pool, int num_cores, 
-                                    const uint64_t &system_time, logger &log, shared_ptr<system_statistics> sys_stats) 
+                                    const uint64_t &system_time, logger &log, shared_ptr<system_statistics> sys_stats,
+                                    shared_ptr<SynchedCATModel> cat_model, uint32_t cat_allocation_unit_in_bytes) 
 {
     if (!files) {
         return;
@@ -107,8 +108,14 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
                 maddr.space = 0;
                 maddr.address = addr;
                 home = home % num_cores;
-                // TODO : support static CAT
                 uint32_t word_count = 1; /* 4byte word is assumed */
+
+                if (cat_allocation_unit_in_bytes > 0) {
+                    maddr_t start_maddr = maddr;
+                    start_maddr.address -= start_maddr.address % cat_allocation_unit_in_bytes;
+                    /* this is done by the main thread so need not protect by a lock */
+                    cat_model->set(start_maddr, 0, home);
+                }
 
                 thread = pool->find(th_id);
                 if (thread == NULL) {
@@ -176,7 +183,9 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     shared_ptr<privateSharedMSIStats> private_shared_msi_stats = shared_ptr<privateSharedMSIStats>();
     shared_ptr<privateSharedLCCStats> private_shared_lcc_stats = shared_ptr<privateSharedLCCStats>();
 
-    shared_ptr<dram> new_dram(new dram ());
+    shared_ptr<dram> new_dram(new dram());
+    shared_ptr<SynchedCATModel> cat_model(new SynchedCATModel());
+    uint32_t cat_allocation_unit_in_bytes = 0;
 
     for (unsigned i = 0; i < num_nodes; ++i) {
         uint32_t id = read_word(img);
@@ -293,7 +302,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             uint32_t cat_latency = read_word(img);
 
             /* cat allocation unit */
-            uint32_t cat_allocation_unit_in_bytes = read_word(img);
+            cat_allocation_unit_in_bytes = read_word(img);
 
             /* cat synch delay */
             uint32_t cat_synch_delay = read_word(img);
@@ -309,11 +318,13 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                 break;
             case CAT_STATIC:
                 new_cat = shared_ptr<catStatic>(new catStatic(num_nodes, t->get_time(), cat_num_ports, 
-                                                              cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay));
+                                                              cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay,
+                                                              cat_model));
                 break;
             case CAT_FIRST_TOUCH:
                 new_cat = shared_ptr<catFirstTouch>(new catFirstTouch(num_nodes, t->get_time(), cat_num_ports, 
-                                                                      cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay));
+                                                                      cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay,
+                                                                      cat_model));
                 break;
             }
 
@@ -518,7 +529,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             uint32_t cat_latency = read_word(img);
 
             /* cat allocation unit */
-            uint32_t cat_allocation_unit_in_bytes = read_word(img);
+            cat_allocation_unit_in_bytes = read_word(img);
 
             /* cat synch delay */
             uint32_t cat_synch_delay = read_word(img);
@@ -534,11 +545,13 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                 break;
             case CAT_STATIC:
                 new_cat = shared_ptr<catStatic>(new catStatic(num_nodes, t->get_time(), cat_num_ports, 
-                                                              cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay));
+                                                              cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay,
+                                                              cat_model));
                 break;
             case CAT_FIRST_TOUCH:
                 new_cat = shared_ptr<catFirstTouch>(new catFirstTouch(num_nodes, t->get_time(), cat_num_ports, 
-                                                                      cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay));
+                                                                      cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay,
+                                                                      cat_model));
                 break;
             }
 
@@ -821,7 +834,8 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     event_parser ep(events_files, injectors, flow_starts);
 
     /* populate memtrace thread pool from traces */
-    create_memtrace_threads(memtrace_files, memtrace_thread_pool, memtrace_cores.size(), sys_time, log, stats);
+    create_memtrace_threads(memtrace_files, memtrace_thread_pool, memtrace_cores.size(), sys_time, log, stats, 
+                            cat_model, cat_allocation_unit_in_bytes);
 
     /* spawn threads */
     for (unsigned int i = 0; i < memtrace_thread_pool->size() && memtrace_cores.size() > 0; ++i) {
