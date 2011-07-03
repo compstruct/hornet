@@ -136,17 +136,13 @@ void catStatic::request(shared_ptr<catRequest> req) {
 
 
     set_req_status(req, CAT_REQ_WAIT);
+    m_req_entry_queue.push_back(new_req_entry);
 
 }
 
 void catStatic::tick_positive_edge() {}
 
 void catStatic::tick_negative_edge() {
-    assert(available());
-    if (m_num_ports > 0) {
-        --m_num_free_ports;
-    }
-
     vector<request_entry_t>::iterator it;
     for (it = m_req_entry_queue.begin(); it != m_req_entry_queue.end(); ++it) {
         if (it->available_time <= system_time) {
