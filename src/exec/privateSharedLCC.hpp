@@ -84,6 +84,8 @@ public:
 
     typedef struct {
         uint64_t expiration_time;
+        uint64_t current_delta; /* only for ZERO_DELAY */
+        uint64_t current_threshold; /* only for ZERO_DELAY */
         shared_ptr<uint64_t> synched_expiration_time; /* only used in idealized timestamp logic */
         shared_ptr<uint64_t> first_read_time_in_phase;  /* this is supposed to be updated on the cache, but for now assumes thie information is kept somehow */
         shared_ptr<uint64_t> last_read_time;

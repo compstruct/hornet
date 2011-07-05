@@ -122,6 +122,11 @@ void cache::request(shared_ptr<cacheRequest> req) {
     maddr_t start_maddr = get_start_maddr_in_line(req->m_maddr);
     m_req_table[start_maddr].push_back(new_entry);
 
+#if 0
+    if (get_start_maddr_in_line(req->m_maddr).address == 0xdfef00) {
+        cerr << " REQ " << req->m_maddr << " was requested @ " << system_time << endl;
+    } 
+#endif
     return;
 
 }
@@ -164,6 +169,15 @@ void cache::tick_positive_edge() {
                 if (!line.empty && start_maddr == line.start_maddr) {
                     matched = true;
 
+#if 0
+                    if (start_maddr.address == 0xdfef00) {
+                        cerr << " Testing " << start_maddr << " request for " << req->m_request_type << endl;
+                        if (system_time > 26800) {
+                            cerr << " hmm" << endl;
+                        }
+                    }
+#endif
+
                     /* is it a real hit? */
                     bool hit = 
                         /* update is always a hit if matched. */
@@ -184,6 +198,11 @@ void cache::tick_positive_edge() {
                         switch (req->m_request_type) {
                         case CACHE_REQ_UPDATE:
                             //printf("\tRequest was an UPDATE\n");
+#if 0
+                            if (m_id == 62 && idx == 888) {
+                                cerr << "  a line for " << start_maddr << " got into the cache 82 index 888 way " << it_way << " @ " << system_time << endl;
+                            }
+#endif
                             line.valid = true;
                             line.dirty = false;
                         case CACHE_REQ_WRITE:
@@ -335,8 +354,39 @@ void cache::tick_positive_edge() {
                 cacheLine &line = m_cache[idx][victim_way];
                 req->m_victim_line_copy = copy_cache_line(line);
 
+#if 0
+                if (system_time > 40000 && m_helper_can_evict_line && idx == 888 && !((*m_helper_can_evict_line)(line, system_time))) {
+                    cerr << "            could NOT evict " << line.start_maddr << " for "
+                         << start_maddr << " at " << m_id << " for index " << idx << " way " << victim_way << " @ " << system_time << endl;
+                    for (uint32_t _way = 0; _way < 4; ++_way) {
+                        cerr << "                way 0 ";
+                        if (m_cache[idx][_way].empty) {
+                            cerr << " EMPTY " << endl;
+                        } else  {
+                            cerr << " of " << m_cache[idx][_way].start_maddr;
+                            if (!m_cache[idx][_way].valid) {
+                                cerr << " invalid " << endl;
+                            } else {
+                                if (written_lines.count(m_cache[idx][_way].start_maddr)) {
+                                    cerr << " written " << endl;
+                                } else {
+                                    cerr << " lru " << m_cache[idx][_way].last_access_time << endl;
+                                }
+                            }
+                        }
+                    }
+                }
+#endif
+
                 if (!m_helper_can_evict_line ||
                     (m_helper_can_evict_line && (*m_helper_can_evict_line)(line, system_time))) {
+
+#if 0
+                    if (line.start_maddr.address == 0xdfef00) {
+                        cerr << "    EVICTED by " << start_maddr << " @ " << system_time << endl;
+                    } 
+#endif
+
                     /* if we can evict right now */
                     req->m_line_copy = copy_cache_line(line);
                     req->m_line_copy->start_maddr = start_maddr;

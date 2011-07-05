@@ -8,7 +8,10 @@
 
 #define TIMESTAMP_WORDS 2
 
-#define MAX_IDEAL 1000
+#define PRIVATE_BYPASS
+#undef PRIVATE_BYPASS
+
+#define MAX_IDEAL 10000
 #undef MAX_IDEAL
 
 #define PRINT_PROGRESS
@@ -16,6 +19,9 @@
 
 #define PRINT_IDEAL 
 #undef PRINT_IDEAL
+
+#define DEADLOCK_CHECK
+#undef DEADLOCK_CHECK
 
 #define DEBUG
 #undef DEBUG
@@ -26,6 +32,41 @@
 #else
 #define mh_assert(X) 
 #define mh_log(X) LOG(log,X)
+#endif
+
+#define WATERTINY
+
+#define MR 10000
+#define LR 40
+
+#ifdef FFTTINY
+#define W1 60
+#define W2 280
+#endif
+
+#ifdef LUTINY
+#define W1 20
+#define W2 110
+#endif
+
+#ifdef OCEANTINY
+#define W1 130
+#define W2 420
+#endif
+
+#ifdef RADIXTINY
+#define W1 10
+#define W2 20
+#endif
+
+#ifdef WATERTINY
+#define W1 680
+#define W2 4800
+#endif
+
+#ifndef W1
+#define W1 230
+#define W2 2000
 #endif
 
 static shared_ptr<void> copy_coherence_info(shared_ptr<void> source) { 
@@ -52,6 +93,11 @@ static bool l2_is_hit(shared_ptr<cacheRequest> req, cacheLine &line, const uint6
     shared_ptr<privateSharedLCC::coherenceInfo> info =
         static_pointer_cast<privateSharedLCC::coherenceInfo>(line.coherence_info);
     if (req->request_type() == CACHE_REQ_WRITE && !info->synched_expiration_time) {
+#ifdef PRIVATE_BYPASS
+        if (info->directory->size() == 1 && info->directory->count(req->requesting_core()) > 0) {
+            return true;
+        }
+#endif
         return system_time >= info->expiration_time;
     }
     return true;
@@ -291,8 +337,6 @@ void privateSharedLCC::l1_work_table_update() {
         maddr_t start_maddr = it_addr->first;
         shared_ptr<toL1Entry> entry = it_addr->second;
 
-//        if (system_time > 137515) 
-//        cerr << "doing something for l1 " << m_id << " @ " << system_time << " for " << start_maddr << " state " << entry->status << endl;
         shared_ptr<memoryRequest> core_req = entry->core_req;
         shared_ptr<cacheRequest> l1_req = entry->l1_req;
         shared_ptr<catRequest> cat_req = entry->cat_req;
@@ -308,6 +352,61 @@ void privateSharedLCC::l1_work_table_update() {
                 ++it_addr;
                 continue;
             }
+
+#ifdef PRIVATE_BYPASS
+            if (!core_req->is_read()) {
+
+                if (cat_req->status() == CAT_REQ_DONE) {
+                    uint32_t dir_home = cat_req->home();
+                    if (stats_enabled()) {
+                        stats()->did_read_cat(dir_home == m_id);
+                    }
+                    lcc_req = shared_ptr<coherenceMsg>(new coherenceMsg);
+                    lcc_req->sender = m_id;
+                    lcc_req->receiver = dir_home;
+                    lcc_req->did_win_last_arbitration = false;
+                    lcc_req->waited = 0;
+                    lcc_req->type = WRITE_REQ;
+                    lcc_req->word_count = core_req->word_count();
+                    lcc_req->maddr = core_req->maddr();
+                    lcc_req->data = core_req->data();
+
+                    /* cost breakdown study */
+                    lcc_req->milestone_time = system_time;
+
+                    entry->lcc_req = lcc_req;
+                    if (dir_home == m_id) {
+                        m_to_l2_req_schedule_q.push_back(lcc_req);
+                    } else {
+                        msg_to_send = shared_ptr<message_t>(new message_t);
+                        msg_to_send->src = m_id;
+                        msg_to_send->dst = dir_home;
+                        if (m_cfg.use_separate_vc_for_writes && lcc_req->type == WRITE_REQ) {
+                            msg_to_send->type = MSG_LCC_REQ_2;
+                        } else {
+                            msg_to_send->type = MSG_LCC_REQ_1;
+                        }
+                        uint32_t data_size = core_req->word_count() * 4;
+                        msg_to_send->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + data_size);
+                        msg_to_send->content = lcc_req;
+                        entry->net_msg_to_send = msg_to_send;
+                        m_to_network_schedule_q[msg_to_send->type].push_back(msg_to_send);
+                    }
+                    entry->status = _L1_WORK_SEND_LCC_REQ;
+                } else {
+                    entry->status = _L1_WORK_WAIT_CAT;
+                }
+
+                /* cost breakdown study */
+                entry->milestone_time = system_time;
+                if (stats_enabled()) {
+                    stats()->add_l1_action_cost(system_time - entry->milestone_time);
+                }
+                ++it_addr;
+                continue;
+            }
+#endif
+
             if (l1_req->status() == CACHE_REQ_HIT) {
                 shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
                 uint32_t word_offset = (core_req->maddr().address / 4 ) % m_cfg.words_per_cache_line;
@@ -419,13 +518,6 @@ void privateSharedLCC::l1_work_table_update() {
                 entry->lcc_req = lcc_req;
                 if (dir_home == m_id) {
                     m_to_l2_req_schedule_q.push_back(lcc_req);
-#if 0
-                    if (lcc_req->type == READ_REQ) {
-                        m_to_l2_read_req_schedule_q.push_back(lcc_req);
-                    } else {
-                        m_to_l2_write_req_schedule_q.push_back(lcc_req);
-                    }
-#endif
                 } else {
                     msg_to_send = shared_ptr<message_t>(new message_t);
                     msg_to_send->src = m_id;
@@ -604,7 +696,13 @@ void privateSharedLCC::l2_work_table_update() {
                 if (lcc_write_req) {
                     /* WRITE */
                     if (m_cfg.logic == TIMESTAMP_IDEAL) {
+#ifdef PRIVATE_BYPASS
+                        if (*line_info->synched_expiration_time > system_time &&
+                            (line_info->directory->size() > 1 || line_info->directory->count(lcc_write_req->sender) == 0)
+                           ) {
+#else
                         if (*line_info->synched_expiration_time > system_time) {
+#endif
                             *line_info->synched_expiration_time = system_time;
 
                             mh_log(4) << "[LCC " << m_id << " @ " << system_time << " ] has invalidated all shared lines for "
@@ -622,12 +720,25 @@ void privateSharedLCC::l2_work_table_update() {
                             }
 #endif
                         }
-
                     }
+
+#ifdef PRIVATE_BYPASS
+                    if (line_info->expiration_time > system_time) {
+                        *line_info->first_read_time_in_phase = system_time;
+                        *line_info->last_write_time = system_time;
+                        *line_info->num_reads_in_phase = 1;
+                    } else {
+                        *line_info->first_read_time_in_phase = UINT64_MAX;
+                        *line_info->last_write_time = system_time;
+                        *line_info->num_reads_in_phase = 0;
+                        line_info->directory->clear();
+                    }
+#else
                     *line_info->first_read_time_in_phase = UINT64_MAX;
                     *line_info->last_write_time = system_time;
                     *line_info->num_reads_in_phase = 0;
                     line_info->directory->clear();
+#endif
 
                 } else {
                     /* READ */
@@ -658,10 +769,48 @@ void privateSharedLCC::l2_work_table_update() {
                                 *line_info->first_read_time_in_phase = UINT64_MAX;
                             }
                             line_info->expiration_time = system_time + m_cfg.default_timestamp_delta;
+                            /* C# 1 */
                             need_to_update_l2 = true;
                         }
                     } else if (m_cfg.logic == TIMESTAMP_ZERO_DELAY) {
                         /* TODO : SMART */
+                        /* read hit */
+                        if (!entry->write_requests_waiting) {
+                            uint32_t delta = 0;
+                            uint64_t v = system_time - *line_info->last_write_time;
+
+                            int l2_x = (int)m_id % 8;
+                            int l2_y = (int)m_id / 8;
+                            int l1_x = (int)lcc_read_req->sender % 8;
+                            int l1_y = (int)lcc_read_req->sender / 8;
+                            int dist = abs(l2_x - l1_x) + abs(l1_y - l2_y);
+                            uint32_t trip = 8 + dist + get_flit_count(1 + (m_cfg.words_per_cache_line + TIMESTAMP_WORDS) * 4);
+
+                            if (v > W2) {
+                                delta = MR + trip;
+                            } else if (v < W1) {
+                                delta = LR + trip;
+                            } else {
+#if 0
+                                double W_to_R = 2.0;
+                                int l2_x = (int)m_id % 8;
+                                int l2_y = (int)m_id / 8;
+                                int l1_x = (int)lcc_read_req->sender % 8;
+                                int l1_y = (int)lcc_read_req->sender / 8;
+                                int dist = abs(l2_x - l1_x) + abs(l1_y - l2_y);
+                                uint32_t cost = 2*(dist + get_flit_count(1 + (m_cfg.words_per_cache_line + TIMESTAMP_WORDS) * 4));
+                                delta = cost / W_to_R;
+                                _d = delta;
+#endif
+                                delta = LR + (MR-LR)*(v-W1)/(W2-W1) + trip;
+                            }
+
+                            if (system_time + delta > line_info->expiration_time) {
+                            //    cout << "dist " << v << " delta " << delta << endl;
+                                line_info->expiration_time = system_time + delta;
+                                need_to_update_l2 = true;
+                            }
+                        }
 
                     }
 
@@ -810,6 +959,7 @@ void privateSharedLCC::l2_work_table_update() {
                     if (stats_enabled()) {
                         stats()->add_l2_write_block_cost(line_info->expiration_time - system_time);
                     }
+
                     entry->milestone_time = line_info->expiration_time;
 
                     mh_log(4) << "[LCC " << m_id << " @ " << system_time << " ] blocks a write request for " << start_maddr
@@ -942,6 +1092,7 @@ void privateSharedLCC::l2_work_table_update() {
             }
 
         } else if (entry->status == _L2_WORK_UPDATE_L2) {
+
             if (l2_req->status() == CACHE_REQ_NEW || l2_req->status() == CACHE_REQ_WAIT) {
                 ++it_addr;
                 continue;
@@ -1261,6 +1412,7 @@ void privateSharedLCC::l2_work_table_update() {
                             }
                         } else if (m_cfg.logic == TIMESTAMP_ZERO_DELAY) {
                             /* TODO : SMART */
+                            /* read after dram feed, information restored from DRAM */
                         }
                         *line_info->last_read_time = system_time;
                         *line_info->num_reads_in_phase += 1;
@@ -1325,9 +1477,14 @@ void privateSharedLCC::l2_work_table_update() {
                         }
 
                     } else if (m_cfg.logic == TIMESTAMP_ZERO_DELAY) {
+                        /* new line */
+                        *line_info->last_write_time = system_time;
 
-                        /* TODO : SMART */
-
+                        if (lcc_write_req) {
+                            line_info->expiration_time = system_time;
+                        } else {
+                            line_info->expiration_time = system_time + LR;
+                        }
                     }
                         
                     if (lcc_write_req) {
@@ -1375,6 +1532,8 @@ void privateSharedLCC::l2_work_table_update() {
                 lcc_rep->waited = 0;
                 entry->lcc_rep = lcc_rep;
 
+                line_info->directory->insert(lcc_read_req->sender);
+
                 /* cost breakdown study */
                 if (stats_enabled()) {
                     stats()->add_l2_network_plus_serialization_cost(system_time - lcc_read_req->milestone_time);
@@ -1411,8 +1570,23 @@ void privateSharedLCC::l2_work_table_update() {
                     stats()->add_l2_network_plus_serialization_cost(system_time - entry->milestone_time);
                 }
 
-                l2_req->reset();
-                l2_req->set_milestone_time(system_time);
+                /* update the line before writing to the L2 */
+                uint32_t word_offset = (lcc_write_req->maddr.address / 4 ) % m_cfg.words_per_cache_line;
+                for (uint32_t i = 0; i < lcc_write_req->word_count; ++i) {
+                    line->data[i + word_offset] = lcc_write_req->data[i];
+                }
+                shared_ptr<cacheRequest> new_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+                                                                   m_cfg.words_per_cache_line, 
+                                                                   line->data, line_info));
+                new_req->set_clean_write(false);
+                new_req->set_reserve(true);
+                new_req->set_requesting_core(lcc_write_req->sender);
+                new_req->set_milestone_time(system_time);
+
+                entry->l2_req = new_req;
+
+                *line_info->last_write_time = system_time;
+                line_info->directory->clear();
 
                 entry->status = _L2_WORK_UPDATE_L2;
             }
@@ -1440,6 +1614,8 @@ void privateSharedLCC::l2_work_table_update() {
                 lcc_rep->synched_timestamp = line_info->synched_expiration_time;
                 lcc_rep->waited = 0;
                 entry->lcc_rep = lcc_rep;
+
+                line_info->directory->insert(lcc_read_req->sender);
 
                 /* cost breakdown study */
                 if (stats_enabled()) {
@@ -1486,6 +1662,7 @@ void privateSharedLCC::l2_work_table_update() {
                 entry->status = _L2_WORK_UPDATE_L2;
 
                 *line_info->last_write_time = system_time;
+                line_info->directory->clear();
 
                 /* cost breakdown study */
                 if (stats_enabled()) {
@@ -1498,6 +1675,7 @@ void privateSharedLCC::l2_work_table_update() {
         } else if (entry->status == _L2_WORK_SEND_LCC_REP_THEN_WAIT_FOR_WRITE) {
             if (lcc_rep->did_win_last_arbitration) {
                 lcc_rep->did_win_last_arbitration = false;
+
                 if (msg_to_send) {
                     entry->net_msg_to_send = shared_ptr<message_t>();
                 }
@@ -1661,6 +1839,7 @@ void privateSharedLCC::accept_incoming_messages() {
     while (m_core_receive_queues[MSG_LCC_REQ_1]->size()) {
         shared_ptr<message_t> msg = m_core_receive_queues[MSG_LCC_REQ_1]->front();
         shared_ptr<coherenceMsg> lcc_msg = static_pointer_cast<coherenceMsg>(msg->content);
+
         if (lcc_msg->did_win_last_arbitration) {
             /* reset the flag for the next arbitration */
             lcc_msg->did_win_last_arbitration = false;
@@ -1669,7 +1848,8 @@ void privateSharedLCC::accept_incoming_messages() {
             continue;
         } else {
             /* erase later */
-#if 0
+
+#ifdef DEADLOCK_CHECK
             if (++lcc_msg->waited > 30000) {
                 maddr_t msg_start_maddr = get_start_maddr_in_line(lcc_msg->maddr);
                 cerr << "[NET " << m_id << " @ " << system_time << " ] cannot receive a cache req for start maddr " 
@@ -1689,13 +1869,6 @@ void privateSharedLCC::accept_incoming_messages() {
             }
 #endif
             m_to_l2_req_schedule_q.push_back(lcc_msg);
-#if 0
-            if (lcc_msg->type == READ_REQ) {
-                m_to_l2_read_req_schedule_q.push_back(lcc_msg);
-            } else {
-                m_to_l2_write_req_schedule_q.push_back(lcc_msg);
-            }
-#endif
             break;
         }
     }
@@ -1711,7 +1884,7 @@ void privateSharedLCC::accept_incoming_messages() {
             continue;
         } else {
             /* erase later */
-#if 0
+#ifdef DEADLOCK_CHECK
             if (++lcc_msg->waited > 30000) {
                 maddr_t msg_start_maddr = get_start_maddr_in_line(lcc_msg->maddr);
                 cerr << "[NET " << m_id << " @ " << system_time << " ] cannot receive a cache write req for start maddr "
@@ -1732,9 +1905,6 @@ void privateSharedLCC::accept_incoming_messages() {
             }
 #endif
             m_to_l2_req_schedule_q.push_back(lcc_msg);
-#if 0
-            m_to_l2_write_req_schedule_q.push_back(lcc_msg);
-#endif
             break;
         }
     }
@@ -1766,6 +1936,7 @@ void privateSharedLCC::accept_incoming_messages() {
 }
 
 void privateSharedLCC::schedule_requests() {
+
 
     /* random arbitration */
     boost::function<int(int)> rr_fn = bind(&random_gen::random_range, ran, _1);
@@ -1802,7 +1973,17 @@ void privateSharedLCC::schedule_requests() {
         } else {
             mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] received a write request from core for "
                       << req->maddr() << " (start maddr : " << start_maddr << " ) " << endl;
+#ifdef PRIVATE_BYPASS
+            shared_ptr<cacheRequest> l1_req(new cacheRequest(req->maddr(), 
+                                                             CACHE_REQ_WRITE,
+                                                             req->word_count(),
+                                                             req->data()));
+            l1_req->set_reserve(false);
+            new_entry->l1_req = l1_req;
+            new_entry->status = _L1_WORK_WAIT_L1;
+#else
             new_entry->status = _L1_WORK_WAIT_CAT;
+#endif
         }
 
         shared_ptr<catRequest> cat_req(new catRequest(req->maddr(), m_id));
@@ -1856,6 +2037,8 @@ void privateSharedLCC::schedule_requests() {
                 l2_req->set_clean_write(false);
                 new_entry->l2_req = l2_req;
 
+                l2_req->set_requesting_core(msg->sender);
+
                 new_entry->lcc_rep = shared_ptr<coherenceMsg>();
                 new_entry->dram_req = shared_ptr<dramMsg>();
                 new_entry->dram_rep = shared_ptr<dramMsg>();
@@ -1907,6 +2090,8 @@ void privateSharedLCC::schedule_requests() {
                 shared_ptr<cacheRequest> l2_req(new cacheRequest(start_maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
                 l2_req->set_reserve(true);
                 new_entry->l2_req = l2_req;
+
+                l2_req->set_requesting_core(msg->sender);
 
                 new_entry->lcc_rep = shared_ptr<coherenceMsg>();
                 new_entry->dram_req = shared_ptr<dramMsg>();
@@ -2054,7 +2239,7 @@ void privateSharedLCC::schedule_requests() {
         }
         for (toL1Table::iterator it = m_l1_work_table.begin(); it != m_l1_work_table.end(); ++it) {
             shared_ptr<toL1Entry> entry = it->second;
-            if (entry->l1_req == m_l1_read_req_schedule_q.front()) {
+            if (entry->l1_req == m_l1_write_req_schedule_q.front()) {
                 if (stats_enabled()) {
                     stats()->add_l1_serialization_cost(system_time - entry->milestone_time);
                 }
@@ -2142,5 +2327,6 @@ void privateSharedLCC::schedule_requests() {
         }
     }
     m_to_network_schedule_q.clear();
+
 }
 

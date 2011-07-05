@@ -96,7 +96,7 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
                 uint64_t addr, pc;
                 char rw;
                 try {
-                    l >> hex >> th_id >> addr >> rw >> pc >> home >> interval;
+                    l >> hex >> th_id >> pc >> rw >> addr >> home >> interval;
                 } catch (const err &e) {
                     assert(false);
                 }

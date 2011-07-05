@@ -79,6 +79,10 @@ public:
 
     friend class cache;
 
+    /* aux info for sophisticated schemes */
+    inline void set_requesting_core(uint32_t core) { m_core = core; }
+    inline uint32_t requesting_core() { return m_core; }
+
 private:
     inline bool use_read_ports() { return m_request_type == CACHE_REQ_READ ||
                                           m_request_type == CACHE_REQ_INVALIDATE; }
@@ -98,6 +102,9 @@ private:
 
     /* cost breakdown study */
     uint64_t m_milestone_time;;
+
+    /* aux info */
+    uint32_t m_core;
 
 };
 
