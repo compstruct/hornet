@@ -395,12 +395,13 @@ void privateSharedLCC::l1_work_table_update() {
                     entry->status = _L1_WORK_SEND_LCC_REQ;
                 } else {
                     entry->status = _L1_WORK_WAIT_CAT;
+                    cat_req->set_milestone_time(system_time);
                 }
 
                 /* cost breakdown study */
                 entry->milestone_time = system_time;
-                if (stats_enabled()) {
-                    stats()->add_l1_action_cost(system_time - entry->milestone_time);
+                if (stats_enabled() && l1_req->milestone_time() != UINT64_MAX) {
+                    stats()->add_l1_action_cost(system_time - l1_req->milestone_time());
                 }
                 ++it_addr;
                 continue;
@@ -423,7 +424,9 @@ void privateSharedLCC::l1_work_table_update() {
                     stats()->did_finish_read(system_time - entry->requested_time);
 
                     /* cost breakdown study */
-                    stats()->add_l1_action_cost(system_time - entry->milestone_time);
+                    if (l1_req->milestone_time() != UINT64_MAX) {
+                        stats()->add_l1_action_cost(system_time - l1_req->milestone_time());
+                    }
 
                 }
                 m_l1_work_table.erase(it_addr++);
@@ -433,8 +436,8 @@ void privateSharedLCC::l1_work_table_update() {
                 mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a MISS for address " << core_req->maddr() << endl;
 
                 /* cost breakdown study */
-                if (stats_enabled()) {
-                    stats()->add_l1_action_cost(system_time - entry->milestone_time);
+                if (stats_enabled() && l1_req->milestone_time() != UINT64_MAX) {
+                    stats()->add_l1_action_cost(system_time - l1_req->milestone_time());
                 }
                 entry->milestone_time = system_time;
 
@@ -489,8 +492,8 @@ void privateSharedLCC::l1_work_table_update() {
                 }
 
                 /* csst breakdown study */
-                if (stats_enabled()) {
-                    stats()->add_cat_action_cost(system_time - entry->milestone_time);
+                if (stats_enabled() && cat_req->milestone_time() != UINT64_MAX) {
+                    stats()->add_cat_action_cost(system_time - cat_req->milestone_time());
                 }
                 entry->milestone_time = system_time;
 
@@ -597,6 +600,7 @@ void privateSharedLCC::l1_work_table_update() {
 
                         /* cost breakdown study */
                         entry->milestone_time = system_time;
+                        l1_req->set_milestone_time(system_time);
 
                     } else {
                         shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
@@ -627,8 +631,8 @@ void privateSharedLCC::l1_work_table_update() {
             }
 
             /* cost breakdown study */
-            if (stats_enabled()) {
-                stats()->add_l1_action_cost(system_time - entry->milestone_time);
+            if (stats_enabled() && l1_req->milestone_time() != UINT64_MAX) {
+                stats()->add_l1_action_cost(system_time - l1_req->milestone_time());
             }
             entry->milestone_time = system_time;
 
@@ -1029,6 +1033,7 @@ void privateSharedLCC::l2_work_table_update() {
 
                         /* cost breakdown study */
                         dram_req->milestone_time = system_time;
+                        entry->milestone_time = system_time;
 
                         entry->status = _L2_WORK_SEND_DRAM_WRITEBACK_THEN_FEED;
 
@@ -1043,6 +1048,7 @@ void privateSharedLCC::l2_work_table_update() {
                                                                                 m_cfg.words_per_cache_line)); 
                         dram_req->did_win_last_arbitration = false;
                         entry->dram_req = dram_req;
+                        dram_req->milestone_time = system_time;
                         if (m_dram_controller_location == m_id) {
                             m_to_dram_req_schedule_q.push_back(dram_req);
                         } else {
@@ -1423,6 +1429,7 @@ void privateSharedLCC::l2_work_table_update() {
                                                                        m_cfg.words_per_cache_line,
                                                                        dram_rep->req->read(),
                                                                        dram_rep->req->read_aux()));
+                    l2_req->set_milestone_time(system_time);
                     l2_req->set_reserve(true);
                     l2_req->set_clean_write(lcc_read_req);
                     entry->l2_req = l2_req;
@@ -1761,12 +1768,12 @@ void privateSharedLCC::dram_work_table_update() {
         shared_ptr<toDRAMEntry> entry = it_addr->second;
         if (entry->dram_req->req->status() == DRAM_REQ_DONE) {
 
-            /* cost breakdown study */
-            if (stats_enabled()) {
-                stats()->add_dram_offchip_network_plus_dram_action_cost(system_time - entry->milestone_time);
-            }
-
             if (!entry->dram_rep) {
+                /* cost breakdown study */
+                if (stats_enabled()) {
+                    stats()->add_dram_offchip_network_plus_dram_action_cost(system_time - entry->milestone_time);
+                }
+
                 entry->dram_rep = shared_ptr<dramMsg>(new dramMsg);
                 entry->dram_rep->sender = m_id;
                 entry->dram_rep->req = entry->dram_req->req;
@@ -1776,6 +1783,7 @@ void privateSharedLCC::dram_work_table_update() {
                 entry->dram_rep->milestone_time = system_time;
 
             }
+
             if (entry->dram_req->sender == m_id) {
                 /* guaranteed to have an active entry in l2 work table */
                 maddr_t start_maddr = entry->dram_req->req->maddr();
@@ -1968,6 +1976,7 @@ void privateSharedLCC::schedule_requests() {
                                                              req->word_count(),
                                                              shared_array<uint32_t>()));
             l1_req->set_reserve(false);
+            l1_req->set_milestone_time(system_time);
             new_entry->l1_req = l1_req;
             new_entry->status = _L1_WORK_WAIT_L1;
         } else {
@@ -1979,6 +1988,7 @@ void privateSharedLCC::schedule_requests() {
                                                              req->word_count(),
                                                              req->data()));
             l1_req->set_reserve(false);
+            l1_req->set_milestone_time(system_time);
             new_entry->l1_req = l1_req;
             new_entry->status = _L1_WORK_WAIT_L1;
 #else
@@ -1998,6 +2008,11 @@ void privateSharedLCC::schedule_requests() {
             stats()->add_memory_subsystem_serialization_cost(system_time - req->milestone_time());
         }
         new_entry->milestone_time = system_time;
+        if (req->is_read()) {
+            cat_req->set_milestone_time(UINT64_MAX); /* count CAT cost only if it's not hiden by L1 latency */
+        } else {
+            cat_req->set_milestone_time(system_time);
+        }
 
         set_req_status(req, REQ_WAIT);
         m_l1_work_table[start_maddr] = new_entry;
@@ -2184,22 +2199,16 @@ void privateSharedLCC::schedule_requests() {
     /* cat requests */
     random_shuffle(m_cat_req_schedule_q.begin(), m_cat_req_schedule_q.end(), rr_fn);
     while (m_cat->available() && m_cat_req_schedule_q.size()) {
-        m_cat->request(m_cat_req_schedule_q.front());
+        shared_ptr<catRequest> cat_req = m_cat_req_schedule_q.front();
+        m_cat->request(cat_req);
 
         /* cost breakdown study */
-        for (toL1Table::iterator it = m_l1_work_table.begin(); it != m_l1_work_table.end(); ++it) {
-            shared_ptr<toL1Entry> entry = it->second;
-            if (entry->cat_req == m_cat_req_schedule_q.front()) {
-                if (entry->status == _L1_WORK_WAIT_CAT) {
-                    if (stats_enabled()) {
-                        stats()->add_cat_serialization_cost(system_time - entry->milestone_time);
-                    }
-                    entry->milestone_time = system_time;
-                }
-                break;
+        if (cat_req->milestone_time() != UINT64_MAX) {
+            if (stats_enabled()) {
+                stats()->add_cat_serialization_cost(system_time - cat_req->milestone_time());
             }
+            cat_req->set_milestone_time(system_time);
         }
-
         m_cat_req_schedule_q.erase(m_cat_req_schedule_q.begin());
     }
     m_cat_req_schedule_q.clear();
@@ -2207,23 +2216,19 @@ void privateSharedLCC::schedule_requests() {
     /* l1 read requests */
     random_shuffle(m_l1_read_req_schedule_q.begin(), m_l1_read_req_schedule_q.end(), rr_fn);
     while (m_l1->read_port_available() && m_l1_read_req_schedule_q.size()) {
-        m_l1->request(m_l1_read_req_schedule_q.front());
+        shared_ptr<cacheRequest> l1_req = m_l1_read_req_schedule_q.front();
+        m_l1->request(l1_req);
 
         /* cost breakdown study */
         if (stats_enabled()) {
             stats()->add_l1_action();
         }
-        for (toL1Table::iterator it = m_l1_work_table.begin(); it != m_l1_work_table.end(); ++it) {
-            shared_ptr<toL1Entry> entry = it->second;
-            if (entry->l1_req == m_l1_read_req_schedule_q.front()) {
-                if (stats_enabled()) {
-                    stats()->add_l1_serialization_cost(system_time -  entry->milestone_time);
-                }
-                entry->milestone_time = system_time;
-                break;
+        if (l1_req->milestone_time() != UINT64_MAX) {
+            if (stats_enabled()) {
+                stats()->add_l1_serialization_cost(system_time -  l1_req->milestone_time());
             }
+            l1_req->set_milestone_time(system_time);
         }
-
         m_l1_read_req_schedule_q.erase(m_l1_read_req_schedule_q.begin());
     }
     m_l1_read_req_schedule_q.clear();
@@ -2231,23 +2236,19 @@ void privateSharedLCC::schedule_requests() {
     /* l1 write requests */
     random_shuffle(m_l1_write_req_schedule_q.begin(), m_l1_write_req_schedule_q.end(), rr_fn);
     while (m_l1->write_port_available() && m_l1_write_req_schedule_q.size()) {
-        m_l1->request(m_l1_write_req_schedule_q.front());
+        shared_ptr<cacheRequest> l1_req = m_l1_write_req_schedule_q.front();
+        m_l1->request(l1_req);
 
         /* cost breakdown study */
         if (stats_enabled()) {
             stats()->add_l1_action();
         }
-        for (toL1Table::iterator it = m_l1_work_table.begin(); it != m_l1_work_table.end(); ++it) {
-            shared_ptr<toL1Entry> entry = it->second;
-            if (entry->l1_req == m_l1_write_req_schedule_q.front()) {
-                if (stats_enabled()) {
-                    stats()->add_l1_serialization_cost(system_time - entry->milestone_time);
-                }
-                entry->milestone_time = system_time;
-                break;
+        if (l1_req->milestone_time() != UINT64_MAX) {
+            if (stats_enabled()) {
+                stats()->add_l1_serialization_cost(system_time - l1_req->milestone_time());
             }
+            l1_req->set_milestone_time(system_time);
         }
-
         m_l1_write_req_schedule_q.erase(m_l1_write_req_schedule_q.begin());
     }
     m_l1_write_req_schedule_q.clear();

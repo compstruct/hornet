@@ -17,7 +17,12 @@ public:
     void did_write_l2(bool hit);
     void did_read_cat(bool hit);
 
-    /* cost breakdown study */
+    /* cost breakdown study - outstanding costs only */
+    /* cost means something that causes an increase in the latency for a memory request */
+    /* if a latency of a certain action is hidden and not seen by any memory request, it's not a cost */
+    /* all costs except for serialization costs are measured only on single memory request that directly decides actions */
+    /* if an action (i.e. an invalidation) may affect other memory requests, those requests will see this effect only on */
+    /* serialization costs */
     inline void add_memory_subsystem_serialization_cost(uint64_t cost) { m_memory_subsystem_serialization_cost += cost; }
     inline void add_cat_serialization_cost(uint64_t cost) { m_cat_serialization_cost += cost; }
     inline void add_cat_action_cost(uint64_t cost) { m_cat_action_cost += cost; }

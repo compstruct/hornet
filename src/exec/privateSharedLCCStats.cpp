@@ -59,7 +59,6 @@ void privateSharedLCCStats::print_stats(ostream &out) {
     double total_l2_hits = 0.0;
     double total_l1_reads_hits = 0.0;
     double total_cat_hits = 0.0;
-    uint64_t total_write_block = 0;
 
     running_stats avg_ideal_deltas;
     running_stats avg_ideal_stddevs;
@@ -154,7 +153,7 @@ void privateSharedLCCStats::print_stats(ostream &out) {
             100.0*total_l2_hits/total_l2,
             100.0*total_l2_read_hits/total_l2_reads,
             100.0*total_l2_write_hits/total_l2_writes,
-            total_write_block, 
+            total_l2_write_block, 
             100.0*total_cat_hits/total_cat_lookups,
             total_l1_action, total_l2_action );
 

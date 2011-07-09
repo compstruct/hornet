@@ -582,6 +582,7 @@ void privateSharedMSI::l1_work_table_update() {
                 cache_req->data = shared_array<uint32_t>();
                 cache_req->did_win_last_arbitration = false;
                 cache_req->waited = 0; /* for debugging only - erase later */
+                cache_req->milestone_time = system_time;
                 entry->cache_req = cache_req;
                 if (dir_home == m_id) {
                     m_to_directory_req_schedule_q.push_back(cache_req);
@@ -1004,7 +1005,9 @@ void privateSharedMSI::l2_work_table_update() {
                             entry->waiting_for_evictions = true;
                             entry->milestone_time = system_time;
                         }
-                        l2_req->set_milestone_time(system_time);
+
+                        /* from now on, count the L2 serialization & action cost as an evict-block cost */
+                        l2_req->set_milestone_time(UINT64_MAX);
                         
                         /* will keep trying until a line is successfully emptied. */
                         l2_req->reset();
@@ -2015,7 +2018,7 @@ void privateSharedMSI::schedule_requests() {
 
             /* cost breakdown study */
             l2_req->set_milestone_time(system_time);
-            if (stats_enabled()) {
+            if (msg->type != EMPTY_REQ && stats_enabled()) {
                 stats()->add_l2_network_plus_serialization_cost(system_time - msg->milestone_time);
             }
 
