@@ -153,7 +153,7 @@ void privateSharedLCCStats::print_stats(ostream &out) {
             100.0*total_l2_hits/total_l2,
             100.0*total_l2_read_hits/total_l2_reads,
             100.0*total_l2_write_hits/total_l2_writes,
-            total_l2_write_block, 
+            total_l2_write_block_cost, 
             100.0*total_cat_hits/total_cat_lookups,
             total_l1_action, total_l2_action );
 

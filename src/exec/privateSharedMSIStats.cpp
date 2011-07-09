@@ -218,7 +218,7 @@ void privateSharedMSIStats::print_stats(ostream &out) {
 
     char str[1024];
     sprintf(str, "[Summary: Private-shared-MSI/MESI ] %ld reads %ld writes L1hit%%: %.2f read%%: %.2f write%%: %.2f "
-            "L2hit%%: %.2f invs: %ld total-inv-targets: %ld total-inv-latency: %ld CAThit%%: %.2f L1ops: %ld L2ops: %ld",
+            "L2hit%%: %.2f invs: %ld total-inv-targets: %.0f total-inv-latency: %.0f CAThit%%: %.2f L1ops: %ld L2ops: %ld",
             total_l1_reads, total_l1_writes,
             100.0*total_l1_hits/total_l1,
             100.0*total_l1_read_hits/total_l1_reads,
@@ -250,7 +250,7 @@ void privateSharedMSIStats::print_stats(ostream &out) {
     out << str << endl;
 
     sprintf(str, "[Coherence Messages 1 ] shReq: %ld exReq: %ld invRep: %ld (requested: %ld) flushRep: %ld (requested: %ld)"
-                 "wbRep: %ld (requested)",
+                 "wbRep: %ld (requested %ld)",
                  total_shreq, total_exreq, total_invrep, total_invrep_requested, total_flushrep, total_flushrep_requested,
                  total_wbrep, total_wbrep_requested);
 

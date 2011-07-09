@@ -69,37 +69,6 @@ public:
     inline void add_wbreq() { ++m_wbreq; }
     inline void add_wbreq_replied() { ++m_wbreq_replied; }
 
-    uint64_t m_i_s;
-    uint64_t m_i_m;
-    uint64_t m_s_s;
-    uint64_t m_s_m;
-    uint64_t m_s_m_invs;
-    uint64_t m_m_s;
-    uint64_t m_m_s_invs;
-    uint64_t m_m_m;
-    uint64_t m_s_i;
-    uint64_t m_s_i_invs;
-    uint64_t m_m_i;
-    uint64_t m_m_i_invs;
-    
-    uint64_t m_shreq;
-    uint64_t m_exreq;
-    uint64_t m_invrep;
-    uint64_t m_invrep_requested;
-    uint64_t m_flushrep;
-    uint64_t m_flushrep_requested;
-    uint64_t m_wbrep;
-    uint64_t m_wbrep_requested;
-    uint64_t m_shrep;
-    uint64_t m_exrep;
-    uint64_t m_invreq;
-    uint64_t m_invreq_replied;
-    uint64_t m_flushreq;
-    uint64_t m_flushreq_replied;
-    uint64_t m_wbreq;
-    uint64_t m_wbreq_replied;
-
-
     friend class privateSharedMSIStats;
 
 private:
