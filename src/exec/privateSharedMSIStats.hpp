@@ -33,33 +33,23 @@ public:
     inline void add_l2_network_plus_serialization_cost(uint64_t cost) { m_l2_network_plus_serialization_cost += cost; }
     inline void add_l2_action_cost(uint64_t cost) { m_l2_action_cost += cost; }
     inline void add_l2_invalidation_cost(uint64_t cost) { m_l2_invalidation_cost += cost; }
-    inline void add_l2_eviction_cost(uint64_t cost) { m_l2_eviction_cost += cost; }
     inline void add_dram_network_plus_serialization_cost(uint64_t cost) { m_dram_network_plus_serialization_cost += cost; }
     inline void add_dram_offchip_network_plus_dram_action_cost(uint64_t cost) { m_dram_offchip_network_plus_dram_action_cost += cost; }
     inline void add_l1_action() { ++m_l1_action; }
     inline void add_l2_action() { ++m_l2_action; }
     
     inline void add_i_s() { ++m_i_s; }
-    inline void add_i_m() { ++m_i_m; }
+    inline void add_i_e() { ++m_i_e; }
     inline void add_s_s() { ++m_s_s; }
-    inline void add_s_m() { ++m_s_m; }
-    inline void add_s_m_invs() { ++m_s_m_invs; }
-    inline void add_m_s() { ++m_m_s; }
-    inline void add_m_s_invs() { ++m_m_s_invs; }
-    inline void add_m_m() { ++m_m_m; }
-    inline void add_s_i() { ++m_s_i; }
-    inline void add_s_i_invs() { ++m_s_i_invs; }
-    inline void add_m_i() { ++m_m_i; }
-    inline void add_m_i_invs() { ++m_m_i_invs; }
+    inline void add_s_e() { ++m_s_e; }
+    inline void add_e_s() { ++m_e_s; }
+    inline void add_e_e() { ++m_e_e; }
     
     inline void add_shreq() { ++m_shreq; }
     inline void add_exreq() { ++m_exreq; }
     inline void add_invrep() { ++m_invrep; }
-    inline void add_invrep_requested() { ++m_invrep_requested; }
     inline void add_flushrep() { ++m_flushrep; }
-    inline void add_flushrep_requested() { ++m_flushrep_requested; }
     inline void add_wbrep() { ++m_wbrep; }
-    inline void add_wbrep_requested() { ++m_wbrep_requested; }
     inline void add_shrep() { ++m_shrep; }
     inline void add_exrep() { ++m_exrep; }
     inline void add_invreq() { ++m_invreq; }
@@ -92,33 +82,23 @@ private:
     uint64_t m_l2_network_plus_serialization_cost;
     uint64_t m_l2_action_cost;
     uint64_t m_l2_invalidation_cost;
-    uint64_t m_l2_eviction_cost;
     uint64_t m_dram_network_plus_serialization_cost;
     uint64_t m_dram_offchip_network_plus_dram_action_cost;
     uint64_t m_l1_action;
     uint64_t m_l2_action;
     
     uint64_t m_i_s;
-    uint64_t m_i_m;
+    uint64_t m_i_e;
     uint64_t m_s_s;
-    uint64_t m_s_m;
-    uint64_t m_s_m_invs;
-    uint64_t m_m_s;
-    uint64_t m_m_s_invs;
-    uint64_t m_m_m;
-    uint64_t m_s_i;
-    uint64_t m_s_i_invs;
-    uint64_t m_m_i;
-    uint64_t m_m_i_invs;
+    uint64_t m_s_e;
+    uint64_t m_e_s;
+    uint64_t m_e_e;
     
     uint64_t m_shreq;
     uint64_t m_exreq;
     uint64_t m_invrep;
-    uint64_t m_invrep_requested;
     uint64_t m_flushrep;
-    uint64_t m_flushrep_requested;
     uint64_t m_wbrep;
-    uint64_t m_wbrep_requested;
     uint64_t m_shrep;
     uint64_t m_exrep;
     uint64_t m_invreq;

@@ -381,12 +381,6 @@ void cache::tick_positive_edge() {
                 if (!m_helper_can_evict_line ||
                     (m_helper_can_evict_line && (*m_helper_can_evict_line)(line, system_time))) {
 
-#if 0
-                    if (line.start_maddr.address == 0xdfef00) {
-                        cerr << "    EVICTED by " << start_maddr << " @ " << system_time << endl;
-                    } 
-#endif
-
                     /* if we can evict right now */
                     req->m_line_copy = copy_cache_line(line);
                     req->m_line_copy->start_maddr = start_maddr;

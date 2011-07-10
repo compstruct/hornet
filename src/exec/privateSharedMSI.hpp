@@ -204,7 +204,6 @@ private:
 
         /* cost breakdown study */
         uint64_t milestone_time;
-        bool waiting_for_evictions;
 
     } toL2Entry;
 

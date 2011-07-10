@@ -17,6 +17,9 @@ public:
     void did_write_l2(bool hit);
     void did_read_cat(bool hit);
 
+    void write_blocked_by_timestamp() { ++m_blocks; }
+    void evict_blocked_by_timestamp() { ++m_blocks_eviction; }
+
     /* cost breakdown study - outstanding costs only */
     /* cost means something that causes an increase in the latency for a memory request */
     /* if a latency of a certain action is hidden and not seen by any memory request, it's not a cost */
@@ -31,7 +34,6 @@ public:
     inline void add_l2_network_plus_serialization_cost(uint64_t cost) { m_l2_network_plus_serialization_cost += cost; }
     inline void add_l2_action_cost(uint64_t cost) { m_l2_action_cost += cost; }
     inline void add_l2_write_block_cost(uint64_t cost) { m_l2_write_block_cost += cost; }
-    inline void add_l2_eviction_cost(uint64_t cost) { m_l2_eviction_cost += cost; }
     inline void add_dram_network_plus_serialization_cost(uint64_t cost) { m_dram_network_plus_serialization_cost += cost; }
     inline void add_dram_offchip_network_plus_dram_action_cost(uint64_t cost) { m_dram_offchip_network_plus_dram_action_cost += cost; }
     inline void add_l1_action() { ++m_l1_action; }
@@ -47,6 +49,9 @@ private:
 
     running_stats m_cat_hits;
 
+    uint64_t m_blocks;
+    uint64_t m_blocks_eviction;
+
     map<maddr_t, running_stats> m_ideal_delta;
     map<maddr_t, vector<uint64_t> > m_ideal_delta_samples;
 
@@ -59,7 +64,6 @@ private:
     uint64_t m_l2_network_plus_serialization_cost;
     uint64_t m_l2_action_cost;
     uint64_t m_l2_write_block_cost;
-    uint64_t m_l2_eviction_cost;
     uint64_t m_dram_network_plus_serialization_cost;
     uint64_t m_dram_offchip_network_plus_dram_action_cost;
     uint64_t m_l1_action;

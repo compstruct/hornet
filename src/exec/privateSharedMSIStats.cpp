@@ -10,9 +10,11 @@ privateSharedMSIStatsPerTile::privateSharedMSIStatsPerTile(uint32_t id, const ui
     m_cat_serialization_cost(0), m_cat_action_cost(0),
     m_l1_serialization_cost(0), m_l1_action_cost(0), m_l1_eviction_cost(0),
     m_l2_network_plus_serialization_cost(0), m_l2_action_cost(0), m_l2_invalidation_cost(0),
-    m_l2_eviction_cost(0),
     m_dram_network_plus_serialization_cost(0), m_dram_offchip_network_plus_dram_action_cost(0),
-    m_l1_action(0), m_l2_action(0) { }
+    m_l1_action(0), m_l2_action(0),
+    m_i_s(0), m_i_e(0), m_s_s(0), m_s_e(0), m_e_s(0), m_e_e(0), 
+    m_shreq(0), m_exreq(0), m_invrep(0), m_flushrep(0), m_wbrep(0), m_shrep(0), m_exrep(0),
+    m_invreq(0), m_invreq_replied(0), m_wbreq(0), m_wbreq_replied(0) { }
 
 privateSharedMSIStatsPerTile::~privateSharedMSIStatsPerTile() {}
 
@@ -77,7 +79,6 @@ void privateSharedMSIStats::print_stats(ostream &out) {
     uint64_t total_l1_eviction_cost = 0;
     uint64_t total_l2_network_plus_serialization_cost = 0;
     uint64_t total_l2_action_cost = 0;
-    uint64_t total_l2_eviction_cost = 0;
     uint64_t total_l2_invalidation_cost = 0;
     uint64_t total_dram_network_plus_serialization_cost = 0;
     uint64_t total_dram_offchip_network_plus_dram_action_cost = 0;
@@ -85,26 +86,17 @@ void privateSharedMSIStats::print_stats(ostream &out) {
     uint64_t total_l2_action = 0;
 
     uint64_t total_i_s = 0;
-    uint64_t total_i_m = 0;
+    uint64_t total_i_e = 0;
     uint64_t total_s_s = 0;
-    uint64_t total_s_m = 0;
-    uint64_t total_s_m_invs = 0;
-    uint64_t total_m_s = 0;
-    uint64_t total_m_s_invs = 0;
-    uint64_t total_m_m = 0;
-    uint64_t total_s_i = 0;
-    uint64_t total_s_i_invs = 0;
-    uint64_t total_m_i = 0;
-    uint64_t total_m_i_invs = 0;
+    uint64_t total_s_e = 0;
+    uint64_t total_e_s = 0;
+    uint64_t total_e_e = 0;
     
     uint64_t total_shreq = 0;
     uint64_t total_exreq = 0;
     uint64_t total_invrep = 0;
-    uint64_t total_invrep_requested = 0;
     uint64_t total_flushrep = 0;
-    uint64_t total_flushrep_requested = 0;
     uint64_t total_wbrep = 0;
-    uint64_t total_wbrep_requested = 0;
     uint64_t total_shrep = 0;
     uint64_t total_exrep = 0;
     uint64_t total_invreq = 0;
@@ -168,33 +160,23 @@ void privateSharedMSIStats::print_stats(ostream &out) {
         total_l2_network_plus_serialization_cost += st->m_l2_network_plus_serialization_cost;
         total_l2_action_cost += st->m_l2_action_cost;
         total_l2_invalidation_cost += st->m_l2_invalidation_cost;
-        total_l2_eviction_cost += st->m_l2_eviction_cost;
         total_dram_network_plus_serialization_cost += st->m_dram_network_plus_serialization_cost;
         total_dram_offchip_network_plus_dram_action_cost += st->m_dram_offchip_network_plus_dram_action_cost;
         total_l1_action += st->m_l1_action;
         total_l2_action += st->m_l2_action;
 
         total_i_s += st->m_i_s;
-        total_i_m += st->m_i_m;
+        total_i_e += st->m_i_e;
         total_s_s += st->m_s_s;
-        total_s_m += st->m_s_m;
-        total_s_m_invs += st->m_s_m_invs;
-        total_m_s += st->m_m_s;
-        total_m_s_invs += st->m_m_s_invs;
-        total_m_m += st->m_m_m;
-        total_s_i += st->m_s_i;
-        total_s_i_invs += st->m_s_i_invs;
-        total_m_i += st->m_m_i;
-        total_m_i_invs += st->m_m_i_invs;
+        total_s_e += st->m_s_e;
+        total_e_s += st->m_e_s;
+        total_e_e += st->m_e_e;
 
         total_shreq += st->m_shreq;
         total_exreq += st->m_exreq;
         total_invrep += st->m_invrep;
-        total_invrep_requested += st->m_invrep_requested;
         total_flushrep += st->m_flushrep;
-        total_flushrep_requested += st->m_flushrep_requested;
         total_wbrep += st->m_wbrep;
-        total_wbrep_requested += st->m_wbrep_requested;
         total_shrep += st->m_shrep;
         total_exrep += st->m_exrep;
         total_invreq += st->m_invreq;
@@ -224,6 +206,7 @@ void privateSharedMSIStats::print_stats(ostream &out) {
             100.0*total_l1_read_hits/total_l1_reads,
             100.0*total_l1_write_hits/total_l1_writes,
             100.0*total_l2_hits/total_l2,
+            /* these include invalidations for evictions */
             total_invs,
             total_inv_caches, 
             total_inv_penalty,
@@ -233,26 +216,23 @@ void privateSharedMSIStats::print_stats(ostream &out) {
 
     /* cost breakdown study */
     sprintf(str, "[Latency Breakdown ] MEM-S: %ld L1-N&S: %ld L1: %ld L1-evict: %ld CAT-S: %ld CAT: %ld L2-N&S: %ld L2-Inv: %ld L2: %ld "
-                 "L2-Evct: %ld DRAM-N&S: %ld DRAM-Offchip: %ld", total_memory_subsystem_serialization_cost,
+                 "DRAM-N&S: %ld DRAM-Offchip: %ld", total_memory_subsystem_serialization_cost,
                  total_l1_serialization_cost, total_l1_action_cost, total_l1_eviction_cost,
                  total_cat_serialization_cost, total_cat_action_cost,
-                 total_l2_network_plus_serialization_cost, total_l2_invalidation_cost, total_l2_action_cost, total_l2_eviction_cost,
+                 total_l2_network_plus_serialization_cost, total_l2_invalidation_cost, total_l2_action_cost, 
                  total_dram_network_plus_serialization_cost, total_dram_offchip_network_plus_dram_action_cost);
     
     out << str << endl;
 
-    sprintf(str, "[State Transitions ] I->S: %ld I->M: %ld S->S: %ld S->M: %ld (with invalidation: %ld) "
-                 "M->S: %ld (with invalidation: %ld) M->M: %ld S->I: %ld (with invalidation: %ld ) "
-                 "M->I: %ld (with invalidation: %ld)",
-                 total_i_s, total_i_m, total_s_s, total_s_m, total_s_m_invs,
-                 total_m_s, total_m_s_invs, total_m_m, total_s_i, total_s_i_invs, total_m_i, total_m_i_invs);
+    sprintf(str, "[State Transitions on Requests ] I->S: %ld I->E: %ld S->S: %ld S->E: %ld E->S: %ld E->E: %ld",
+                 total_i_s, total_i_e, total_s_s, total_s_e, total_e_s, total_e_e);
 
     out << str << endl;
 
-    sprintf(str, "[Coherence Messages 1 ] shReq: %ld exReq: %ld invRep: %ld (requested: %ld) flushRep: %ld (requested: %ld)"
-                 "wbRep: %ld (requested %ld)",
-                 total_shreq, total_exreq, total_invrep, total_invrep_requested, total_flushrep, total_flushrep_requested,
-                 total_wbrep, total_wbrep_requested);
+    sprintf(str, "[Coherence Messages 1 ] shReq: %ld exReq: %ld invRep: %ld (on requests: %ld) flushRep: %ld (on requests: %ld) "
+                 "wbRep: %ld (on requests %ld)",
+                 total_shreq, total_exreq, total_invrep, total_invreq_replied, total_flushrep, total_flushreq_replied,
+                 total_wbrep, total_wbreq_replied);
 
     out << str << endl;
 

@@ -11,7 +11,7 @@
 #define PRIVATE_BYPASS
 #undef PRIVATE_BYPASS
 
-#define MAX_IDEAL 10000
+#define MAX_IDEAL 1000
 #undef MAX_IDEAL
 
 #define PRINT_PROGRESS
@@ -639,6 +639,7 @@ void privateSharedLCC::l1_work_table_update() {
             if (l1_req->status() == CACHE_REQ_MISS) {
                 /* evicted a line and reserved its space */
                 l1_req->reset();
+                l1_req->set_milestone_time(system_time);
                 ++it_addr;
                 continue;
             }
@@ -690,12 +691,14 @@ void privateSharedLCC::l2_work_table_update() {
             }
 
             /* cost breakdown study */
-            if (stats_enabled() && !entry->waiting_for_evictions && l2_req->milestone_time() != UINT64_MAX) {
+            if (stats_enabled() && l2_req->milestone_time() != UINT64_MAX) {
                 stats()->add_l2_action_cost(system_time - l2_req->milestone_time());
             }
 
             if (l2_req->status() == CACHE_REQ_HIT) {
                 /* HIT */
+                entry->waiting_for_evictions = false;
+
                 mh_assert(line_info);
                 if (lcc_write_req) {
                     /* WRITE */
@@ -930,23 +933,20 @@ void privateSharedLCC::l2_work_table_update() {
 
                 /* cost breakdown study */
                 entry->milestone_time = system_time;
-                if (line && entry->waiting_for_evictions) {
+
+                if (line) {
                     entry->waiting_for_evictions = false;
-                    if (stats_enabled()) {
-                        stats()->add_l2_action_cost(system_time - l2_req->milestone_time());
-                        stats()->add_l2_eviction_cost(l2_req->milestone_time() - entry->milestone_time);
-                    }
                 }
 
                 if (!line) {
                     /* could not evict */
 
-                    /* cost breakdown study */
                     if (!entry->waiting_for_evictions) {
                         entry->waiting_for_evictions = true;
-                        entry->milestone_time = system_time;
+                        if (stats_enabled()) {
+                            stats()->evict_blocked_by_timestamp();
+                        }
                     }
-
                     /* keep retrying */
                     l2_req->reset();
                     l2_req->set_milestone_time(system_time);
@@ -962,6 +962,7 @@ void privateSharedLCC::l2_work_table_update() {
                     /* cost breakdown study */
                     if (stats_enabled()) {
                         stats()->add_l2_write_block_cost(line_info->expiration_time - system_time);
+                        stats()->write_blocked_by_timestamp();
                     }
 
                     entry->milestone_time = line_info->expiration_time;
@@ -1105,16 +1106,8 @@ void privateSharedLCC::l2_work_table_update() {
             } 
 
             /* cost breakdown study */
-            if (!entry->waiting_for_evictions) {
-                if (stats_enabled() && l2_req->milestone_time() != UINT64_MAX) {
-                    stats()->add_l2_action_cost(system_time - l2_req->milestone_time());
-                }
-            } else if (line) {
-                entry->waiting_for_evictions = false;
-                if (stats_enabled() && l2_req->milestone_time() != UINT64_MAX) {
-                    stats()->add_l2_eviction_cost(l2_req->milestone_time() - entry->milestone_time);
-                    stats()->add_l2_action_cost(system_time - l2_req->milestone_time());
-                }
+            if (stats_enabled() && l2_req->milestone_time() != UINT64_MAX) {
+                stats()->add_l2_action_cost(system_time - l2_req->milestone_time());
             }
 
             if (l2_req->status() == CACHE_REQ_MISS) {
@@ -1123,10 +1116,11 @@ void privateSharedLCC::l2_work_table_update() {
                 if (!line) {
                     /* could not evict */
 
-                    /* cost breakdown study */
                     if (!entry->waiting_for_evictions) {
                         entry->waiting_for_evictions = true;
-                        entry->milestone_time = system_time;
+                        if (stats_enabled()) {
+                            stats()->evict_blocked_by_timestamp();
+                        }
                     }
 
                     /* keep retrying */
@@ -1189,6 +1183,7 @@ void privateSharedLCC::l2_work_table_update() {
 
             } else {
                 /* HIT */
+                entry->waiting_for_evictions = false;
 
                 mh_log(4) << "[LCC " << m_id << " @ " << system_time << " ] updated cache line for " << start_maddr << endl;
                 lcc_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
@@ -1314,7 +1309,7 @@ void privateSharedLCC::l2_work_table_update() {
 
                 /* cost breakdown study */
                 if (stats_enabled()) {
-                    stats()->add_dram_network_plus_serialization_cost(system_time - entry->milestone_time);
+                    stats()->add_dram_network_plus_serialization_cost(system_time - dram_req->milestone_time);
                 }
 
                 mh_log(4) << "[LCC " << m_id << " @ " << system_time << " ] sent a dram request for writing back for "
@@ -1382,6 +1377,7 @@ void privateSharedLCC::l2_work_table_update() {
 
                             /* cost breakdown study */
                             if (stats_enabled()) {
+                                stats()->write_blocked_by_timestamp();
                                 stats()->add_l2_write_block_cost(line_info->expiration_time - system_time);
                             }
                             entry->milestone_time = line_info->expiration_time;
