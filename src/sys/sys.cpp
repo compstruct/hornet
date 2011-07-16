@@ -29,6 +29,7 @@
 /* memories */
 #include "privateSharedMSI.hpp"
 #include "privateSharedLCC.hpp"
+#include "privateSharedEMRA.hpp"
 
 typedef enum {
     CORE_MIPS_MPI = 0,
@@ -182,6 +183,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
     shared_ptr<privateSharedMSIStats> private_shared_msi_stats = shared_ptr<privateSharedMSIStats>();
     shared_ptr<privateSharedLCCStats> private_shared_lcc_stats = shared_ptr<privateSharedLCCStats>();
+    shared_ptr<privateSharedEMRAStats> private_shared_emra_stats = shared_ptr<privateSharedEMRAStats>();
 
     shared_ptr<dram> new_dram(new dram());
     shared_ptr<SynchedCATModel> cat_model(new SynchedCATModel());
@@ -280,8 +282,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         }
         case CORE_MEMTRACE: {
             /* memtraceCore-specific cfgs*/
-            uint32_t em_type_word = read_word(img);
-            emType_t em_type = static_cast<emType_t>(em_type_word);
+            bool support_em = (bool)read_word(img);
             uint32_t msg_queue_size = read_word(img);
             uint32_t mig_size_in_bytes = read_word(img);
             uint32_t max_threads = read_word(img);
@@ -367,7 +368,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     cfg.l2_num_read_ports = read_word(img);
                     cfg.l2_num_write_ports = read_word(img);
 
-                    assert(em_type == EM_NEVER);
+                    assert(support_em == false);
                     if (private_shared_msi_stats == shared_ptr<privateSharedMSIStats>()) {
                         private_shared_msi_stats = 
                             shared_ptr<privateSharedMSIStats>(new privateSharedMSIStats(t->get_time()));
@@ -432,6 +433,48 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
                     break;
                 }
+            case MEM_PRIVATE_SHARED_EMRA:
+                {
+                    privateSharedEMRA::privateSharedEMRACfg_t cfg;
+                    cfg.logic = (privateSharedEMRA::emraLogic_t)read_word(img);
+                    cfg.num_nodes = num_nodes;
+                    cfg.bytes_per_flit = bytes_per_flit;
+                    cfg.address_size_in_bytes = address_size_in_bytes;
+                    cfg.work_table_size= read_word(img);
+                    cfg.l1_replacement_policy = (privateSharedEMRA::_replacementPolicy_t)read_word(img);
+                    cfg.l2_replacement_policy = (privateSharedEMRA::_replacementPolicy_t)read_word(img);                 
+                    cfg.words_per_cache_line = read_word(img);
+                    cfg.num_local_core_ports = read_word(img);
+                    cfg.lines_in_l1 = read_word(img);
+                    cfg.l1_associativity = read_word(img);
+                    cfg.l1_hit_test_latency = read_word(img);
+                    cfg.l1_num_read_ports = read_word(img);
+                    cfg.l1_num_write_ports = read_word(img);
+                    cfg.lines_in_l2 = read_word(img);
+                    cfg.l2_associativity = read_word(img);
+                    cfg.l2_hit_test_latency = read_word(img);
+                    cfg.l2_num_read_ports = read_word(img);
+                    cfg.l2_num_write_ports = read_word(img);
+
+                    if (private_shared_emra_stats == shared_ptr<privateSharedEMRAStats>()) {
+                        private_shared_emra_stats = 
+                            shared_ptr<privateSharedEMRAStats>(new privateSharedEMRAStats(t->get_time()));
+                        stats->add_aux_statistics(private_shared_emra_stats);
+                    }
+
+                    shared_ptr<privateSharedEMRA> new_mem = 
+                        shared_ptr<privateSharedEMRA>(new privateSharedEMRA(id, t->get_time(), 
+                                                                            t->get_statistics(), log, ran, new_cat, cfg));
+                    shared_ptr<privateSharedEMRAStatsPerTile> per_tile_stats = 
+                        shared_ptr<privateSharedEMRAStatsPerTile>(new privateSharedEMRAStatsPerTile(id, t->get_time()));
+                    new_mem->set_per_tile_stats(per_tile_stats);
+
+                    private_shared_emra_stats->add_per_tile_stats(per_tile_stats);
+
+                    mem = new_mem;
+
+                    break;
+                }
             default:
                 {
                     throw err_bad_shmem_cfg("not supported memory type");
@@ -488,7 +531,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             shared_ptr<memtraceCore> new_core = 
                 shared_ptr<memtraceCore>(new memtraceCore(pe_id(id), t->get_time(), t->get_packet_id_factory(),
                                                           t->get_statistics(), log, ran, memtrace_thread_pool, mem,
-                                                          em_type, msg_queue_size, bytes_per_flit, 
+                                                          support_em, msg_queue_size, bytes_per_flit, 
                                                           (mig_size_in_bytes + bytes_per_flit - 1)/bytes_per_flit, /* flit/context */
                                                           max_threads));
 
