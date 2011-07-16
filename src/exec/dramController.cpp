@@ -6,14 +6,14 @@
 
 dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count) :
     m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_aux_word_size(0), m_status(DRAM_REQ_NEW), 
-    m_data(shared_array<uint32_t>()), m_aux_data(shared_ptr<void>()) 
+    m_data(shared_array<uint32_t>()), m_aux_data(shared_ptr<void>())
 {
     assert(m_request_type == DRAM_REQ_READ);
 }
 
 dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_array<uint32_t> wdata) :
     m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_aux_word_size(0), m_status(DRAM_REQ_NEW), 
-    m_data(wdata), m_aux_data(shared_ptr<void>()) 
+    m_data(wdata), m_aux_data(shared_ptr<void>())
 {
     assert(m_request_type == DRAM_REQ_WRITE);
 }
@@ -21,7 +21,7 @@ dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t wor
 dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_array<uint32_t> wdata,
                          uint32_t aux_word_size, shared_ptr<void> aux_data) :
     m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_aux_word_size(0), m_status(DRAM_REQ_NEW), 
-    m_data(shared_array<uint32_t>()), m_aux_data(aux_data) 
+    m_data(shared_array<uint32_t>()), m_aux_data(aux_data)
 {
     assert(m_request_type == DRAM_REQ_WRITE);
 }

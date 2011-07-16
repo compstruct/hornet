@@ -71,11 +71,14 @@ public:
 
     /* to support architecture-specific functionalities */
     inline void set_clean_write(bool enable = true) { m_do_clean_write = enable; }
-    inline void set_reserve(bool enable) { m_do_reserve= enable; }
+    inline void set_reserve(bool enable) { m_do_reserve = enable; }
+    inline void set_evict(bool enable) { m_do_evict = enable; }
 
     /* cost breakdown study */
     inline void set_milestone_time(uint64_t time) { m_milestone_time = time; }
     inline uint64_t milestone_time(){ return m_milestone_time; }
+    inline void set_stats_info(shared_ptr<void> info) { m_stats_info = info; }
+    inline shared_ptr<void> stats_info() { return m_stats_info; }
 
     friend class cache;
 
@@ -99,9 +102,11 @@ private:
 
     bool m_do_clean_write;
     bool m_do_reserve;
+    bool m_do_evict;
 
     /* cost breakdown study */
-    uint64_t m_milestone_time;;
+    uint64_t m_milestone_time;
+    shared_ptr<void> m_stats_info;
 
     /* aux info */
     uint32_t m_core;
@@ -115,6 +120,7 @@ public:
     typedef void (*helperReserveLine) (cacheLine&);
     typedef bool (*helperCanEvictLine) (cacheLine&, const uint64_t&);
     typedef uint32_t (*helperReplacementPolicy) (vector<uint32_t>&, cacheLine const*, const uint64_t&, shared_ptr<random_gen> ran);
+    typedef void (*helperInvalidateHook) (cacheLine&);
 
     cache(uint32_t cache_level, uint32_t numeric_id, const uint64_t &system_time, 
           shared_ptr<tile_statistics> stats, logger &log, shared_ptr<random_gen> ran, 
@@ -139,6 +145,7 @@ public:
     inline void set_helper_replacement_policy (helperReplacementPolicy fptr) { 
         m_replacement_policy = REPLACE_CUSTOM;
         m_helper_replacement_policy = fptr; }
+    inline void set_helper_invalidate (helperInvalidateHook fptr) { m_helper_invalidate_hook = fptr; }
 
 private:
     typedef map<uint32_t/*index*/, cacheLine*> cacheTable;
@@ -189,6 +196,7 @@ private:
     helperReserveLine m_helper_reserve_line;
     helperCanEvictLine m_helper_can_evict_line;
     helperReplacementPolicy m_helper_replacement_policy;
+    helperInvalidateHook m_helper_invalidate_hook;
 
     reqTable m_req_table;
     cacheTable m_cache;

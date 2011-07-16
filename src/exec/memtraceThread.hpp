@@ -39,7 +39,7 @@ public:
     /* read from current instruction */
     inst_type_t type();
     uint32_t remaining_alu_cycle();
-    inline uint64_t memory_issued_time() { return m_cur.memory_issued_time; }
+    inline uint64_t first_memory_issued_time() { return m_cur.first_memory_issued_time; }
 
     /* read from current instruction - valid for INST_MEMORY only */
     bool is_read();
@@ -69,7 +69,8 @@ private:
         maddr_t maddr;
         uint32_t word_count;
         /* stats */
-        uint64_t memory_issued_time;
+        bool first_memory_issued;
+        uint64_t first_memory_issued_time;
     } inst_t;
 
     uint32_t m_id;

@@ -11,7 +11,7 @@
 #define PRIVATE_BYPASS
 #undef PRIVATE_BYPASS
 
-#define MAX_IDEAL 1000
+#define MAX_IDEAL 10000
 #undef MAX_IDEAL
 
 #define PRINT_PROGRESS
@@ -1741,11 +1741,6 @@ void privateSharedLCC::l2_work_table_update() {
                     if (stats_enabled()) {
                         stats()->did_write_l2(!entry->did_miss_on_first);
                     }
-                }
-                if (entry->using_space_for_reads) {
-                    ++m_l2_work_table_vacancy_readonly;
-                } else {
-                    ++m_l2_work_table_vacancy_shared;
                 }
                 m_l2_work_table.erase(it_addr++);
                 continue;

@@ -11,13 +11,13 @@ memtraceCore::memtraceCore(const pe_id &id, const uint64_t &t,
                            shared_ptr<random_gen> r,
                            shared_ptr<memtraceThreadPool> pool,
                            shared_ptr<memory> mem,
-                           emType_t em_type,
+                           bool support_em,
                            uint32_t msg_queue_size,
                            uint32_t bytes_per_flit,
                            uint32_t flits_per_context,
                            uint32_t max_threads) throw(err) : 
-    core(id, t, pif, st, l, r, mem, ((em_type==EM_NEVER)?0:2), msg_queue_size, bytes_per_flit),
-    m_em_type(em_type), m_flits_per_context(flits_per_context), m_max_threads(max_threads),
+    core(id, t, pif, st, l, r, mem, (support_em?2:0), msg_queue_size, bytes_per_flit),
+    m_support_em(support_em), m_flits_per_context(flits_per_context), m_max_threads(max_threads),
     m_lane_ptr(0), m_num_threads(0), m_num_natives(0), m_num_guests(0), 
     m_threads(pool), m_do_evict(false) 
 { 
@@ -37,7 +37,7 @@ memtraceCore::~memtraceCore() throw() {}
 void memtraceCore::execute() {
 
     /* update em */
-    if (support_em()) {
+    if (m_support_em) {
         if (m_pending_mig.valid) {
             if (send_queue(m_first_core_msg_type)->size() == 0 && send_queue(m_first_core_msg_type+1)->size() == 0) {
                 LOG(log,3) << "[thread " << m_lanes[m_pending_mig.idx].thread->get_id() << " @ " << system_time
@@ -47,6 +47,9 @@ void memtraceCore::execute() {
             /* cancel if not sent */
             send_queue(m_first_core_msg_type)->pop();
             send_queue(m_first_core_msg_type+1)->pop();
+            if (m_pending_mig.evict) {
+                m_lanes[m_pending_mig.idx].thread->stats()->did_begin_eviction();
+            }
             m_pending_mig.valid = false;
         }
 
@@ -70,6 +73,7 @@ void memtraceCore::execute() {
                     m_pending_mig.valid = true;
                     m_pending_mig.idx = cand;
                     m_pending_mig.dst = new_msg->dst; 
+                    m_pending_mig.evict = true;
                     LOG(log,3) << "[thread " << m_lanes[cand].thread->get_id() << " @ " << system_time  
                         << " ] is an evict candidate on " << get_id().get_numeric_id() << endl;
                     break;
@@ -90,6 +94,7 @@ void memtraceCore::execute() {
                     m_pending_mig.valid = true;
                     m_pending_mig.idx = cand;
                     m_pending_mig.dst = new_msg->dst; 
+                    m_pending_mig.evict = false;
                     /* The queue is guaranteed to have a space because we always pop the message every cycle */ 
                     /* even if the message is not sent */
                     if (new_msg->dst == (uint32_t)(m_lanes[cand].thread->native_core())) {
@@ -157,8 +162,8 @@ void memtraceCore::execute() {
                     m_memory->request(cur.req);
                     cur.status = LANE_WAIT;
                     LOG(log,4) << "[thread " << cur.thread->get_id() << " @ " << system_time 
-                         << " ] is making a memory request on core " 
-                         << get_id().get_numeric_id() << " for address " << cur.thread->maddr() << endl;
+                        << " ] is making a memory request on core " 
+                        << get_id().get_numeric_id() << " for address " << cur.thread->maddr() << endl;
                 } else if (cur.thread->type() == memtraceThread::INST_OTHER) {
                     cur.status = LANE_IDLE;
                 }
@@ -166,7 +171,7 @@ void memtraceCore::execute() {
         }
     }
 
-    if (support_em()) {
+    if (m_support_em) {
         /* load incoming threads */
         uint32_t num_arrived_natives = receive_queue(m_first_core_msg_type)->size();
         uint32_t num_arrived_guests = receive_queue(m_first_core_msg_type+1)->size();
@@ -176,6 +181,7 @@ void memtraceCore::execute() {
             uint64_t content = *(static_pointer_cast<uint64_t>(receive_queue(m_first_core_msg_type)->front()->content));
             memtraceThread *new_thread = (memtraceThread*)content;
             load_thread(new_thread);
+            new_thread->stats()->did_arrive_destination();
             receive_queue(m_first_core_msg_type)->pop();
         } 
         /* may take up to num_lanes - num_native_lanes */
@@ -184,6 +190,7 @@ void memtraceCore::execute() {
             uint64_t content = *(static_pointer_cast<uint64_t>(receive_queue(m_first_core_msg_type+1)->front()->content));
             memtraceThread *new_thread = (memtraceThread*)content;
             load_thread(new_thread);
+            new_thread->stats()->did_arrive_destination();
             receive_queue(m_first_core_msg_type+1)->pop();
         }
         m_do_evict = (receive_queue(m_first_core_msg_type+1)->size() > 0)? true: false;
@@ -198,9 +205,9 @@ void memtraceCore::update_from_memory_requests() {
             if(entry.req->status() == REQ_DONE) {
                 if (entry.thread->stats_enabled()) {
                     if (entry.req->is_read()) {
-                        entry.thread->stats()->did_finish_read(system_time - entry.thread->memory_issued_time());
+                        entry.thread->stats()->did_finish_read(system_time - entry.thread->first_memory_issued_time());
                     } else {
-                        entry.thread->stats()->did_finish_write(system_time - entry.thread->memory_issued_time());
+                        entry.thread->stats()->did_finish_write(system_time - entry.thread->first_memory_issued_time());
                     }
                 }
                 LOG(log,4) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
@@ -222,9 +229,10 @@ void memtraceCore::update_from_memory_requests() {
                 i->req->set_milestone_time(system_time);
 
                 m_memory->request(i->req); /* it's supposed to be in the positive tick of the next cycle, but doing here is equivalent */             
-            } else if (support_em() && entry.req->status() == REQ_MIGRATE) {
+            } else if (m_support_em && entry.req->status() == REQ_MIGRATE) {
                 entry.thread->reset_current_instruction();
                 entry.status = LANE_MIG;
+                entry.thread->stats()->did_begin_migration();
             }
         }
     }

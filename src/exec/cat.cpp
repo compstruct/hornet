@@ -4,7 +4,9 @@
 #include "cat.hpp"
 #include <iostream>
 
-catRequest::catRequest(maddr_t maddr, uint32_t sender) : m_status(CAT_REQ_NEW), m_maddr(maddr), m_sender(sender) {}
+catRequest::catRequest(maddr_t maddr, uint32_t sender) : 
+    m_status(CAT_REQ_NEW), m_maddr(maddr), m_sender(sender), m_stats_info(shared_ptr<void>()) 
+{}
 
 catRequest::~catRequest() {}
 

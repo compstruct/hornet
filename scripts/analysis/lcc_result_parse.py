@@ -47,6 +47,14 @@ def main():
     cost_dram_ns = 'n/a'
     cost_dram_off = 'n/a'
 
+    mig_rate = 'n/a'
+    total_migs = 'n/a'
+    total_in_migs = 'n/a'
+    total_th_evicts = 'n/a'
+    total_mig_lat = 'n/a'
+    total_in_mig_lat = 'n/a'
+    total_th_evict_lat = 'n/a'
+
     shreq = 'n/a'
     exreq = 'n/a'
     invrep = 'n/a'
@@ -68,14 +76,31 @@ def main():
     e_to_e = 'n/a'
 
     for line in f:
-        if line.find('[Summary: Memory') == 0:
+        if line.find('[Summary: Thread') == 0:
             words = line.split()
-            total = words[4]
             reads = words[6]
             writes = words[8]
+            total = str(int(reads)+int(writes))
             aml = words[10]
             amrl = words[12]
             amwl = words[14]
+            try:
+                mig_rate = words[16]
+                total_migs = words[19]
+                total_in_migs = words[21]
+                total_th_evicts = words[23]
+                total_mig_lat = words[27]
+                total_in_mig_lat = words[30]
+                total_th_evict_lat = words[33]
+            except:
+                # legacy
+                mig_rate = '0'
+                total_migs = '0'
+                total_in_migs = '0'
+                total_th_evicts = '0'
+                total_mig_lat = '0'
+                total_in_mig_lat = '0'
+                total_th_evict_lat = '0'
         elif line.find('[Summary: Private-shared-LCC') == 0:
             words = line.split()
             l1hit = words[8]
@@ -108,6 +133,22 @@ def main():
             cathit = words[22]
             l1ops = words[24]
             l2ops = words[26]
+        elif line.find('[Summary: Private-shared-EMRA') == 0:
+            words = line.split()
+            l1hit = words[8]
+            l1rhit = words[10]
+            l1whit = words[12]
+            l2hit = words[18]
+            l2rhit = words[20]
+            l2whit = words[22]
+            blks = '0'
+            blks_evict = '0'
+            invs = '0'
+            inv_tgts = '0'
+            inv_cycles = '0'
+            cathit = words[24]
+            l1ops = words[26]
+            l2ops = words[28]
         elif line.find('[Latency Breakdown ') == 0:
             words = line.split()
             if words[9] == 'L1-evict:':
@@ -132,10 +173,9 @@ def main():
                 cost_cat_act = words[12]
                 cost_l2_ns = words[14]
                 cost_l2_inv = '0'
-                cost_l2_blk = words[16]
-                cost_l2_act = words[18]
-                cost_dram_ns = words[20]
-                cost_dram_off = words[22]
+                cost_l2_act = words[16]
+                cost_dram_ns = words[18]
+                cost_dram_off = words[20]
         elif line.find('[Coherence Messages 1') == 0:
             words = line.split()
             shreq = words[5]
@@ -166,10 +206,12 @@ def main():
           cathit + ' ' + l1ops + ' ' + l2ops + ' ' + \
           invs + ' ' + inv_tgts + ' ' + inv_cycles + ' ' +\
           blks + ' ' + blks_evict + ' ' +\
+          mig_rate + ' ' + total_migs + ' ' + total_in_migs + ' ' + total_th_evicts + ' ' +\
+          total_mig_lat + ' ' + total_in_mig_lat + ' ' + total_th_evict_lat + ' ' +\
           cost_mem_s + ' ' + ' ' + cost_cat_s + ' ' + cost_cat_act + ' ' + \
           cost_l1_ns + ' ' + cost_l1_act + ' ' + cost_l1_evt + ' ' + \
           cost_l2_ns + ' ' + cost_l2_act + ' ' + cost_l2_inv + ' ' + cost_l2_blk + ' ' + \
-          cost_dram_ns + ' ' + cost_dram_off + ' ' + \
+          cost_dram_ns + ' ' + cost_dram_off + ' ' + total_in_mig_lat + ' ' +\
           i_to_s + ' ' + i_to_e + ' ' + s_to_s + ' ' + s_to_e + ' ' + e_to_s + ' ' + e_to_e + ' ' + \
           shreq + ' ' + exreq + ' ' + invrep + ' ' + invrep_on_req + ' ' + flushrep + ' ' + flushrep_on_req + ' ' + \
           wbrep + ' ' + wbrep_on_req + ' ' + \

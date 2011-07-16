@@ -38,7 +38,9 @@ public:
     /* cost breakdown study */
     inline void set_milestone_time(uint64_t time) { m_milestone_time = time; }
     inline uint64_t milestone_time() { return m_milestone_time; }
-
+    inline void set_stats_info(shared_ptr<void> info) { m_stats_info = info; }
+    inline shared_ptr<void> stats_info() { return m_stats_info; }
+    
     friend class cat;
 
 private:
@@ -49,6 +51,7 @@ private:
 
     /* cost breakdown study */
     uint64_t m_milestone_time;
+    shared_ptr<void> m_stats_info;
 
 };
 

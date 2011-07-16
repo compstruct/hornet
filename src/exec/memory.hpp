@@ -78,6 +78,7 @@ public:
 protected:
     inline void set_req_status(shared_ptr<memoryRequest> req, memReqStatus_t status) { req->m_status = status; }
     inline void set_req_data(shared_ptr<memoryRequest> req, shared_array<uint32_t> data) { req->m_data = data; }
+    inline void set_req_home(shared_ptr<memoryRequest> req, uint32_t home) { req->m_home = home; }
 
     uint32_t m_id;
     const uint64_t &system_time;

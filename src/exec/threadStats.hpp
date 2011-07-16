@@ -18,14 +18,21 @@ public:
     inline void did_complete() { m_completed = true; m_completion_time = system_time; }
     inline void did_finish_read(uint64_t latency) { m_read_latencies.add(latency, 1); }
     inline void did_finish_write(uint64_t latency) { m_write_latencies.add(latency, 1); }
-    inline void did_begin_migration() { m_mig_start_time = system_time; }
-    inline void did_finish_migration() { m_migration_penalties.add(system_time - m_mig_start_time, 1); }
-    inline void did_begin_eviction() { m_mig_start_time = system_time; }
-    inline void did_finish_eviction() { m_eviction_penalties.add(system_time - m_mig_start_time, 1); };
+
+    void did_begin_migration();
+    void did_begin_eviction();
+    void did_arrive_destination();
 
     friend class threadStats;
 
 private:
+
+    typedef enum {
+        NOT_MIGRATING = 0,
+        MIGRATING,
+        BEING_EVICTED
+    } migrationStatus_t;
+
     uint32_t m_id;
     const uint64_t &system_time;
 
@@ -35,8 +42,9 @@ private:
     uint64_t m_spawned_time;
     uint64_t m_completion_time;
 
+    migrationStatus_t m_mig_status;
     uint64_t m_mig_start_time;
-    uint64_t m_mig_end_time;
+    uint64_t m_mig_penalty_to_append;
 
     running_stats m_read_latencies;
     running_stats m_write_latencies;

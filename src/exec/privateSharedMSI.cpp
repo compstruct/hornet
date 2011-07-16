@@ -1517,11 +1517,6 @@ void privateSharedMSI::l2_work_table_update() {
         } else if (entry->status == _L2_WORK_SEND_DRAM_FEED_REQ) {
             if (dram_req->did_win_last_arbitration) {
 
-                /* cost breakdown study */
-                if (stats_enabled()) {
-                    stats()->add_dram_network_plus_serialization_cost(system_time - dram_req->milestone_time);
-                }
-
                 if (entry->net_msg_to_send) {
                     entry->net_msg_to_send = shared_ptr<message_t>();
                 }
@@ -1849,13 +1844,13 @@ void privateSharedMSI::schedule_requests() {
     
     /* 2 : arbitrates l1 work table for new entries */
     random_shuffle(m_to_cache_req_schedule_q.begin(), m_to_cache_req_schedule_q.end(), rr_fn);
-    while (m_l1_work_table_vacancy > 0 && m_to_cache_req_schedule_q.size()) {
+    while (m_to_cache_req_schedule_q.size()) {
         bool is_core_req = m_to_cache_req_schedule_q.front().get<0>();
         if (is_core_req) {
             shared_ptr<memoryRequest> req = 
                 static_pointer_cast<memoryRequest>(m_to_cache_req_schedule_q.front().get<1>());
             maddr_t start_maddr = get_start_maddr_in_line(req->maddr());
-            if (m_l1_work_table.count(start_maddr) || m_available_core_ports == 0) {
+            if (m_l1_work_table.count(start_maddr) || m_l1_work_table_vacancy == 0 || m_available_core_ports == 0) {
                 mh_log(4) << "you have to retry" << endl;
                 set_req_status(req, REQ_RETRY);
 

@@ -23,7 +23,7 @@ cacheRequest::cacheRequest(maddr_t maddr, cacheReqType_t request_type, uint32_t 
     m_status(CACHE_REQ_NEW), m_line_copy(shared_ptr<cacheLine>()), 
     m_victim_line_copy(shared_ptr<cacheLine>()),
     m_coherence_info_to_write(coherence_info_to_write), m_data_to_write(data_to_write),
-    m_do_clean_write(false), m_do_reserve(true)
+    m_do_clean_write(false), m_do_reserve(true), m_do_evict(true), m_stats_info(shared_ptr<void>())
 {}
 
 cacheRequest::~cacheRequest() {}
@@ -35,7 +35,7 @@ cache::cache(uint32_t level, uint32_t id, const uint64_t &t, shared_ptr<tile_sta
     m_associativity(associativity), m_replacement_policy(replacement_policy), m_hit_test_latency(hit_test_latency),
     m_available_read_ports(num_read_ports), m_available_write_ports(num_write_ports),
     m_helper_copy_coherence_info(NULL), m_helper_is_hit(NULL), m_helper_reserve_line(NULL), m_helper_can_evict_line(NULL),
-    m_helper_replacement_policy(NULL)
+    m_helper_replacement_policy(NULL), m_helper_invalidate_hook(NULL)
 { 
     mh_assert(m_associativity > 0);
     mh_assert(m_words_per_line > 0);
@@ -246,6 +246,9 @@ void cache::tick_positive_edge() {
                                     req->m_line_copy->empty = true;
                                     req->m_line_copy->valid = false;
                                     m_lines_to_evict.insert(make_tuple(idx, it_way));
+                                    if (m_helper_invalidate_hook) {
+                                        (*m_helper_invalidate_hook)(line);
+                                    }
                                 }
                                 break;
                             }
@@ -327,7 +330,7 @@ void cache::tick_positive_edge() {
             uint32_t lru_way = 0;
             for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
                 cacheLine &line = m_cache[idx][it_way];
-                if (line.valid && written_lines.count(line.start_maddr) == 0) {
+                if (line.valid && written_lines.count(line.start_maddr) == 0 && req->m_do_evict) {
                     evictables.push_back(it_way);
                     if (line.last_access_time < lru_time) {
                         lru_way = it_way;
@@ -353,30 +356,6 @@ void cache::tick_positive_edge() {
                 }
                 cacheLine &line = m_cache[idx][victim_way];
                 req->m_victim_line_copy = copy_cache_line(line);
-
-#if 0
-                if (system_time > 40000 && m_helper_can_evict_line && idx == 888 && !((*m_helper_can_evict_line)(line, system_time))) {
-                    cerr << "            could NOT evict " << line.start_maddr << " for "
-                         << start_maddr << " at " << m_id << " for index " << idx << " way " << victim_way << " @ " << system_time << endl;
-                    for (uint32_t _way = 0; _way < 4; ++_way) {
-                        cerr << "                way 0 ";
-                        if (m_cache[idx][_way].empty) {
-                            cerr << " EMPTY " << endl;
-                        } else  {
-                            cerr << " of " << m_cache[idx][_way].start_maddr;
-                            if (!m_cache[idx][_way].valid) {
-                                cerr << " invalid " << endl;
-                            } else {
-                                if (written_lines.count(m_cache[idx][_way].start_maddr)) {
-                                    cerr << " written " << endl;
-                                } else {
-                                    cerr << " lru " << m_cache[idx][_way].last_access_time << endl;
-                                }
-                            }
-                        }
-                    }
-                }
-#endif
 
                 if (!m_helper_can_evict_line ||
                     (m_helper_can_evict_line && (*m_helper_can_evict_line)(line, system_time))) {
@@ -418,6 +397,9 @@ void cache::tick_negative_edge() {
 
     for (set<tuple<uint32_t, uint32_t> >::iterator it = m_lines_to_evict.begin(); it != m_lines_to_evict.end(); ++it) {
         m_cache[it->get<0>()][it->get<1>()].empty = true;
+        if (m_helper_invalidate_hook) {
+            (*m_helper_invalidate_hook)(m_cache[it->get<0>()][it->get<1>()]);
+        }
     }
     m_lines_to_evict.clear();
 

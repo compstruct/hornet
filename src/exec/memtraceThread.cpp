@@ -31,6 +31,7 @@ void memtraceThread::add_mem_inst(uint32_t alu_cost, bool write, maddr_t maddr, 
     new_inst.is_read = !write;
     new_inst.maddr = maddr;
     new_inst.word_count = word_count;
+    new_inst.first_memory_issued = false;
     m_insts.push_back(new_inst);
 }
 
@@ -51,8 +52,9 @@ void memtraceThread::fetch() {
 void memtraceThread::execute() {
     assert(m_cur.remaining_alu_cost > 0);
     --(m_cur.remaining_alu_cost);
-    if (m_cur.remaining_alu_cost == 0 && m_cur.type == INST_MEMORY) {
-        m_cur.memory_issued_time = system_time;
+    if (m_cur.remaining_alu_cost == 0 && m_cur.type == INST_MEMORY && !m_cur.first_memory_issued) {
+        m_cur.first_memory_issued = true;
+        m_cur.first_memory_issued_time = system_time;
     }
 }
 

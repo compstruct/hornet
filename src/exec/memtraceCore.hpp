@@ -15,7 +15,7 @@ public:
                  shared_ptr<random_gen> ran,
                  shared_ptr<memtraceThreadPool> pool,
                  shared_ptr<memory> mem,
-                 emType_t em_type,
+                 bool support_em,
                  uint32_t msg_queue_size,
                  uint32_t bytes_per_flit,
                  uint32_t flits_per_context,
@@ -34,7 +34,7 @@ private:
     map<uint32_t, flow_id> flow_ids;
 
     /* Configurations */
-    emType_t m_em_type;
+    bool m_support_em;
     uint32_t m_flits_per_context;
     uint32_t m_max_threads;
 
@@ -61,14 +61,13 @@ private:
         bool valid;
         lane_idx_t idx;
         int dst; /* for logs */
+        bool evict;
     } pending_mig_t;
 
 private:
     /* Local methods */
     void load_thread(memtraceThread* thread);
     void unload_thread(lane_idx_t idx);
-
-    bool support_em() { return (m_em_type != EM_NEVER); }
 
 private:
     vector<lane_entry_t> m_lanes;

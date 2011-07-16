@@ -16,7 +16,7 @@ using namespace boost;
 typedef enum {
     MEM_PRIVATE_SHARED_MSI_MESI = 0,
     MEM_PRIVATE_SHARED_LCC = 1,
-    MEM_SHARED_SHARED_RA = 2,
+    MEM_PRIVATE_SHARED_EMRA = 2,
     MEM_PRIVATE_PRIVATE_MOESI = 3
 } memoryType_t;
 
@@ -25,13 +25,6 @@ typedef enum {
     TOP_AND_BOTTOM_TO_DRAM = 0,
     BOUNDARY_TO_DRAM = 1
 } dramLocationType_t;
-
-/* do not change order */
-typedef enum {
-    EM_NEVER = 0,
-    EM_DISTANCE = 1,
-    EM_ALWAYS = 2
-} emType_t;
 
 typedef struct {
     uint32_t space;
