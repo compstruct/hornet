@@ -204,6 +204,9 @@ void privateSharedEMRA::work_table_update() {
         }
 #endif
 
+        mh_log(4) << "[Mem " << m_id << " @ " << system_time << " ] in state " << entry->status 
+            << " for " << start_maddr << endl;
+
         shared_ptr<memoryRequest> core_req = entry->core_req;
         shared_ptr<coherenceMsg> data_req = entry->data_req;;
         shared_ptr<catRequest> cat_req = entry->cat_req;
@@ -649,10 +652,17 @@ void privateSharedEMRA::work_table_update() {
                         /* could not evict */
                         mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] could not evict a line of " << l2_victim->start_maddr
                             << " for  a local request on " << start_maddr << endl;
-                        if (m_work_table.count(l2_victim->start_maddr) == 0) {
+                        if (entry->l1_evict_req) {
+                            mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] last invalidate request status " << entry->l1_evict_req->status() << endl;
+                        }
+                        if (m_work_table.count(l2_victim->start_maddr) == 0 &&
+                            (!entry->l1_evict_req || entry->l1_evict_req->status() == CACHE_REQ_MISS || entry->l1_evict_req->status() == CACHE_REQ_HIT)) 
+                        {
                             entry->l1_evict_req = shared_ptr<cacheRequest>(new cacheRequest(l2_victim->start_maddr, CACHE_REQ_INVALIDATE));
                             entry->l1_evict_req->set_reserve(false);
                             entry->l1_evict_req->set_milestone_time(UINT64_MAX);
+                            mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] invalidate requested for a line of " << l2_victim->start_maddr
+                                << " for  a local request on " << start_maddr << endl;
                         }
                     }
                     l2_req->set_milestone_time(system_time);
@@ -1871,8 +1881,7 @@ void privateSharedEMRA::schedule_requests() {
             shared_ptr<cacheRequest> l1_req = entry->l1_req;
             l1_requested_start_maddr.insert(get_start_maddr_in_line(l1_req->maddr()));
             if (l1_req->request_type() == CACHE_REQ_WRITE || 
-                l1_req->request_type() == CACHE_REQ_UPDATE ||
-                l1_req->request_type() == CACHE_REQ_WRITE) {
+                l1_req->request_type() == CACHE_REQ_UPDATE) {
                 m_l1_write_req_schedule_q.push_back(l1_req);
             } else {
                 m_l1_read_req_schedule_q.push_back(l1_req);
@@ -1881,8 +1890,7 @@ void privateSharedEMRA::schedule_requests() {
         if (entry->l2_req && entry->l2_req->status() == CACHE_REQ_NEW) {
             shared_ptr<cacheRequest> l2_req = entry->l2_req;
             if (l2_req->request_type() == CACHE_REQ_WRITE || 
-                l2_req->request_type() == CACHE_REQ_UPDATE || 
-                l2_req->request_type() == CACHE_REQ_WRITE) {
+                l2_req->request_type() == CACHE_REQ_UPDATE) {
                 m_l2_write_req_schedule_q.push_back(l2_req);
             } else {
                 m_l2_read_req_schedule_q.push_back(l2_req);
@@ -1898,10 +1906,10 @@ void privateSharedEMRA::schedule_requests() {
         shared_ptr<tableEntry> entry = it_addr->second;
         if (entry->l1_evict_req && 
             entry->l1_evict_req->status() == CACHE_REQ_NEW &&
-            l1_requested_start_maddr.count(get_start_maddr_in_line(entry->l1_evict_req->maddr())) == 0)
+            l1_requested_start_maddr.count(entry->l1_evict_req->maddr()) == 0)
         {
             shared_ptr<cacheRequest> l1_evict_req = entry->l1_evict_req;
-            m_l1_write_req_schedule_q.push_back(l1_evict_req);
+            m_l1_read_req_schedule_q.push_back(l1_evict_req);
         }
     }
 
@@ -1943,7 +1951,7 @@ void privateSharedEMRA::schedule_requests() {
     
     /* l1 write requests */
     random_shuffle(m_l1_write_req_schedule_q.begin(), m_l1_write_req_schedule_q.end(), rr_fn);
-    while (m_l1->read_port_available() && m_l1_write_req_schedule_q.size()) {
+    while (m_l1->write_port_available() && m_l1_write_req_schedule_q.size()) {
         shared_ptr<cacheRequest> l1_req = m_l1_write_req_schedule_q.front();
         m_l1->request(l1_req);
 
@@ -1981,7 +1989,7 @@ void privateSharedEMRA::schedule_requests() {
     
     /* l2 write requests */
     random_shuffle(m_l2_write_req_schedule_q.begin(), m_l2_write_req_schedule_q.end(), rr_fn);
-    while (m_l2->read_port_available() && m_l2_write_req_schedule_q.size()) {
+    while (m_l2->write_port_available() && m_l2_write_req_schedule_q.size()) {
         shared_ptr<cacheRequest> l2_req = m_l2_write_req_schedule_q.front();
         m_l2->request(l2_req);
 

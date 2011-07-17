@@ -51,7 +51,6 @@ void threadStats::print_stats(ostream &out) {
 
     bool completed = true;
     uint64_t parallel_completion_time = 0;
-    double total_cycles = 0.0;
     uint64_t total_reads = 0;
     uint64_t total_writes = 0;
     uint64_t total_mem = 0;
@@ -80,7 +79,6 @@ void threadStats::print_stats(ostream &out) {
         if (completed && cycles > parallel_completion_time) {
             parallel_completion_time = cycles;
         }
-        total_cycles += cycles;
         uint64_t reads = st->m_read_latencies.sample_count();
         uint64_t writes = st->m_write_latencies.sample_count();
         uint64_t mem = reads + writes;

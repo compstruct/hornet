@@ -10,7 +10,7 @@
 #undef DEBUG
 
 #ifdef DEBUG
-#define mh_log(X) cout
+#define mh_log(X) if(true) cout
 #define mh_assert(X) assert(X)
 #else
 #define mh_assert(X)
@@ -244,6 +244,8 @@ void cache::tick_positive_edge() {
                                 } else {
                                     req->m_line_copy = copy_cache_line(line);
                                     req->m_line_copy->empty = true;
+                                    mh_log(4) << "[cache " << m_id << " L" << m_level << " @ " << system_time << " ] evicted a line (due to requests) " 
+                                        << line.start_maddr << endl;
                                     req->m_line_copy->valid = false;
                                     m_lines_to_evict.insert(make_tuple(idx, it_way));
                                     if (m_helper_invalidate_hook) {
@@ -263,6 +265,8 @@ void cache::tick_positive_edge() {
                         /* it's either invalid, or a coherence miss */
                         //printf("\t[cache 0%d] Request was INVALID or a COHERENCE MISS\n",  m_id);
                         req->m_status = CACHE_REQ_MISS;
+                        mh_log(4) << "[cache " << m_id << " @ " << system_time << " ] a miss by invalid/coherence for address "
+                            << start_maddr << endl;
                         line.last_access_time = system_time;
                         req->m_line_copy = copy_cache_line(line);
                         break;
@@ -360,6 +364,11 @@ void cache::tick_positive_edge() {
                 if (!m_helper_can_evict_line ||
                     (m_helper_can_evict_line && (*m_helper_can_evict_line)(line, system_time))) {
 
+                    if (m_helper_invalidate_hook) {
+                        (*m_helper_invalidate_hook)(line);
+                    }
+                    mh_log(4) << "[cache " << m_id << " L" << m_level << " @ " << system_time << " ] evicted a line " 
+                              << line.start_maddr << endl;
                     /* if we can evict right now */
                     req->m_line_copy = copy_cache_line(line);
                     req->m_line_copy->start_maddr = start_maddr;
@@ -397,6 +406,8 @@ void cache::tick_negative_edge() {
 
     for (set<tuple<uint32_t, uint32_t> >::iterator it = m_lines_to_evict.begin(); it != m_lines_to_evict.end(); ++it) {
         m_cache[it->get<0>()][it->get<1>()].empty = true;
+        mh_log(4) << "[cache " << m_id << " L" << m_level << " @ " << system_time << " ] evicted a line " 
+            << m_cache[it->get<0>()][it->get<1>()].start_maddr << endl;
         if (m_helper_invalidate_hook) {
             (*m_helper_invalidate_hook)(m_cache[it->get<0>()][it->get<1>()]);
         }
