@@ -197,15 +197,8 @@ void privateSharedEMRA::work_table_update() {
         maddr_t start_maddr = it_addr->first;
         shared_ptr<tableEntry> entry = it_addr->second;
 
-#if 0
-        if (system_time > 1378) {
-            cout << "[Mem " << m_id << " @ " << system_time << " ] in state " << entry->status 
-                 << " for " << start_maddr << endl;
-        }
-#endif
-
         mh_log(4) << "[Mem " << m_id << " @ " << system_time << " ] in state " << entry->status 
-            << " for " << start_maddr << endl;
+                  << " for " << start_maddr << endl;
 
         shared_ptr<memoryRequest> core_req = entry->core_req;
         shared_ptr<coherenceMsg> data_req = entry->data_req;;
@@ -269,9 +262,6 @@ void privateSharedEMRA::work_table_update() {
                 
                 if (cat_req->milestone_time() != UINT64_MAX && cat_req->status() == CAT_REQ_DONE) {
                     breakdown->temp_cat_action += system_time - cat_req->milestone_time();
-                    if (stats_enabled()) {
-                        stats()->did_read_cat(m_id == cat_req->home());
-                    }
                     cat_req->set_milestone_time(UINT64_MAX);
                 } 
 
@@ -290,6 +280,10 @@ void privateSharedEMRA::work_table_update() {
 
                 if (home != m_id) {
 
+                    if (stats_enabled()) {
+                        stats()->did_read_cat(false);
+                    }
+
                     mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a read core MISS for "
                               << core_req->maddr() << endl;
 
@@ -305,7 +299,6 @@ void privateSharedEMRA::work_table_update() {
                     if (m_cfg.logic == MIGRATION_ALWAYS) {
                         if (stats_enabled()) {
                             apply_breakdown_info(breakdown);
-                            stats()->did_read_l1(false);
                         }
                         set_req_status(core_req, REQ_MIGRATE);
                         set_req_home(core_req, home);
@@ -342,6 +335,11 @@ void privateSharedEMRA::work_table_update() {
 
                 } else if (l1_req->status() == CACHE_REQ_MISS) {
 
+                    if (stats_enabled()) {
+                        stats()->did_read_cat(true);
+                        stats()->did_read_l1(false);
+                    }
+
                     mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a core hit but a read L1 MISS for "
                               << core_req->maddr() << endl;
 
@@ -363,10 +361,6 @@ void privateSharedEMRA::work_table_update() {
                         breakdown->temp_cat_action = 0;
                     }
 
-                    if (stats_enabled()) {
-                        stats()->did_read_l2(false);
-                    }
-
                     l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_READ,
                                                                        m_cfg.words_per_cache_line));
                     l2_req->set_milestone_time(system_time);
@@ -383,9 +377,6 @@ void privateSharedEMRA::work_table_update() {
         } else if (entry->status == _WORK_WAIT_CAT_AND_L1_FOR_LOCAL_WRITE) {
 
             if (cat_req->milestone_time() != UINT64_MAX && cat_req->status() == CAT_REQ_DONE) {
-                if (stats_enabled()) {
-                    stats()->did_read_cat(m_id == cat_req->home());
-                }
                 breakdown->temp_cat_action += system_time - cat_req->milestone_time();
                 cat_req->set_milestone_time(UINT64_MAX);
             } 
@@ -399,7 +390,8 @@ void privateSharedEMRA::work_table_update() {
             }
 
             if (l1_req->status() == CACHE_REQ_HIT) {
-                /* We will deal with statistics at the end */
+
+                /* We will deal with l1 hit statistics at the end */
 
                 mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a write hit at L1 for "
                           << core_req->maddr() << endl;
@@ -454,7 +446,7 @@ void privateSharedEMRA::work_table_update() {
                 breakdown->temp_cat_action = 0;
 
                 if (stats_enabled()) {
-                    stats()->did_write_l1(false);
+                    stats()->did_read_cat(false);
                 }
                 
                 if (m_cfg.logic == MIGRATION_ALWAYS) {
@@ -570,6 +562,7 @@ void privateSharedEMRA::work_table_update() {
                         if (stats_enabled()) {
                             stats()->did_write_l1(false);
                             stats()->did_write_l2(false);
+                            stats()->did_read_cat(hit);
                         }
                         breakdown->l1_serialization = breakdown->temp_l1_serialization = 0;
                         breakdown->l1_action = breakdown->temp_l1_action = 0;
@@ -772,6 +765,7 @@ void privateSharedEMRA::work_table_update() {
 
                         if (stats_enabled()) {
                             stats()->did_write_l1(false);
+                            stats()->did_read_cat(true);
                         }
 
                         l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
@@ -826,6 +820,7 @@ void privateSharedEMRA::work_table_update() {
 
                 if (stats_enabled()) {
                     stats()->did_write_l1(false);
+                    stats()->did_read_cat(true);
                 }
 
                 mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] updates a cache line for a local write request on "
