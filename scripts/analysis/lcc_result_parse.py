@@ -14,6 +14,7 @@ def main():
     except:
         print ''
         exit()
+    memarch = 'unknown'
     total = 'n/a'
     reads = 'n/a'
     writes = 'n/a'
@@ -46,6 +47,12 @@ def main():
     cost_l2_act = 'n/a'
     cost_dram_ns = 'n/a'
     cost_dram_off = 'n/a'
+
+    #new breakdowns - privateSharedEMRA
+    cost_ra_req_ns = 'n/a'
+    cost_ra_rep_ns = 'n/a'
+    cost_dram_req_onchip_ns = 'n/a'
+    cost_dram_rep_onchip_ns = 'n/a'
 
     mig_rate = 'n/a'
     total_migs = 'n/a'
@@ -102,6 +109,7 @@ def main():
                 total_in_mig_lat = '0'
                 total_th_evict_lat = '0'
         elif line.find('[Summary: Private-shared-LCC') == 0:
+            memarch = 'Private-shared LCC'
             words = line.split()
             l1hit = words[8]
             l1rhit = l1hit
@@ -118,6 +126,7 @@ def main():
             inv_tgts = '0'
             inv_cycles = '0'
         elif line.find('[Summary: Private-shared-MSI') == 0:
+            memarch = 'Private-shared MSI'
             words = line.split()
             l1hit = words[8]
             l1rhit = words[10]
@@ -134,6 +143,7 @@ def main():
             l1ops = words[24]
             l2ops = words[26]
         elif line.find('[Summary: Private-shared-EMRA') == 0:
+            memarch = 'Private-shared EMRA'
             words = line.split()
             l1hit = words[8]
             l1rhit = words[10]
@@ -151,7 +161,23 @@ def main():
             l2ops = words[28]
         elif line.find('[Latency Breakdown ') == 0:
             words = line.split()
-            if words[9] == 'L1-evict:':
+            if words[2] == 'Private-shared-EMRA':
+                cost_mem_s = words[5]
+                cost_l1_ns = words[7]
+                cost_l1_act = words[9]
+                cost_l1_evt = '0'
+                cost_cat_s = words[11]
+                cost_cat_act = words[13]
+                cost_ra_req_ns = words[15]
+                cost_ra_rep_ns = words[17]
+                cost_l2_ns = words[19]
+                cost_l2_inv = '0'
+                cost_l2_act = words[21]
+                cost_dram_req_onchip_ns = words[23]
+                cost_dram_rep_onchip_ns = words[25]
+                cost_dram_off = words[27]
+                cost_l2_blk = '0'
+            elif words[9] == 'L1-evict:':
                 cost_mem_s = words[4]
                 cost_l1_ns = words[6]
                 cost_l1_act = words[8]
@@ -201,21 +227,32 @@ def main():
             s_to_e = words[12]
             e_to_s = words[14]
             e_to_e = words[16]
-    print total + ' ' + reads + ' ' + writes + ' ' + aml + ' ' + amrl + ' ' + amwl + ' ' + \
-          l1hit + ' ' + l1rhit + ' ' + l1whit + ' ' + l2hit + ' ' + l2rhit + ' ' + l2whit + ' ' + \
-          cathit + ' ' + l1ops + ' ' + l2ops + ' ' + \
-          invs + ' ' + inv_tgts + ' ' + inv_cycles + ' ' +\
-          blks + ' ' + blks_evict + ' ' +\
-          mig_rate + ' ' + total_migs + ' ' + total_in_migs + ' ' + total_th_evicts + ' ' +\
-          total_mig_lat + ' ' + total_in_mig_lat + ' ' + total_th_evict_lat + ' ' +\
-          cost_mem_s + ' ' + ' ' + cost_cat_s + ' ' + cost_cat_act + ' ' + \
-          cost_l1_ns + ' ' + cost_l1_act + ' ' + cost_l1_evt + ' ' + \
-          cost_l2_ns + ' ' + cost_l2_act + ' ' + cost_l2_inv + ' ' + cost_l2_blk + ' ' + \
-          cost_dram_ns + ' ' + cost_dram_off + ' ' + total_in_mig_lat + ' ' +\
-          i_to_s + ' ' + i_to_e + ' ' + s_to_s + ' ' + s_to_e + ' ' + e_to_s + ' ' + e_to_e + ' ' + \
-          shreq + ' ' + exreq + ' ' + invrep + ' ' + invrep_on_req + ' ' + flushrep + ' ' + flushrep_on_req + ' ' + \
-          wbrep + ' ' + wbrep_on_req + ' ' + \
-          shrep + ' ' + exrep + ' ' + invreq + ' ' + wbreq + ' ' + flushreq
+    outstring =  total + ' ' + reads + ' ' + writes + ' ' + aml + ' ' + amrl + ' ' + amwl + ' ' + \
+                 l1hit + ' ' + l1rhit + ' ' + l1whit + ' ' + l2hit + ' ' + l2rhit + ' ' + l2whit + ' ' + \
+                 cathit + ' ' + l1ops + ' ' + l2ops + ' ' + \
+                 invs + ' ' + inv_tgts + ' ' + inv_cycles + ' ' +\
+                 blks + ' ' + blks_evict + ' ' +\
+                 mig_rate + ' ' + total_migs + ' ' + total_in_migs + ' ' + total_th_evicts + ' ' +\
+                 total_mig_lat + ' ' + total_in_mig_lat + ' ' + total_th_evict_lat + ' ' 
+
+    if memarch == 'Private-shared EMRA':
+        outstring += cost_mem_s + ' ' + ' ' + cost_cat_s + ' ' + cost_cat_act + ' ' + \
+                     cost_l1_ns + ' ' + cost_l1_act + ' ' + cost_l1_evt + ' ' + \
+                     cost_ra_req_ns + ' ' + cost_ra_rep_ns + ' ' + \
+                     cost_l2_ns + ' ' + cost_l2_act + ' ' + cost_l2_inv + ' ' + cost_l2_blk + ' ' + \
+                     cost_dram_req_onchip_ns + ' ' + cost_dram_rep_onchip_ns + ' ' + cost_dram_off + ' ' + total_in_mig_lat + ' ' 
+    else:
+        outstring += cost_mem_s + ' ' + ' ' + cost_cat_s + ' ' + cost_cat_act + ' ' + \
+                     cost_l1_ns + ' ' + cost_l1_act + ' ' + cost_l1_evt + ' ' + \
+                     cost_l2_ns + ' ' + cost_l2_act + ' ' + cost_l2_inv + ' ' + cost_l2_blk + ' ' + \
+                     cost_dram_ns + ' ' + cost_dram_off + ' ' + total_in_mig_lat + ' ' 
+
+    outstring += i_to_s + ' ' + i_to_e + ' ' + s_to_s + ' ' + s_to_e + ' ' + e_to_s + ' ' + e_to_e + ' ' + \
+                 shreq + ' ' + exreq + ' ' + invrep + ' ' + invrep_on_req + ' ' + flushrep + ' ' + flushrep_on_req + ' ' + \
+                 wbrep + ' ' + wbrep_on_req + ' ' + \
+                 shrep + ' ' + exrep + ' ' + invreq + ' ' + wbreq + ' ' + flushreq
+
+    print outstring
 
 if __name__ == '__main__': main()
 

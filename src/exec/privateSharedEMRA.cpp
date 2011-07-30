@@ -184,9 +184,12 @@ void privateSharedEMRA::apply_breakdown_info(shared_ptr<breakdownInfo> breakdown
         stats()->add_cat_action_cost(breakdown->cat_action);
         stats()->add_l1_serialization_cost(breakdown->l1_serialization);
         stats()->add_l1_action_cost(breakdown->l1_action);
-        stats()->add_l2_network_plus_serialization_cost(breakdown->l2_network + breakdown->l2_serialization);
+        stats()->add_ra_req_network_plus_serialization_cost(breakdown->ra_req_network_plus_serialization);
+        stats()->add_ra_rep_network_plus_serialization_cost(breakdown->ra_rep_network_plus_serialization);
+        stats()->add_l2_serialization_cost(breakdown->l2_serialization);
         stats()->add_l2_action_cost(breakdown->l2_action);
-        stats()->add_dram_network_plus_serialization_cost(breakdown->dram_network_plus_serialization);
+        stats()->add_dram_req_onchip_network_plus_serialization_cost(breakdown->dram_req_onchip_network_plus_serialization);
+        stats()->add_dram_rep_onchip_network_plus_serialization_cost(breakdown->dram_rep_onchip_network_plus_serialization);
         stats()->add_dram_offchip_network_plus_dram_action_cost(breakdown->dram_offchip);
     }
 }
@@ -197,8 +200,10 @@ void privateSharedEMRA::work_table_update() {
         maddr_t start_maddr = it_addr->first;
         shared_ptr<tableEntry> entry = it_addr->second;
 
+#if 0
         mh_log(4) << "[Mem " << m_id << " @ " << system_time << " ] in state " << entry->status 
                   << " for " << start_maddr << endl;
+#endif
 
         shared_ptr<memoryRequest> core_req = entry->core_req;
         shared_ptr<coherenceMsg> data_req = entry->data_req;;
@@ -510,7 +515,7 @@ void privateSharedEMRA::work_table_update() {
                     << ") from " << data_rep->sender << " for " << data_rep->maddr << endl;
 
                 /* cost breakdown study */
-                breakdown->l2_network += system_time - data_rep->milestone_time;
+                breakdown->ra_rep_network_plus_serialization += system_time - data_rep->milestone_time;
 
                 shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
                 uint32_t word_offset = (core_req->maddr().address / 4 ) % m_cfg.words_per_cache_line;
@@ -562,7 +567,7 @@ void privateSharedEMRA::work_table_update() {
                         if (stats_enabled()) {
                             stats()->did_write_l1(false);
                             stats()->did_write_l2(false);
-                            stats()->did_read_cat(hit);
+                            stats()->did_read_cat(true);
                         }
                         breakdown->l1_serialization = breakdown->temp_l1_serialization = 0;
                         breakdown->l1_action = breakdown->temp_l1_action = 0;
@@ -599,7 +604,7 @@ void privateSharedEMRA::work_table_update() {
                         entry->dram_req = dram_req;
 
                         if (m_dram_controller_location == m_id) {
-                            m_to_dram_req_schedule_q.push_back(entry->dram_req);
+                            m_to_dram_writeback_req_schedule_q.push_back(entry->dram_req);
                         } else {
                             entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
                             entry->net_msg_to_send->src = m_id;
@@ -609,7 +614,7 @@ void privateSharedEMRA::work_table_update() {
                                 get_flit_count (1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
                             entry->net_msg_to_send->content = dram_req;
 
-                            m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
+                            m_to_network_schedule_q_priority[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
                         }
                         entry->status = _WORK_DRAM_WRITEBACK_AND_FEED;
                     } else {
@@ -848,14 +853,19 @@ void privateSharedEMRA::work_table_update() {
                     entry->net_msg_to_send = shared_ptr<message_t>();
                 }
 
-                breakdown->dram_network_plus_serialization += system_time - dram_req->milestone_time;
+                breakdown->dram_req_onchip_network_plus_serialization += system_time - dram_req->milestone_time;
 
+                dram_req = shared_ptr<dramMsg>(new dramMsg);
+                dram_req->sender = m_id;
+                dram_req->receiver = m_dram_controller_location;
                 dram_req->req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
                                                                         DRAM_REQ_READ,
                                                                         m_cfg.words_per_cache_line));
-                entry->dram_req = dram_req;
+                dram_req->did_win_last_arbitration = false;
                 dram_req->milestone_time = system_time;
                 dram_req->breakdown = breakdown;
+
+                entry->dram_req = dram_req;
 
                 if (m_dram_controller_location == m_id) {
                     m_to_dram_req_schedule_q.push_back(entry->dram_req);
@@ -870,13 +880,13 @@ void privateSharedEMRA::work_table_update() {
                 }
                 entry->status = _WORK_SEND_DRAM_FEED_REQ;
 
-                mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] is sending a DRAM request for a local request on "
+                mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] is sending a DRAM request for a request on "
                     << start_maddr << " after a writeback " << endl;
 
             } else if (m_dram_controller_location == m_id) {
-                m_to_dram_req_schedule_q.push_back(entry->dram_req);
+                m_to_dram_writeback_req_schedule_q.push_back(entry->dram_req);
             } else {
-                m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
+                m_to_network_schedule_q_priority[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
             }
             ++it_addr;
             continue;
@@ -902,7 +912,7 @@ void privateSharedEMRA::work_table_update() {
         } else if (entry->status == _WORK_WAIT_DRAM_FEED) {
 
             if (dram_rep) {
-                breakdown->dram_network_plus_serialization += system_time - dram_rep->milestone_time;
+                breakdown->dram_rep_onchip_network_plus_serialization += system_time - dram_rep->milestone_time;
 
                 mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] received a DRAM reply for "
                     << dram_rep->req->maddr() << endl;
@@ -1050,7 +1060,7 @@ void privateSharedEMRA::work_table_update() {
                         entry->dram_req = dram_req;
 
                         if (m_dram_controller_location == m_id) {
-                            m_to_dram_req_schedule_q.push_back(entry->dram_req);
+                            m_to_dram_writeback_req_schedule_q.push_back(entry->dram_req);
                         } else {
                             entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
                             entry->net_msg_to_send->src = m_id;
@@ -1060,7 +1070,7 @@ void privateSharedEMRA::work_table_update() {
                                 get_flit_count (1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
                             entry->net_msg_to_send->content = dram_req;
 
-                            m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
+                            m_to_network_schedule_q_priority[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
                         }
                         entry->status = _WORK_DRAM_WRITEBACK_AND_UPDATE_L1_AND_L2;
                     }
@@ -1086,14 +1096,14 @@ void privateSharedEMRA::work_table_update() {
 
             if (l1_req->status() == CACHE_REQ_HIT && l2_req->status() == CACHE_REQ_HIT) {
                 if (breakdown->temp_l1_serialization + breakdown->temp_l1_action > 
-                    breakdown->temp_l2_serialization + breakdown->temp_l2_action + breakdown->temp_dram_network_plus_serialization)
+                    breakdown->temp_l2_serialization + breakdown->temp_l2_action + breakdown->temp_dram_req_onchip_network_plus_serialization)
                 {
                     breakdown->l1_serialization += breakdown->temp_l1_serialization;
                     breakdown->l1_action += breakdown->temp_l1_action;
                 } else {
                     breakdown->l2_serialization += breakdown->temp_l2_serialization;
                     breakdown->l2_action += breakdown->temp_l2_action;
-                    breakdown->dram_network_plus_serialization += breakdown->temp_dram_network_plus_serialization;
+                    breakdown->dram_req_onchip_network_plus_serialization += breakdown->temp_dram_req_onchip_network_plus_serialization;
                 }
 
                 shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
@@ -1133,7 +1143,7 @@ void privateSharedEMRA::work_table_update() {
                     entry->net_msg_to_send = shared_ptr<message_t>();
                 }
 
-                breakdown->temp_dram_network_plus_serialization += system_time - dram_req->milestone_time;
+                breakdown->temp_dram_req_onchip_network_plus_serialization += system_time - dram_req->milestone_time;
 
                 mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] the evicted line of " << l2_victim->start_maddr
                           << " is written back to DRAM for a local request on " 
@@ -1141,7 +1151,12 @@ void privateSharedEMRA::work_table_update() {
 
                 entry->status = _WORK_UPDATE_L1_AND_L2;
 
+            } else if (m_dram_controller_location == m_id) {
+                m_to_dram_writeback_req_schedule_q.push_back(entry->dram_req);
+            } else {
+                m_to_network_schedule_q_priority[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
             }
+
             ++it_addr;
             continue;
         } else if (entry->status == _WORK_WAIT_L2_FOR_REMOTE_READ) {
@@ -1225,7 +1240,7 @@ void privateSharedEMRA::work_table_update() {
                         entry->dram_req = dram_req;
 
                         if (m_dram_controller_location == m_id) {
-                            m_to_dram_req_schedule_q.push_back(entry->dram_req);
+                            m_to_dram_writeback_req_schedule_q.push_back(entry->dram_req);
                         } else {
                             entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
                             entry->net_msg_to_send->src = m_id;
@@ -1235,7 +1250,7 @@ void privateSharedEMRA::work_table_update() {
                                 get_flit_count (1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
                             entry->net_msg_to_send->content = dram_req;
 
-                            m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
+                            m_to_network_schedule_q_priority[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
                         }
                         mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] is sending a DRAM writeback on "
                                   << l2_victim->start_maddr << " for a remote request on "
@@ -1397,7 +1412,7 @@ void privateSharedEMRA::work_table_update() {
                         entry->dram_req = dram_req;
 
                         if (m_dram_controller_location == m_id) {
-                            m_to_dram_req_schedule_q.push_back(entry->dram_req);
+                            m_to_dram_writeback_req_schedule_q.push_back(entry->dram_req);
                         } else {
                             entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
                             entry->net_msg_to_send->src = m_id;
@@ -1407,7 +1422,7 @@ void privateSharedEMRA::work_table_update() {
                                 get_flit_count (1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
                             entry->net_msg_to_send->content = dram_req;
 
-                            m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
+                            m_to_network_schedule_q_priority[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
                         }
                         mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] sends a DRAM writeback of line of " 
                             << l2_victim->start_maddr << " for a remote write request on "  
@@ -1566,7 +1581,7 @@ void privateSharedEMRA::dram_work_table_update() {
                 maddr_t start_maddr = entry->dram_req->req->maddr();
                 mh_assert(m_work_table.count(start_maddr));
                 m_work_table[start_maddr]->dram_rep = entry->dram_rep;
-                mh_log(4) << "[DRAM " << m_id << " @ " << system_time << " ] has sent a dram rep for address " 
+                mh_log(4) << "[DRAM " << m_id << " @ " << system_time << " ] has sent a DRAM rep for address " 
                           << entry->dram_rep->req->maddr() << " to core " << m_id << endl;
                 m_dram_work_table.erase(it_addr++);
                 continue;
@@ -1588,7 +1603,7 @@ void privateSharedEMRA::dram_work_table_update() {
                     if (entry->net_msg_to_send) {
                         entry->net_msg_to_send = shared_ptr<message_t>();
                     }
-                    mh_log(4) << "[DRAM " << m_id << " @ " << system_time << " ] has sent a dram rep for address " 
+                    mh_log(4) << "[DRAM " << m_id << " @ " << system_time << " ] has sent a DRAM rep for address " 
                               << entry->dram_rep->req->maddr() << " to core " << entry->dram_req->sender << endl;
                     m_dram_work_table.erase(it_addr++);
                     continue;
@@ -1634,8 +1649,32 @@ void privateSharedEMRA::accept_incoming_messages() {
         if (dram_msg->did_win_last_arbitration) {
             dram_msg->did_win_last_arbitration = false;
             m_core_receive_queues[MSG_DRAM_REQ]->pop();
+#if 0
+            if (dram_msg->req->maddr().address == 0xefff46aae0 ||
+                dram_msg->req->maddr().address == 0xefffbaaae0 ) 
+            {
+                cout << " DRAM REQ POPPED " << dram_msg->req->maddr() << " " << hex << dram_msg << dec << " @ " << system_time << " size " << m_core_receive_queues[MSG_DRAM_REQ]->size() << endl;
+                if (m_core_receive_queues[MSG_DRAM_REQ]->size()) {
+                    shared_ptr<message_t> nmsg = m_core_receive_queues[MSG_DRAM_REQ]->front();
+                    shared_ptr<dramMsg> ndram_msg = static_pointer_cast<dramMsg>(nmsg->content);
+                    cout << " DRAM REQ NEXT " << ndram_msg->req->maddr() << " " << hex << ndram_msg << dec << endl;
+                }
+            }
+#endif
             continue;
         } else {
+#if 0
+            if (dram_msg->req->maddr().address == 0xefff46aae0 ||
+                dram_msg->req->maddr().address == 0xefffbaaae0 ) 
+            {
+                cout << " DRAM REQ WAITING " << dram_msg->req->maddr() << " " << hex << dram_msg << dec << " @ " << system_time << " size " << m_core_receive_queues[MSG_DRAM_REQ]->size() << endl;
+                if (m_core_receive_queues[MSG_DRAM_REQ]->size() > 2) {
+                    shared_ptr<message_t> nmsg = m_core_receive_queues[MSG_DRAM_REQ]->at(1);
+                    shared_ptr<dramMsg> ndram_msg = static_pointer_cast<dramMsg>(nmsg->content);
+                    cout << " DRAM REQ NEXT " << ndram_msg->req->maddr() << " " << hex << ndram_msg << dec << endl;
+                }
+            }
+#endif
             m_to_dram_req_schedule_q.push_back(dram_msg);
             break;
         }
@@ -1646,6 +1685,15 @@ void privateSharedEMRA::accept_incoming_messages() {
         shared_ptr<dramMsg> dram_msg = static_pointer_cast<dramMsg>(msg->content);
         maddr_t start_maddr = dram_msg->req->maddr(); /* always access by a cache line */
         /* always for a read */
+#if 0
+        if (m_work_table.count(start_maddr) == 0) {
+            cout << "[MEM " << m_id << " @ " << system_time << " ] received a DRAM reply for " << start_maddr << " but has no entry for it" << endl;
+            cerr << "!!!!!!!!!!!!!!!!!!!!!!" << endl;
+            while(true) {
+                ;
+            }
+        }
+#endif
         mh_assert(m_work_table.count(start_maddr) > 0);
         m_work_table[start_maddr]->dram_rep = dram_msg;
         m_core_receive_queues[MSG_DRAM_REP]->pop();
@@ -1703,19 +1751,23 @@ void privateSharedEMRA::schedule_requests() {
             new_entry->breakdown->cat_action = 0;
             new_entry->breakdown->l1_serialization = 0;
             new_entry->breakdown->l1_action = 0;
-            new_entry->breakdown->l2_network = 0;
+            new_entry->breakdown->ra_req_network_plus_serialization = 0;
+            new_entry->breakdown->ra_rep_network_plus_serialization = 0;
             new_entry->breakdown->l2_serialization = 0;
             new_entry->breakdown->l2_action = 0;
-            new_entry->breakdown->dram_network_plus_serialization = 0;
+            new_entry->breakdown->dram_req_onchip_network_plus_serialization = 0;
+            new_entry->breakdown->dram_rep_onchip_network_plus_serialization = 0;
             new_entry->breakdown->dram_offchip = 0;
             new_entry->breakdown->temp_cat_serialization = 0;
             new_entry->breakdown->temp_cat_action = 0;
             new_entry->breakdown->temp_l1_serialization = 0;
             new_entry->breakdown->temp_l1_action = 0;
-            new_entry->breakdown->temp_l2_network = 0;
+            new_entry->breakdown->temp_ra_req_network_plus_serialization = 0;
+            new_entry->breakdown->temp_ra_rep_network_plus_serialization = 0;
             new_entry->breakdown->temp_l2_serialization = 0;
             new_entry->breakdown->temp_l2_action = 0;
-            new_entry->breakdown->temp_dram_network_plus_serialization = 0;
+            new_entry->breakdown->temp_dram_req_onchip_network_plus_serialization = 0;
+            new_entry->breakdown->temp_dram_rep_onchip_network_plus_serialization = 0;
             new_entry->breakdown->temp_dram_offchip = 0;
 
             shared_ptr<cacheRequest> l1_req (new cacheRequest(req->maddr(),
@@ -1781,7 +1833,7 @@ void privateSharedEMRA::schedule_requests() {
                     (is_read)? _WORK_WAIT_L2_FOR_REMOTE_READ : _WORK_WAIT_L1_AND_L2_FOR_REMOTE_WRITE;
 
                 new_entry->breakdown = req->breakdown;
-                new_entry->breakdown->l2_network += system_time - req->milestone_time;
+                new_entry->breakdown->ra_req_network_plus_serialization += system_time - req->milestone_time;
 
                 shared_ptr<cacheRequest> l2_req (new cacheRequest(req->maddr,
                                                                   (is_read)? CACHE_REQ_READ : CACHE_REQ_WRITE,
@@ -1835,17 +1887,54 @@ void privateSharedEMRA::schedule_requests() {
     m_req_schedule_q.clear();
 
     /* 4 : arbitrate inputs to dram work table */
+    random_shuffle(m_to_dram_writeback_req_schedule_q.begin(), m_to_dram_writeback_req_schedule_q.end(), rr_fn);
+    while (m_to_dram_writeback_req_schedule_q.size()) {
+        mh_assert(m_dram_controller);
+        shared_ptr<dramMsg> msg = m_to_dram_writeback_req_schedule_q.front();
+        shared_ptr<breakdownInfo> breakdown = msg->breakdown;
+        if (m_dram_controller->available()) {
+            if (msg->req->is_read()) {
+
+                breakdown->dram_req_onchip_network_plus_serialization = system_time - msg->milestone_time;
+
+                mh_assert(!m_dram_work_table.count(msg->req->maddr()));
+
+                shared_ptr<toDRAMEntry> new_entry(new toDRAMEntry);
+                new_entry->dram_req = msg;
+                new_entry->dram_rep = shared_ptr<dramMsg>();
+                new_entry->net_msg_to_send = shared_ptr<message_t>();
+                new_entry->breakdown = breakdown;
+
+                /* cost breakdown study */
+                new_entry->milestone_time = system_time;
+
+                m_dram_work_table[msg->req->maddr()] = new_entry;
+            }
+            /* if write, make a request and done */
+            m_dram_controller->request(msg->req);
+            msg->did_win_last_arbitration = true;
+        }
+        m_to_dram_writeback_req_schedule_q.erase(m_to_dram_writeback_req_schedule_q.begin());
+    }
+
     random_shuffle(m_to_dram_req_schedule_q.begin(), m_to_dram_req_schedule_q.end(), rr_fn);
     while (m_to_dram_req_schedule_q.size()) {
         mh_assert(m_dram_controller);
         shared_ptr<dramMsg> msg = m_to_dram_req_schedule_q.front();
         shared_ptr<breakdownInfo> breakdown = msg->breakdown;
-        if (m_dram_controller->available()) {
+        if (m_dram_controller->available() && !m_dram_work_table.count(msg->req->maddr())) {
+
+#if 0
+            if (msg->req->maddr().address == 0xefff46aae0 ||
+                msg->req->maddr().address == 0xefffbaaae0 ) 
+            {
+                cout << " RECEIVED DRAM REQ " << msg->req->maddr() << " @ " << system_time << endl;
+            }
+#endif
+
             if (msg->req->is_read()) {
 
-                breakdown->dram_network_plus_serialization = system_time - msg->milestone_time;
-
-                mh_assert(!m_dram_work_table.count(msg->req->maddr()));
+                breakdown->dram_req_onchip_network_plus_serialization = system_time - msg->milestone_time;
 
                 shared_ptr<toDRAMEntry> new_entry(new toDRAMEntry);
                 new_entry->dram_req = msg;
@@ -2002,6 +2091,41 @@ void privateSharedEMRA::schedule_requests() {
     m_l2_write_req_schedule_q.clear();
 
     /* networks */
+    for (uint32_t it_channel = 0; it_channel < NUM_MSG_TYPES; ++it_channel) {
+        random_shuffle(m_to_network_schedule_q_priority[it_channel].begin(), m_to_network_schedule_q_priority[it_channel].end(), rr_fn);
+        while (m_to_network_schedule_q_priority[it_channel].size()) {
+            shared_ptr<message_t> msg = m_to_network_schedule_q_priority[it_channel].front();
+            if (m_core_send_queues[it_channel]->push_back(msg)) {
+                mh_log(4) << "[NETpriority " << m_id << " @ " << system_time << " ] network msg gone " 
+                          << m_id << " -> " << msg->dst << " type " << it_channel << " num flits " << msg->flit_count << endl;
+                switch (it_channel) {
+                case MSG_DATA_REQ:
+                case MSG_DATA_REP:
+                    {
+                        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+                        data_msg->did_win_last_arbitration = true;
+                        break;
+                    }
+                case MSG_DRAM_REQ:
+                case MSG_DRAM_REP:
+                    {
+                        shared_ptr<dramMsg> dram_msg = static_pointer_cast<dramMsg>(msg->content);
+                        dram_msg->did_win_last_arbitration = true;
+                        break;
+                    }
+                default:
+                    mh_assert(false);
+                    break;
+                }
+            } else {
+                break;
+            }
+            m_to_network_schedule_q_priority[it_channel].erase(m_to_network_schedule_q_priority[it_channel].begin());
+        }
+    }
+    m_to_network_schedule_q_priority.clear();
+
+
     for (uint32_t it_channel = 0; it_channel < NUM_MSG_TYPES; ++it_channel) {
         random_shuffle(m_to_network_schedule_q[it_channel].begin(), m_to_network_schedule_q[it_channel].end(), rr_fn);
         while (m_to_network_schedule_q[it_channel].size()) {

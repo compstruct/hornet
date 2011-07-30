@@ -9,8 +9,12 @@ privateSharedEMRAStatsPerTile::privateSharedEMRAStatsPerTile(uint32_t id, const 
     m_memory_subsystem_serialization_cost(0),
     m_cat_serialization_cost(0), m_cat_action_cost(0),
     m_l1_serialization_cost(0), m_l1_action_cost(0), 
-    m_l2_network_plus_serialization_cost(0), m_l2_action_cost(0), 
-    m_dram_network_plus_serialization_cost(0), m_dram_offchip_network_plus_dram_action_cost(0),
+    m_ra_req_network_plus_serialization_cost(0), m_ra_rep_network_plus_serialization_cost(0),
+    m_l2_serialization_cost(0), 
+    m_l2_action_cost(0), 
+    m_dram_req_onchip_network_plus_serialization_cost(0),
+    m_dram_rep_onchip_network_plus_serialization_cost(0),
+    m_dram_offchip_network_plus_dram_action_cost(0),
     m_l1_action(0), m_l2_action(0) { }
 
 privateSharedEMRAStatsPerTile::~privateSharedEMRAStatsPerTile() {}
@@ -73,9 +77,12 @@ void privateSharedEMRAStats::print_stats(ostream &out) {
     uint64_t total_cat_action_cost = 0;
     uint64_t total_l1_serialization_cost = 0;
     uint64_t total_l1_action_cost = 0;
-    uint64_t total_l2_network_plus_serialization_cost = 0;
+    uint64_t total_ra_req_network_plus_serialization_cost = 0;
+    uint64_t total_ra_rep_network_plus_serialization_cost = 0;
+    uint64_t total_l2_serialization_cost = 0;
     uint64_t total_l2_action_cost = 0;
-    uint64_t total_dram_network_plus_serialization_cost = 0;
+    uint64_t total_dram_req_onchip_network_plus_serialization_cost = 0;
+    uint64_t total_dram_rep_onchip_network_plus_serialization_cost = 0;
     uint64_t total_dram_offchip_network_plus_dram_action_cost = 0;
     uint64_t total_l1_action = 0;
     uint64_t total_l2_action = 0;
@@ -132,9 +139,12 @@ void privateSharedEMRAStats::print_stats(ostream &out) {
         total_cat_action_cost += st->m_cat_action_cost;
         total_l1_serialization_cost += st->m_l1_serialization_cost;
         total_l1_action_cost += st->m_l1_action_cost;
-        total_l2_network_plus_serialization_cost += st->m_l2_network_plus_serialization_cost;
+        total_ra_req_network_plus_serialization_cost += st->m_ra_req_network_plus_serialization_cost;
+        total_ra_rep_network_plus_serialization_cost += st->m_ra_rep_network_plus_serialization_cost;
+        total_l2_serialization_cost += st->m_l2_serialization_cost;
         total_l2_action_cost += st->m_l2_action_cost;
-        total_dram_network_plus_serialization_cost += st->m_dram_network_plus_serialization_cost;
+        total_dram_req_onchip_network_plus_serialization_cost += st->m_dram_req_onchip_network_plus_serialization_cost;
+        total_dram_rep_onchip_network_plus_serialization_cost += st->m_dram_rep_onchip_network_plus_serialization_cost;
         total_dram_offchip_network_plus_dram_action_cost += st->m_dram_offchip_network_plus_dram_action_cost;
         total_l1_action += st->m_l1_action;
         total_l2_action += st->m_l2_action;
@@ -172,12 +182,16 @@ void privateSharedEMRAStats::print_stats(ostream &out) {
     out << str << endl;
 
     /* cost breakdown study */
-    sprintf(str, "[Latency Breakdown ] MEM-S: %ld L1-N&S: %ld L1: %ld CAT-S: %ld CAT: %ld L2-N&S: %ld "
-                 "L2: %ld DRAM-N&S: %ld DRAM-Offchip: %ld", total_memory_subsystem_serialization_cost,
+    sprintf(str, "[Latency Breakdown: Private-shared-EMRA ] MEM-S: %ld L1-S: %ld L1: %ld CAT-S: %ld CAT: %ld RAreq-N&S: %ld RArep-N&S: %ld"
+                 "L2-S: %ld L2: %ld DRAMreq-onchip-N&S: %ld DRAMrep-onchip-N&S: %ld DRAM-offchip: %ld", 
+                 total_memory_subsystem_serialization_cost,
                  total_l1_serialization_cost, total_l1_action_cost, 
                  total_cat_serialization_cost, total_cat_action_cost,
-                 total_l2_network_plus_serialization_cost, total_l2_action_cost,
-                 total_dram_network_plus_serialization_cost, total_dram_offchip_network_plus_dram_action_cost);
+                 total_ra_req_network_plus_serialization_cost, total_ra_rep_network_plus_serialization_cost,
+                 total_l2_serialization_cost, total_l2_action_cost,
+                 total_dram_req_onchip_network_plus_serialization_cost, 
+                 total_dram_rep_onchip_network_plus_serialization_cost, 
+                 total_dram_offchip_network_plus_dram_action_cost);
 
     out << str << endl;
 

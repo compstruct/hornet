@@ -29,9 +29,12 @@ public:
     inline void add_cat_action_cost(uint64_t cost) { m_cat_action_cost += cost; }
     inline void add_l1_serialization_cost(uint64_t cost) { m_l1_serialization_cost += cost; }
     inline void add_l1_action_cost(uint64_t cost) { m_l1_action_cost += cost; }
-    inline void add_l2_network_plus_serialization_cost(uint64_t cost) { m_l2_network_plus_serialization_cost += cost; }
+    inline void add_ra_req_network_plus_serialization_cost(uint64_t cost) { m_ra_req_network_plus_serialization_cost += cost; }
+    inline void add_ra_rep_network_plus_serialization_cost(uint64_t cost) { m_ra_rep_network_plus_serialization_cost += cost; }
+    inline void add_l2_serialization_cost(uint64_t cost) { m_l2_serialization_cost += cost; }
     inline void add_l2_action_cost(uint64_t cost) { m_l2_action_cost += cost; }
-    inline void add_dram_network_plus_serialization_cost(uint64_t cost) { m_dram_network_plus_serialization_cost += cost; }
+    inline void add_dram_req_onchip_network_plus_serialization_cost(uint64_t cost) { m_dram_req_onchip_network_plus_serialization_cost += cost; }
+    inline void add_dram_rep_onchip_network_plus_serialization_cost(uint64_t cost) { m_dram_rep_onchip_network_plus_serialization_cost += cost; }
     inline void add_dram_offchip_network_plus_dram_action_cost(uint64_t cost) { m_dram_offchip_network_plus_dram_action_cost += cost; }
     inline void add_l1_action() { ++m_l1_action; }
     inline void add_l2_action() { ++m_l2_action; }
@@ -53,9 +56,12 @@ private:
     uint64_t m_cat_action_cost;
     uint64_t m_l1_serialization_cost;
     uint64_t m_l1_action_cost;
-    uint64_t m_l2_network_plus_serialization_cost;
+    uint64_t m_ra_req_network_plus_serialization_cost;
+    uint64_t m_ra_rep_network_plus_serialization_cost;
+    uint64_t m_l2_serialization_cost;
     uint64_t m_l2_action_cost;
-    uint64_t m_dram_network_plus_serialization_cost;
+    uint64_t m_dram_req_onchip_network_plus_serialization_cost;
+    uint64_t m_dram_rep_onchip_network_plus_serialization_cost;
     uint64_t m_dram_offchip_network_plus_dram_action_cost;
     uint64_t m_l1_action;
     uint64_t m_l2_action;

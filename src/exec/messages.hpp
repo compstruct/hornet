@@ -29,6 +29,7 @@ public:
     bool push_back(shared_ptr<message_t> msg);
     inline shared_ptr<message_t> front() { assert(size()>0); return m_queue.front(); }
     bool pop();
+    inline shared_ptr<message_t> at(uint32_t idx) { return m_queue.at(idx); }
  
 private:
     uint32_t m_type;

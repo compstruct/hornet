@@ -90,20 +90,24 @@ public:
         uint64_t cat_action;
         uint64_t l1_serialization;
         uint64_t l1_action;
-        uint64_t l2_network;
+        uint64_t ra_req_network_plus_serialization;
+        uint64_t ra_rep_network_plus_serialization;
         uint64_t l2_serialization;
         uint64_t l2_action;
-        uint64_t dram_network_plus_serialization;
+        uint64_t dram_req_onchip_network_plus_serialization;
+        uint64_t dram_rep_onchip_network_plus_serialization;
         uint64_t dram_offchip;
 
         uint64_t temp_cat_serialization;
         uint64_t temp_cat_action;
         uint64_t temp_l1_serialization;
         uint64_t temp_l1_action;
-        uint64_t temp_l2_network;
+        uint64_t temp_ra_req_network_plus_serialization;
+        uint64_t temp_ra_rep_network_plus_serialization;
         uint64_t temp_l2_serialization;
         uint64_t temp_l2_action;
-        uint64_t temp_dram_network_plus_serialization;
+        uint64_t temp_dram_req_onchip_network_plus_serialization;
+        uint64_t temp_dram_rep_onchip_network_plus_serialization;
         uint64_t temp_dram_offchip;
 
     } breakdownInfo;
@@ -177,6 +181,7 @@ private:
 
         shared_ptr<coherenceMsg> data_rep;
 
+        /* writeback is prior to other requests */
         shared_ptr<dramMsg> dram_req;
         shared_ptr<dramMsg> dram_rep;
 
@@ -241,10 +246,12 @@ private:
     vector<shared_ptr<memoryRequest> > m_core_port_schedule_q; 
     vector<tuple<bool/* is a memoryRequest type */, shared_ptr<void> > > m_req_schedule_q;
 
+    vector<shared_ptr<dramMsg> > m_to_dram_writeback_req_schedule_q;
     vector<shared_ptr<dramMsg> > m_to_dram_req_schedule_q;
 
     /* scheduler queues for sending messages to the network */
     map<uint32_t/* per channel*/, vector<shared_ptr<message_t> > > m_to_network_schedule_q;
+    map<uint32_t/* per channel*/, vector<shared_ptr<message_t> > > m_to_network_schedule_q_priority;
 
     /* to-memory request scheduler */
     vector<shared_ptr<catRequest> > m_cat_req_schedule_q;
