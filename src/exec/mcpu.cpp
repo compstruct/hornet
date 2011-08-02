@@ -958,7 +958,7 @@ void mcpu::syscall(uint32_t call_no) throw(err) {
         // 2.) call
         char * walk; char * data_buffer;
         data_buffer = (char *) malloc(size);  walk = data_buffer; 
-        char lc = NULL; uint32_t write_count;
+        char lc = '\0'; uint32_t write_count;
         for (write_count = 0; write_count < count; write_count++) {
             if (feof(fid_value)) break;
             lc = fgetc(fid_value);
