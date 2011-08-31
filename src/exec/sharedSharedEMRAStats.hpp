@@ -1,16 +1,16 @@
 // -*- mode:c++; c-style:k&r; c-basic-offset:4; indent-tabs-mode: nil; -*-
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
-#ifndef __PRIVATE_SHARED_EMRA_STATS_HPP__
-#define __PRIVATE_SHARED_EMRA_STATS_HPP__
+#ifndef __SHARED_SHARED_EMRA_STATS_HPP__
+#define __SHARED_SHARED_EMRA_STATS_HPP__
 
 #include "memStats.hpp"
 #include "memory_types.hpp"
 
-class privateSharedEMRAStatsPerTile : public memStatsPerTile {
+class sharedSharedEMRAStatsPerTile : public memStatsPerTile {
 public:
-    privateSharedEMRAStatsPerTile(uint32_t id, const uint64_t &system_time);
-    virtual ~privateSharedEMRAStatsPerTile();
+    sharedSharedEMRAStatsPerTile(uint32_t id, const uint64_t &system_time);
+    virtual ~sharedSharedEMRAStatsPerTile();
 
     void did_read_l1(bool hit);
     void did_write_l1(bool hit);
@@ -39,7 +39,7 @@ public:
     inline void add_l1_action() { ++m_l1_action; }
     inline void add_l2_action() { ++m_l2_action; }
 
-    friend class privateSharedEMRAStats;
+    friend class sharedSharedEMRAStats;
 
 private:
 
@@ -68,10 +68,10 @@ private:
 
 };
 
-class privateSharedEMRAStats : public memStats {
+class sharedSharedEMRAStats : public memStats {
 public:
-    privateSharedEMRAStats(const uint64_t &system_time);
-    virtual ~privateSharedEMRAStats();
+    sharedSharedEMRAStats(const uint64_t &system_time);
+    virtual ~sharedSharedEMRAStats();
 
 protected:
     virtual void print_stats(ostream &out);

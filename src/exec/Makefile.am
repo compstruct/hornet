@@ -9,7 +9,8 @@ AM_CXXFLAGS = -Wall -Werror
 
 noinst_LTLIBRARIES = libdarexec.la
 
-libdarexec_la_SOURCES = memory_types.hpp memory_types.cpp \
+libdarexec_la_SOURCES = sharedMemory.hpp \
+                        memory_types.hpp memory_types.cpp \
                         messages.hpp messages.cpp \
                         memory.hpp memory.cpp  \
                         cat.hpp cat.cpp \
@@ -23,8 +24,10 @@ libdarexec_la_SOURCES = memory_types.hpp memory_types.cpp \
                         privateSharedMSI.hpp privateSharedMSI.cpp \
                         privateSharedLCC.hpp privateSharedLCC.cpp \
                         privateSharedEMRA.hpp privateSharedEMRA.cpp \
+                        sharedSharedEMRA.hpp sharedSharedEMRA.cpp \
                         memStats.hpp memStats.cpp \
 					    mcpu.hpp mcpu.cpp \
                         privateSharedMSIStats.hpp privateSharedMSIStats.cpp \
                         privateSharedLCCStats.hpp privateSharedLCCStats.cpp \
-                        privateSharedEMRAStats.hpp privateSharedEMRAStats.cpp
+                        privateSharedEMRAStats.hpp privateSharedEMRAStats.cpp \
+                        sharedSharedEMRAStats.hpp sharedSharedEMRAStats.cpp

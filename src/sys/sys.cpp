@@ -23,13 +23,12 @@
 #include "id_factory.hpp"
 #include "sys.hpp"
 #include "ginj.hpp"
-/* cores */
+/* cores and threads */
 #include "memtraceCore.hpp"
+#include "memtraceThread.hpp"
 #include "mcpu.hpp"
 /* memories */
-#include "privateSharedMSI.hpp"
-#include "privateSharedLCC.hpp"
-#include "privateSharedEMRA.hpp"
+#include "sharedMemory.hpp"
 
 typedef enum {
     CORE_MIPS_MPI = 0,
@@ -181,9 +180,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     vector<shared_ptr<memtraceCore> > memtrace_cores;
     shared_ptr<memtraceThreadPool> memtrace_thread_pool(new memtraceThreadPool());
 
-    shared_ptr<privateSharedMSIStats> private_shared_msi_stats = shared_ptr<privateSharedMSIStats>();
-    shared_ptr<privateSharedLCCStats> private_shared_lcc_stats = shared_ptr<privateSharedLCCStats>();
-    shared_ptr<privateSharedEMRAStats> private_shared_emra_stats = shared_ptr<privateSharedEMRAStats>();
+    shared_ptr<memStats> mem_stats = shared_ptr<memStats>();
 
     shared_ptr<dram> new_dram(new dram());
     shared_ptr<SynchedCATModel> cat_model(new SynchedCATModel());
@@ -369,10 +366,10 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     cfg.l2_num_write_ports = read_word(img);
 
                     assert(support_em == false);
-                    if (private_shared_msi_stats == shared_ptr<privateSharedMSIStats>()) {
-                        private_shared_msi_stats = 
+                    if (mem_stats == shared_ptr<memStats>()) {
+                        mem_stats = 
                             shared_ptr<privateSharedMSIStats>(new privateSharedMSIStats(t->get_time()));
-                        stats->add_aux_statistics(private_shared_msi_stats);
+                        stats->add_aux_statistics(mem_stats);
                     }
                     shared_ptr<privateSharedMSI> new_mem = 
                         shared_ptr<privateSharedMSI>(new privateSharedMSI(id, t->get_time(), 
@@ -381,7 +378,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                         shared_ptr<privateSharedMSIStatsPerTile>(new privateSharedMSIStatsPerTile(id, t->get_time()));
                     new_mem->set_per_tile_stats(per_tile_stats);
 
-                    private_shared_msi_stats->add_per_tile_stats(per_tile_stats);
+                    mem_stats->add_per_tile_stats(per_tile_stats);
 
                     mem = new_mem;
 
@@ -414,10 +411,10 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     cfg.l2_num_read_ports = read_word(img);
                     cfg.l2_num_write_ports = read_word(img);
 
-                    if (private_shared_lcc_stats == shared_ptr<privateSharedLCCStats>()) {
-                        private_shared_lcc_stats = 
+                    if (mem_stats == shared_ptr<memStats>()) {
+                        mem_stats = 
                             shared_ptr<privateSharedLCCStats>(new privateSharedLCCStats(t->get_time()));
-                        stats->add_aux_statistics(private_shared_lcc_stats);
+                        stats->add_aux_statistics(mem_stats);
                     }
 
                     shared_ptr<privateSharedLCC> new_mem = 
@@ -427,7 +424,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                         shared_ptr<privateSharedLCCStatsPerTile>(new privateSharedLCCStatsPerTile(id, t->get_time()));
                     new_mem->set_per_tile_stats(per_tile_stats);
 
-                    private_shared_lcc_stats->add_per_tile_stats(per_tile_stats);
+                    mem_stats->add_per_tile_stats(per_tile_stats);
 
                     mem = new_mem;
 
@@ -456,10 +453,10 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     cfg.l2_num_read_ports = read_word(img);
                     cfg.l2_num_write_ports = read_word(img);
 
-                    if (private_shared_emra_stats == shared_ptr<privateSharedEMRAStats>()) {
-                        private_shared_emra_stats = 
+                    if (mem_stats == shared_ptr<memStats>()) {
+                        mem_stats = 
                             shared_ptr<privateSharedEMRAStats>(new privateSharedEMRAStats(t->get_time()));
-                        stats->add_aux_statistics(private_shared_emra_stats);
+                        stats->add_aux_statistics(mem_stats);
                     }
 
                     shared_ptr<privateSharedEMRA> new_mem = 
@@ -469,12 +466,55 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                         shared_ptr<privateSharedEMRAStatsPerTile>(new privateSharedEMRAStatsPerTile(id, t->get_time()));
                     new_mem->set_per_tile_stats(per_tile_stats);
 
-                    private_shared_emra_stats->add_per_tile_stats(per_tile_stats);
+                    mem_stats->add_per_tile_stats(per_tile_stats);
 
                     mem = new_mem;
 
                     break;
                 }
+            case MEM_SHARED_SHARED_EMRA:
+                {
+                    sharedSharedEMRA::sharedSharedEMRACfg_t cfg;
+                    cfg.logic = (sharedSharedEMRA::emraLogic_t)read_word(img);
+                    cfg.num_nodes = num_nodes;
+                    cfg.bytes_per_flit = bytes_per_flit;
+                    cfg.address_size_in_bytes = address_size_in_bytes;
+                    cfg.work_table_size= read_word(img);
+                    cfg.l1_replacement_policy = (sharedSharedEMRA::_replacementPolicy_t)read_word(img);
+                    cfg.l2_replacement_policy = (sharedSharedEMRA::_replacementPolicy_t)read_word(img);                 
+                    cfg.words_per_cache_line = read_word(img);
+                    cfg.num_local_core_ports = read_word(img);
+                    cfg.lines_in_l1 = read_word(img);
+                    cfg.l1_associativity = read_word(img);
+                    cfg.l1_hit_test_latency = read_word(img);
+                    cfg.l1_num_read_ports = read_word(img);
+                    cfg.l1_num_write_ports = read_word(img);
+                    cfg.lines_in_l2 = read_word(img);
+                    cfg.l2_associativity = read_word(img);
+                    cfg.l2_hit_test_latency = read_word(img);
+                    cfg.l2_num_read_ports = read_word(img);
+                    cfg.l2_num_write_ports = read_word(img);
+
+                    if (mem_stats == shared_ptr<sharedSharedEMRAStats>()) {
+                        mem_stats = 
+                            shared_ptr<sharedSharedEMRAStats>(new sharedSharedEMRAStats(t->get_time()));
+                        stats->add_aux_statistics(mem_stats);
+                    }
+
+                    shared_ptr<sharedSharedEMRA> new_mem = 
+                        shared_ptr<sharedSharedEMRA>(new sharedSharedEMRA(id, t->get_time(), 
+                                                                            t->get_statistics(), log, ran, new_cat, cfg));
+                    shared_ptr<sharedSharedEMRAStatsPerTile> per_tile_stats = 
+                        shared_ptr<sharedSharedEMRAStatsPerTile>(new sharedSharedEMRAStatsPerTile(id, t->get_time()));
+                    new_mem->set_per_tile_stats(per_tile_stats);
+
+                    mem_stats->add_per_tile_stats(per_tile_stats);
+
+                    mem = new_mem;
+
+                    break;
+                }
+
             default:
                 {
                     throw err_bad_shmem_cfg("not supported memory type");
@@ -639,10 +679,10 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             cfg.l2_num_read_ports = read_word(img);
             cfg.l2_num_write_ports = read_word(img);
 
-            if (private_shared_msi_stats == shared_ptr<privateSharedMSIStats>()) {
-                private_shared_msi_stats = 
+            if (mem_stats == shared_ptr<memStats>()) {
+                mem_stats = 
                     shared_ptr<privateSharedMSIStats>(new privateSharedMSIStats(t->get_time()));
-                stats->add_aux_statistics(private_shared_msi_stats);
+                stats->add_aux_statistics(mem_stats);
             }
 
             // form new caches
@@ -658,7 +698,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             new_data_memory->set_per_tile_stats(per_tile_stats);
             //new_instruction_memory->set_per_tile_stats(per_tile_stats);
 
-            private_shared_msi_stats->add_per_tile_stats(per_tile_stats);
+            mem_stats->add_per_tile_stats(per_tile_stats);
 
             data_memory = new_data_memory;
             //instruction_memory = new_instruction_memory;

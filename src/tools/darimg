@@ -357,7 +357,9 @@ def get_core_cfgs(cfg, core):
 def get_memory_cfgs(cfg, core):
     memory_id = {'private-shared MSI/MESI':0, 
                  'private-shared LCC':1,
-                 'private-shared EMRA':2}
+                 'private-shared EMRA':2,
+                 'shared-shared EMRA':3,
+                 'shared-shared LCC':4}
     ret = []
     if core in ['mips_mpi', 'injector']:
         # need no memory configurations
@@ -466,7 +468,7 @@ def get_memory_cfgs(cfg, core):
     else:
         ret.append(4)
 
-    if memory_arch in ['private-shared EMRA']:
+    if memory_arch in ['private-shared EMRA', 'shared-shared EMRA']:
         section = 'memory::' + memory_arch
         emra_logic_id = {'ra only':0, 'em only':1 }
         if cfg.has_option(section, 'EMRA logic'):
@@ -589,8 +591,10 @@ def get_memory_cfgs(cfg, core):
                 ret.append(option_id['LRU'])
 
     # cache configuration (L1L2)
-    if memory_arch in ['private-shared MSI/MESI', 'private-shared LCC', \
-                       'private-shared EMRA']:
+    if memory_arch in ['private-shared MSI/MESI', \
+                       'private-shared LCC', \
+                       'private-shared EMRA', \
+                       'shared-shared EMRA' ]:
         section = 'memory::' + memory_arch
         if cfg.has_option(section, 'words per cache line'):
             ret.append(int(cfg.get(section, 'words per cache line')))

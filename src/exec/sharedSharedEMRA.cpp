@@ -1,7 +1,7 @@
 // -*- mode:c++; c-style:k&r; c-basic-offset:5; indent-tabs-mode: nil; -*-
 // vi:set et cin sw=4 cino=>se0n0f0{0}0^0\:0=sl1g0hspst0+sc3C0/0(0u0U0w0m0:
 
-#include "privateSharedEMRA.hpp"
+#include "sharedSharedEMRA.hpp"
 #include "messages.hpp"
 #include <boost/function.hpp>
 #include <boost/bind.hpp>
@@ -15,9 +15,6 @@
 #define DEBUG
 #undef DEBUG
 
-#define REPORT_BREAKDOWN
-#undef REPORT_BREAKDOWN
-
 #ifdef DEBUG
 #define mh_log(X) if(true) cout
 #define mh_assert(X) assert(X)
@@ -27,55 +24,55 @@
 #endif
 
 static void l1_invalidation_hook(cacheLine &line) {
-    shared_ptr<privateSharedEMRA::coherenceInfo> info = 
-        static_pointer_cast<privateSharedEMRA::coherenceInfo>(line.coherence_info);
+    shared_ptr<sharedSharedEMRA::coherenceInfo> info = 
+        static_pointer_cast<sharedSharedEMRA::coherenceInfo>(line.coherence_info);
     *(info->in_l1) = false;
 }
 
 static shared_ptr<void> copy_coherence_info(shared_ptr<void> source) { 
-    shared_ptr<privateSharedEMRA::coherenceInfo> ret
-        (new privateSharedEMRA::coherenceInfo(*static_pointer_cast<privateSharedEMRA::coherenceInfo>(source)));
+    shared_ptr<sharedSharedEMRA::coherenceInfo> ret
+        (new sharedSharedEMRA::coherenceInfo(*static_pointer_cast<sharedSharedEMRA::coherenceInfo>(source)));
     return ret;
 }
 
 static void cache_reserve_line(cacheLine &line) { 
     if (!line.coherence_info) {
         line.coherence_info = 
-            shared_ptr<privateSharedEMRA::coherenceInfo>(new privateSharedEMRA::coherenceInfo);
+            shared_ptr<sharedSharedEMRA::coherenceInfo>(new sharedSharedEMRA::coherenceInfo);
     }
     return; 
 }
 
 static bool l2_can_evict_line_inclusive(cacheLine &line, const uint64_t& system_time) {
-    shared_ptr<privateSharedEMRA::coherenceInfo> info = 
-        static_pointer_cast<privateSharedEMRA::coherenceInfo>(line.coherence_info);
+    shared_ptr<sharedSharedEMRA::coherenceInfo> info = 
+        static_pointer_cast<sharedSharedEMRA::coherenceInfo>(line.coherence_info);
     return !*(info->in_l1);
 }
 
-privateSharedEMRA::privateSharedEMRA(uint32_t id, 
+sharedSharedEMRA::sharedSharedEMRA(uint32_t id, 
                                    const uint64_t &t, 
                                    shared_ptr<tile_statistics> st, 
                                    logger &l, 
                                    shared_ptr<random_gen> r, 
                                    shared_ptr<cat> a_cat, 
-                                   privateSharedEMRACfg_t cfg) :
+                                   sharedSharedEMRACfg_t cfg) :
     memory(id, t, st, l, r), 
     m_cfg(cfg), 
     m_l1(NULL), 
     m_l2(NULL), 
     m_cat(a_cat), 
-    m_stats(shared_ptr<privateSharedEMRAStatsPerTile>()),
+    m_stats(shared_ptr<sharedSharedEMRAStatsPerTile>()),
     m_work_table_vacancy(cfg.work_table_size),
     m_available_core_ports(cfg.num_local_core_ports)
 {
     if (m_cfg.bytes_per_flit == 0) throw err_bad_shmem_cfg("flit size must be non-zero.");
     if (m_cfg.words_per_cache_line == 0) throw err_bad_shmem_cfg("cache line size must be non-zero.");
-    if (m_cfg.lines_in_l1 == 0) throw err_bad_shmem_cfg("privateSharedEMRA : L1 size must be non-zero.");
-    if (m_cfg.lines_in_l2 == 0) throw err_bad_shmem_cfg("privateSharedEMRA : L2 size must be non-zero.");
+    if (m_cfg.lines_in_l1 == 0) throw err_bad_shmem_cfg("sharedSharedEMRA : L1 size must be non-zero.");
+    if (m_cfg.lines_in_l2 == 0) throw err_bad_shmem_cfg("sharedSharedEMRA : L2 size must be non-zero.");
     if (m_cfg.work_table_size == 0) 
-        throw err_bad_shmem_cfg("privateSharedEMRA : work table must be non-zero.");
+        throw err_bad_shmem_cfg("sharedSharedEMRA : work table must be non-zero.");
     if (m_cfg.work_table_size <= m_cfg.num_local_core_ports) 
-        throw err_bad_shmem_cfg("privateSharedEMRA : work table size must be greater than local core ports.");
+        throw err_bad_shmem_cfg("sharedSharedEMRA : work table size must be greater than local core ports.");
 
     replacementPolicy_t l1_policy, l2_policy;
 
@@ -117,14 +114,14 @@ privateSharedEMRA::privateSharedEMRA(uint32_t id,
 
 }
 
-privateSharedEMRA::~privateSharedEMRA() {
+sharedSharedEMRA::~sharedSharedEMRA() {
     delete m_l1;
     delete m_l2;
 }
 
-uint32_t privateSharedEMRA::number_of_mem_msg_types() { return NUM_MSG_TYPES; }
+uint32_t sharedSharedEMRA::number_of_mem_msg_types() { return NUM_MSG_TYPES; }
 
-void privateSharedEMRA::request(shared_ptr<memoryRequest> req) {
+void sharedSharedEMRA::request(shared_ptr<memoryRequest> req) {
 
     /* assumes a request is not across multiple cache lines */
     uint32_t __attribute__((unused)) byte_offset = req->maddr().address%(m_cfg.words_per_cache_line*4);
@@ -137,7 +134,7 @@ void privateSharedEMRA::request(shared_ptr<memoryRequest> req) {
 
 }
 
-void privateSharedEMRA::tick_positive_edge() {
+void sharedSharedEMRA::tick_positive_edge() {
     /* schedule and make requests */
 #ifdef PRINT_PROGRESS
     static uint64_t last_served[64];
@@ -162,7 +159,7 @@ void privateSharedEMRA::tick_positive_edge() {
     }
 }
 
-void privateSharedEMRA::tick_negative_edge() {
+void sharedSharedEMRA::tick_negative_edge() {
 
     m_l1->tick_negative_edge();
     m_l2->tick_negative_edge();
@@ -180,8 +177,8 @@ void privateSharedEMRA::tick_negative_edge() {
 
 }
 
-void privateSharedEMRA::apply_breakdown_info(shared_ptr<breakdownInfo> breakdown) {
-    if (stats_enabled() && breakdown) {
+void sharedSharedEMRA::apply_breakdown_info(shared_ptr<breakdownInfo> breakdown) {
+    if (stats_enabled()) {
         stats()->add_memory_subsystem_serialization_cost(breakdown->mem_serialization);
         stats()->add_cat_serialization_cost(breakdown->cat_serialization);
         stats()->add_cat_action_cost(breakdown->cat_action);
@@ -197,7 +194,7 @@ void privateSharedEMRA::apply_breakdown_info(shared_ptr<breakdownInfo> breakdown
     }
 }
 
-void privateSharedEMRA::work_table_update() {
+void sharedSharedEMRA::work_table_update() {
     for (workTable::iterator it_addr = m_work_table.begin(); it_addr != m_work_table.end(); ) {
 
         maddr_t start_maddr = it_addr->first;
@@ -251,16 +248,14 @@ void privateSharedEMRA::work_table_update() {
                           << core_req->maddr() << endl;
 
                 if (stats_enabled()) {
-                    if (breakdown) {
-                        breakdown->cat_serialization = breakdown->temp_cat_serialization = 0;
-                        breakdown->cat_action = breakdown->temp_cat_action = 0;
-                        breakdown->l1_serialization = breakdown->temp_l1_serialization;
-                        breakdown->l1_action += system_time - l1_req->milestone_time();
-                        breakdown->temp_l1_serialization = 0;
-                        breakdown->temp_l1_action = 0;
+                    breakdown->cat_serialization = breakdown->temp_cat_serialization = 0;
+                    breakdown->cat_action = breakdown->temp_cat_action = 0;
+                    breakdown->l1_serialization = breakdown->temp_l1_serialization;
+                    breakdown->l1_action += system_time - l1_req->milestone_time();
+                    breakdown->temp_l1_serialization = 0;
+                    breakdown->temp_l1_action = 0;
 
-                        apply_breakdown_info(breakdown);
-                    }
+                    apply_breakdown_info(breakdown);
                     stats()->did_read_l1(true);
                     stats()->did_finish_read(system_time - entry->requested_time);
                 }
@@ -271,16 +266,12 @@ void privateSharedEMRA::work_table_update() {
             } else {
                 
                 if (cat_req->milestone_time() != UINT64_MAX && cat_req->status() == CAT_REQ_DONE) {
-                    if (breakdown) {
-                        breakdown->temp_cat_action += system_time - cat_req->milestone_time();
-                    }
+                    breakdown->temp_cat_action += system_time - cat_req->milestone_time();
                     cat_req->set_milestone_time(UINT64_MAX);
                 } 
 
                 if (l1_req->milestone_time() != UINT64_MAX && l1_req->status() == CACHE_REQ_MISS) {
-                    if (breakdown) {
-                        breakdown->temp_l1_action += system_time - l1_req->milestone_time();
-                    }
+                    breakdown->temp_l1_action += system_time - l1_req->milestone_time();
                     l1_req->set_milestone_time(UINT64_MAX);
                 }
 
@@ -303,14 +294,12 @@ void privateSharedEMRA::work_table_update() {
 
                     /* CAT is the critical path */
                     entry->l1_req = shared_ptr<cacheRequest>();
-                    if (breakdown) {
-                        breakdown->l1_serialization = breakdown->temp_l1_serialization = 0;
-                        breakdown->l1_action = breakdown->temp_l1_action = 0;
-                        breakdown->cat_serialization = breakdown->temp_cat_serialization;
-                        breakdown->cat_action = breakdown->temp_cat_action;
-                        breakdown->temp_cat_serialization = 0;
-                        breakdown->temp_cat_action = 0;
-                    }
+                    breakdown->l1_serialization = breakdown->temp_l1_serialization = 0;
+                    breakdown->l1_action = breakdown->temp_l1_action = 0;
+                    breakdown->cat_serialization = breakdown->temp_cat_serialization;
+                    breakdown->cat_action = breakdown->temp_cat_action;
+                    breakdown->temp_cat_serialization = 0;
+                    breakdown->temp_cat_action = 0;
 
                     if (m_cfg.logic == MIGRATION_ALWAYS) {
                         if (stats_enabled()) {
@@ -359,24 +348,22 @@ void privateSharedEMRA::work_table_update() {
                     mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a core hit but a read L1 MISS for "
                               << core_req->maddr() << endl;
 
-                    if (breakdown) {
-                        if (breakdown->temp_cat_serialization + breakdown->temp_cat_action < 
-                            breakdown->temp_l1_serialization + breakdown->temp_l1_action) 
-                        {
-                            breakdown->cat_serialization = breakdown->temp_cat_serialization = 0;
-                            breakdown->cat_action = breakdown->temp_cat_action = 0;
-                            breakdown->l1_serialization = breakdown->temp_l1_serialization;
-                            breakdown->l1_action = breakdown->temp_l1_action;
-                            breakdown->temp_l1_serialization = 0;
-                            breakdown->temp_l1_action = 0;
-                        } else {
-                            breakdown->l1_serialization = breakdown->temp_l1_serialization = 0;
-                            breakdown->l1_action = breakdown->temp_l1_action = 0;
-                            breakdown->cat_serialization = breakdown->temp_cat_serialization;
-                            breakdown->cat_action = breakdown->temp_cat_action;
-                            breakdown->temp_cat_serialization = 0;
-                            breakdown->temp_cat_action = 0;
-                        }
+                    if (breakdown->temp_cat_serialization + breakdown->temp_cat_action < 
+                        breakdown->temp_l1_serialization + breakdown->temp_l1_action) 
+                    {
+                        breakdown->cat_serialization = breakdown->temp_cat_serialization = 0;
+                        breakdown->cat_action = breakdown->temp_cat_action = 0;
+                        breakdown->l1_serialization = breakdown->temp_l1_serialization;
+                        breakdown->l1_action = breakdown->temp_l1_action;
+                        breakdown->temp_l1_serialization = 0;
+                        breakdown->temp_l1_action = 0;
+                    } else {
+                        breakdown->l1_serialization = breakdown->temp_l1_serialization = 0;
+                        breakdown->l1_action = breakdown->temp_l1_action = 0;
+                        breakdown->cat_serialization = breakdown->temp_cat_serialization;
+                        breakdown->cat_action = breakdown->temp_cat_action;
+                        breakdown->temp_cat_serialization = 0;
+                        breakdown->temp_cat_action = 0;
                     }
 
                     l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_READ,
@@ -395,9 +382,7 @@ void privateSharedEMRA::work_table_update() {
         } else if (entry->status == _WORK_WAIT_CAT_AND_L1_FOR_LOCAL_WRITE) {
 
             if (cat_req->milestone_time() != UINT64_MAX && cat_req->status() == CAT_REQ_DONE) {
-                if (breakdown) {
-                    breakdown->temp_cat_action += system_time - cat_req->milestone_time();
-                }
+                breakdown->temp_cat_action += system_time - cat_req->milestone_time();
                 cat_req->set_milestone_time(UINT64_MAX);
             } 
 
@@ -405,9 +390,7 @@ void privateSharedEMRA::work_table_update() {
                 && (l1_req->status() == CACHE_REQ_MISS || l1_req->status() == CACHE_REQ_HIT)
                ) 
             {
-                if (breakdown) {
-                    breakdown->temp_l1_action += system_time - l1_req->milestone_time();
-                }
+                breakdown->temp_l1_action += system_time - l1_req->milestone_time();
                 l1_req->set_milestone_time(UINT64_MAX);
             }
 
@@ -460,14 +443,12 @@ void privateSharedEMRA::work_table_update() {
                           << core_req->maddr() << endl;
 
                 entry->l1_req = shared_ptr<cacheRequest>();
-                if (breakdown) {
-                    breakdown->l1_serialization = breakdown->temp_l1_serialization = 0;
-                    breakdown->l1_action = breakdown->temp_l1_action = 0;
-                    breakdown->cat_serialization = breakdown->temp_cat_serialization;
-                    breakdown->cat_action = breakdown->temp_cat_action;
-                    breakdown->temp_cat_serialization = 0;
-                    breakdown->temp_cat_action = 0;
-                }
+                breakdown->l1_serialization = breakdown->temp_l1_serialization = 0;
+                breakdown->l1_action = breakdown->temp_l1_action = 0;
+                breakdown->cat_serialization = breakdown->temp_cat_serialization;
+                breakdown->cat_action = breakdown->temp_cat_action;
+                breakdown->temp_cat_serialization = 0;
+                breakdown->temp_cat_action = 0;
 
                 if (stats_enabled()) {
                     stats()->did_read_cat(false);
@@ -534,9 +515,7 @@ void privateSharedEMRA::work_table_update() {
                     << ") from " << data_rep->sender << " for " << data_rep->maddr << endl;
 
                 /* cost breakdown study */
-                if (breakdown) {
-                    breakdown->ra_rep_network_plus_serialization += system_time - data_rep->milestone_time;
-                }
+                breakdown->ra_rep_network_plus_serialization += system_time - data_rep->milestone_time;
 
                 shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
                 uint32_t word_offset = (core_req->maddr().address / 4 ) % m_cfg.words_per_cache_line;
@@ -554,6 +533,7 @@ void privateSharedEMRA::work_table_update() {
 
                 if (stats_enabled()) {
                     apply_breakdown_info(breakdown);
+
                     if (core_req->is_read()) {
                         stats()->did_finish_read(system_time - entry->requested_time);
                     } else {
@@ -573,9 +553,7 @@ void privateSharedEMRA::work_table_update() {
                 continue;
             }
 
-            if (breakdown) {
-                breakdown->temp_l2_action += system_time - l2_req->milestone_time();
-            }
+            breakdown->temp_l2_action += system_time - l2_req->milestone_time();
 
             if (l2_req->status() == CACHE_REQ_MISS) {
 
@@ -591,25 +569,21 @@ void privateSharedEMRA::work_table_update() {
                             stats()->did_write_l2(false);
                             stats()->did_read_cat(true);
                         }
-                        if (breakdown) {
-                            breakdown->l1_serialization = breakdown->temp_l1_serialization = 0;
-                            breakdown->l1_action = breakdown->temp_l1_action = 0;
-                            breakdown->cat_serialization = breakdown->temp_cat_serialization;
-                            breakdown->cat_action = breakdown->temp_cat_action;
-                            breakdown->temp_cat_serialization = 0;
-                            breakdown->temp_cat_action = 0;
-                        }
+                        breakdown->l1_serialization = breakdown->temp_l1_serialization = 0;
+                        breakdown->l1_action = breakdown->temp_l1_action = 0;
+                        breakdown->cat_serialization = breakdown->temp_cat_serialization;
+                        breakdown->cat_action = breakdown->temp_cat_action;
+                        breakdown->temp_cat_serialization = 0;
+                        breakdown->temp_cat_action = 0;
                     } else {
                         if (stats_enabled()) {
                             stats()->did_read_l2(false);
                         }
                     }
-                    if (breakdown) {
-                        breakdown->l2_serialization = breakdown->temp_l2_serialization;
-                        breakdown->l2_action = breakdown->temp_l2_action;
-                        breakdown->temp_l2_serialization = 0;
-                        breakdown->temp_l2_action = 0;
-                    }
+                    breakdown->l2_serialization = breakdown->temp_l2_serialization;
+                    breakdown->l2_action = breakdown->temp_l2_action;
+                    breakdown->temp_l2_serialization = 0;
+                    breakdown->temp_l2_action = 0;
 
                     if (l2_victim && l2_victim->dirty) {
 
@@ -720,12 +694,10 @@ void privateSharedEMRA::work_table_update() {
                     mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] updates a cache line for a local read request on "
                               << start_maddr << endl;
 
-                    if (breakdown) {
-                        breakdown->l2_serialization = breakdown->temp_l2_serialization;
-                        breakdown->l2_action = breakdown->temp_l2_action;
-                        breakdown->temp_l2_serialization = 0;
-                        breakdown->temp_l2_action = 0;
-                    }
+                    breakdown->l2_serialization = breakdown->temp_l2_serialization;
+                    breakdown->l2_action = breakdown->temp_l2_action;
+                    breakdown->temp_l2_serialization = 0;
+                    breakdown->temp_l2_action = 0;
 
                     l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                        m_cfg.words_per_cache_line, 
@@ -745,12 +717,10 @@ void privateSharedEMRA::work_table_update() {
 
                     if (l1_req->status() == CACHE_REQ_NEW || l1_req->status() == CACHE_REQ_WAIT) {
                         /* L1 latency hides all others */
-                        if (breakdown) {
-                            breakdown->cat_serialization = breakdown->temp_cat_serialization = 0;
-                            breakdown->cat_action = breakdown->temp_cat_action = 0;
-                            breakdown->l2_serialization = breakdown->temp_l2_serialization = 0;
-                            breakdown->l2_action = breakdown->temp_l2_action = 0;
-                        }
+                        breakdown->cat_serialization = breakdown->temp_cat_serialization = 0;
+                        breakdown->cat_action = breakdown->temp_cat_action = 0;
+                        breakdown->l2_serialization = breakdown->temp_l2_serialization = 0;
+                        breakdown->l2_action = breakdown->temp_l2_action = 0;
                         entry->status = _WORK_WAIT_L1_WRITE_AFTER_L2;
                         ++it_addr;
 
@@ -762,18 +732,17 @@ void privateSharedEMRA::work_table_update() {
                     }
 
                     /* L1 latency is hidden */
-                    if (breakdown) {
-                        breakdown->l1_serialization = breakdown->temp_l1_serialization = 0;
-                        breakdown->l1_action = breakdown->temp_l1_action = 0;
-                        breakdown->cat_serialization = breakdown->temp_cat_serialization;
-                        breakdown->cat_action = breakdown->temp_cat_action;
-                        breakdown->l2_serialization = breakdown->temp_l2_serialization;
-                        breakdown->l2_action = breakdown->temp_l2_action;
-                        breakdown->temp_cat_serialization = 0;
-                        breakdown->temp_cat_action = 0;
-                        breakdown->temp_l2_serialization = 0;
-                        breakdown->temp_l2_action = 0;
-                    }
+                    breakdown->l1_serialization = breakdown->temp_l1_serialization = 0;
+                    breakdown->l1_action = breakdown->temp_l1_action = 0;
+                    breakdown->cat_serialization = breakdown->temp_cat_serialization;
+                    breakdown->cat_action = breakdown->temp_cat_action;
+                    breakdown->l2_serialization = breakdown->temp_l2_serialization;
+                    breakdown->l2_action = breakdown->temp_l2_action;
+                    breakdown->temp_cat_serialization = 0;
+                    breakdown->temp_cat_action = 0;
+                    breakdown->temp_l2_serialization = 0;
+                    breakdown->temp_l2_action = 0;
+
 
                     if (l1_req->status() == CACHE_REQ_HIT) {
 
@@ -827,13 +796,11 @@ void privateSharedEMRA::work_table_update() {
                 continue;
             }
 
-            if (breakdown) {
-                breakdown->temp_l1_action += system_time - l1_req->milestone_time();
-                breakdown->l1_serialization = breakdown->temp_l1_serialization;
-                breakdown->l1_action = breakdown->temp_l1_action;
-                breakdown->temp_l1_serialization = 0;
-                breakdown->temp_l1_action = 0;
-            }
+            breakdown->temp_l1_action += system_time - l1_req->milestone_time();
+            breakdown->l1_serialization = breakdown->temp_l1_serialization;
+            breakdown->l1_action = breakdown->temp_l1_action;
+            breakdown->temp_l1_serialization = 0;
+            breakdown->temp_l1_action = 0;
 
             if (l1_req->status() == CACHE_REQ_HIT) {
 
@@ -886,9 +853,7 @@ void privateSharedEMRA::work_table_update() {
                     entry->net_msg_to_send = shared_ptr<message_t>();
                 }
 
-                if (breakdown) {
-                    breakdown->dram_req_onchip_network_plus_serialization += system_time - dram_req->milestone_time;
-                }
+                breakdown->dram_req_onchip_network_plus_serialization += system_time - dram_req->milestone_time;
 
                 dram_req = shared_ptr<dramMsg>(new dramMsg);
                 dram_req->sender = m_id;
@@ -947,9 +912,7 @@ void privateSharedEMRA::work_table_update() {
         } else if (entry->status == _WORK_WAIT_DRAM_FEED) {
 
             if (dram_rep) {
-                if (breakdown) {
-                    breakdown->dram_rep_onchip_network_plus_serialization += system_time - dram_rep->milestone_time;
-                }
+                breakdown->dram_rep_onchip_network_plus_serialization += system_time - dram_rep->milestone_time;
 
                 mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] received a DRAM reply for "
                     << dram_rep->req->maddr() << endl;
@@ -1021,9 +984,7 @@ void privateSharedEMRA::work_table_update() {
                 continue;
             } 
 
-            if (breakdown) {
-                breakdown->temp_l1_action += system_time - l1_req->milestone_time();
-            }
+            breakdown->temp_l1_action += system_time - l1_req->milestone_time();
 
             if (l1_req->status() == CACHE_REQ_MISS) {
                 l1_req->reset();
@@ -1034,12 +995,10 @@ void privateSharedEMRA::work_table_update() {
 
             /* HIT */
 
-            if (breakdown) {
-                breakdown->l1_serialization += breakdown->temp_l1_serialization;
-                breakdown->l1_action += breakdown->temp_l1_action;
-                breakdown->temp_l1_serialization = 0;
-                breakdown->temp_l1_action = 0;
-            }
+            breakdown->l1_serialization += breakdown->temp_l1_serialization;
+            breakdown->l1_action += breakdown->temp_l1_action;
+            breakdown->temp_l1_serialization = 0;
+            breakdown->temp_l1_action = 0;
 
             if (stats_enabled()) {
                 apply_breakdown_info(breakdown);
@@ -1064,18 +1023,14 @@ void privateSharedEMRA::work_table_update() {
             if (l1_req->milestone_time() != UINT64_MAX && 
                 (l1_req->status() == CACHE_REQ_MISS || l1_req->status() == CACHE_REQ_HIT))
             {
-                if (breakdown) {
-                    breakdown->temp_l1_action += system_time - l1_req->milestone_time();
-                }
+                breakdown->temp_l1_action += system_time - l1_req->milestone_time();
                 l1_req->set_milestone_time(UINT64_MAX);
             }
 
             if (l2_req->milestone_time() != UINT64_MAX && 
                 (l2_req->status() == CACHE_REQ_MISS || l2_req->status() == CACHE_REQ_HIT)) 
             {
-                if (breakdown) {
-                    breakdown->temp_l2_action += system_time - l2_req->milestone_time();
-                }
+                breakdown->temp_l2_action += system_time - l2_req->milestone_time();
                 l2_req->set_milestone_time(UINT64_MAX);
             }
 
@@ -1140,17 +1095,15 @@ void privateSharedEMRA::work_table_update() {
             }
 
             if (l1_req->status() == CACHE_REQ_HIT && l2_req->status() == CACHE_REQ_HIT) {
-                if (breakdown) {
-                    if (breakdown->temp_l1_serialization + breakdown->temp_l1_action > 
-                        breakdown->temp_l2_serialization + breakdown->temp_l2_action + breakdown->temp_dram_req_onchip_network_plus_serialization)
-                    {
-                        breakdown->l1_serialization += breakdown->temp_l1_serialization;
-                        breakdown->l1_action += breakdown->temp_l1_action;
-                    } else {
-                        breakdown->l2_serialization += breakdown->temp_l2_serialization;
-                        breakdown->l2_action += breakdown->temp_l2_action;
-                        breakdown->dram_req_onchip_network_plus_serialization += breakdown->temp_dram_req_onchip_network_plus_serialization;
-                    }
+                if (breakdown->temp_l1_serialization + breakdown->temp_l1_action > 
+                    breakdown->temp_l2_serialization + breakdown->temp_l2_action + breakdown->temp_dram_req_onchip_network_plus_serialization)
+                {
+                    breakdown->l1_serialization += breakdown->temp_l1_serialization;
+                    breakdown->l1_action += breakdown->temp_l1_action;
+                } else {
+                    breakdown->l2_serialization += breakdown->temp_l2_serialization;
+                    breakdown->l2_action += breakdown->temp_l2_action;
+                    breakdown->dram_req_onchip_network_plus_serialization += breakdown->temp_dram_req_onchip_network_plus_serialization;
                 }
 
                 shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
@@ -1190,9 +1143,7 @@ void privateSharedEMRA::work_table_update() {
                     entry->net_msg_to_send = shared_ptr<message_t>();
                 }
 
-                if (breakdown) {
-                    breakdown->temp_dram_req_onchip_network_plus_serialization += system_time - dram_req->milestone_time;
-                }
+                breakdown->temp_dram_req_onchip_network_plus_serialization += system_time - dram_req->milestone_time;
 
                 mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] the evicted line of " << l2_victim->start_maddr
                           << " is written back to DRAM for a local request on " 
@@ -1215,18 +1166,14 @@ void privateSharedEMRA::work_table_update() {
                 continue;
             }
 
-            if (breakdown) {
-                breakdown->temp_l2_action = system_time - l2_req->milestone_time();
-            }
+            breakdown->temp_l2_action = system_time - l2_req->milestone_time();
 
             if (l2_req->status() == CACHE_REQ_HIT) {
 
-                if (breakdown) {
-                    breakdown->l2_serialization += breakdown->temp_l2_serialization;
-                    breakdown->temp_l2_serialization = 0;
-                    breakdown->l2_action += breakdown->temp_l2_action;
-                    breakdown->temp_l2_action = 0;
-                }
+                breakdown->l2_serialization += breakdown->temp_l2_serialization;
+                breakdown->temp_l2_serialization = 0;
+                breakdown->l2_action += breakdown->temp_l2_action;
+                breakdown->temp_l2_action = 0;
 
                 mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] gets a read HIT for a remote request on "
                           << data_req->maddr << endl;
@@ -1266,12 +1213,10 @@ void privateSharedEMRA::work_table_update() {
                 /* MISS */
                 if (l2_line) {
                     
-                    if (breakdown) {
-                        breakdown->l2_serialization += breakdown->temp_l2_serialization;
-                        breakdown->temp_l2_serialization = 0;
-                        breakdown->l2_action += breakdown->temp_l2_action;
-                        breakdown->temp_l2_action = 0;
-                    }
+                    breakdown->l2_serialization += breakdown->temp_l2_serialization;
+                    breakdown->temp_l2_serialization = 0;
+                    breakdown->l2_action += breakdown->temp_l2_action;
+                    breakdown->temp_l2_action = 0;
 
                     mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] gets a read MISS for a remote request on "
                               << data_req->maddr << endl;
@@ -1365,18 +1310,14 @@ void privateSharedEMRA::work_table_update() {
             if (l1_req && l1_req->milestone_time() != UINT64_MAX && 
                 (l1_req->status() == CACHE_REQ_MISS || l1_req->status() == CACHE_REQ_HIT)) 
             {
-                if (breakdown) {
-                    breakdown->temp_l1_action += system_time - l1_req->milestone_time();
-                }
+                breakdown->temp_l1_action += system_time - l1_req->milestone_time();
                 l1_req->set_milestone_time(UINT64_MAX);
             }
 
             if (l2_req->milestone_time() != UINT64_MAX && 
                 (l2_req->status() == CACHE_REQ_MISS || l2_req->status() == CACHE_REQ_HIT)) 
             {
-                if (breakdown) {
-                    breakdown->temp_l2_action += system_time - l2_req->milestone_time();
-                }
+                breakdown->temp_l2_action += system_time - l2_req->milestone_time();
                 l2_req->set_milestone_time(UINT64_MAX);
             }
 
@@ -1387,24 +1328,22 @@ void privateSharedEMRA::work_table_update() {
                 mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] finish a write through for a remote writ request on " 
                     << data_req->maddr << endl;
 
-                if (breakdown) {
-                    if (breakdown->temp_l1_action + breakdown->temp_l1_serialization > 
-                        breakdown->temp_l2_action + breakdown->temp_l2_serialization)
-                    {
-                        breakdown->l1_serialization += breakdown->temp_l1_serialization;
-                        breakdown->l1_action += breakdown->temp_l1_action;
-                        breakdown->temp_l1_serialization = 0;
-                        breakdown->temp_l1_action = 0;
-                        breakdown->temp_l2_serialization = 0;
-                        breakdown->temp_l2_action = 0;
-                    } else {
-                        breakdown->l2_serialization += breakdown->temp_l2_serialization;
-                        breakdown->l2_action += breakdown->temp_l2_action;
-                        breakdown->temp_l2_serialization = 0;
-                        breakdown->temp_l2_action = 0;
-                        breakdown->temp_l1_serialization = 0;
-                        breakdown->temp_l1_action = 0;
-                    }
+                if (breakdown->temp_l1_action + breakdown->temp_l1_serialization > 
+                    breakdown->temp_l2_action + breakdown->temp_l2_serialization)
+                {
+                    breakdown->l1_serialization += breakdown->temp_l1_serialization;
+                    breakdown->l1_action += breakdown->temp_l1_action;
+                    breakdown->temp_l1_serialization = 0;
+                    breakdown->temp_l1_action = 0;
+                    breakdown->temp_l2_serialization = 0;
+                    breakdown->temp_l2_action = 0;
+                } else {
+                    breakdown->l2_serialization += breakdown->temp_l2_serialization;
+                    breakdown->l2_action += breakdown->temp_l2_action;
+                    breakdown->temp_l2_serialization = 0;
+                    breakdown->temp_l2_action = 0;
+                    breakdown->temp_l1_serialization = 0;
+                    breakdown->temp_l1_action = 0;
                 }
 
                 if (stats_enabled()) {
@@ -1447,14 +1386,12 @@ void privateSharedEMRA::work_table_update() {
 
                 if (l2_line) {
 
-                    if (breakdown) {
-                        breakdown->temp_l1_serialization = 0;
-                        breakdown->temp_l1_action = 0;
-                        breakdown->l2_serialization = breakdown->temp_l2_serialization;
-                        breakdown->l2_action = breakdown->temp_l2_action;
-                        breakdown->temp_l2_serialization = 0;
-                        breakdown->temp_l2_action = 0;
-                    }
+                    breakdown->temp_l1_serialization = 0;
+                    breakdown->temp_l1_action = 0;
+                    breakdown->l2_serialization = breakdown->temp_l2_serialization;
+                    breakdown->l2_action = breakdown->temp_l2_action;
+                    breakdown->temp_l2_serialization = 0;
+                    breakdown->temp_l2_action = 0;
 
                     if (stats_enabled()) {
                         stats()->did_write_l2(false);
@@ -1552,11 +1489,9 @@ void privateSharedEMRA::work_table_update() {
                 continue;
             }
 
-            if (breakdown) {
-                breakdown->l2_serialization += breakdown->temp_l2_serialization;
-                breakdown->temp_l2_serialization = 0;
-                breakdown->l2_action += system_time - l2_req->milestone_time();
-            }
+            breakdown->l2_serialization += breakdown->temp_l2_serialization;
+            breakdown->temp_l2_serialization = 0;
+            breakdown->l2_action += system_time - l2_req->milestone_time();
 
             if (l2_req->status() == CACHE_REQ_MISS) {
                 l2_req->set_milestone_time(system_time);
@@ -1619,7 +1554,7 @@ void privateSharedEMRA::work_table_update() {
 
 }
 
-void privateSharedEMRA::dram_work_table_update() {
+void sharedSharedEMRA::dram_work_table_update() {
     for (toDRAMTable::iterator it_addr = m_dram_work_table.begin(); it_addr != m_dram_work_table.end(); ) {
         shared_ptr<toDRAMEntry> entry = it_addr->second;
         shared_ptr<breakdownInfo> breakdown = static_pointer_cast<breakdownInfo>(entry->dram_req->breakdown);
@@ -1629,9 +1564,7 @@ void privateSharedEMRA::dram_work_table_update() {
 
             if (!entry->dram_rep) {
                 /* cost breakdown study */
-                if (breakdown) {
-                    breakdown->dram_offchip = system_time - entry->milestone_time;
-                }
+                breakdown->dram_offchip = system_time - entry->milestone_time;
 
                 entry->dram_rep = shared_ptr<dramMsg>(new dramMsg);
                 entry->dram_rep->sender = m_id;
@@ -1681,7 +1614,7 @@ void privateSharedEMRA::dram_work_table_update() {
     }
 }
 
-void privateSharedEMRA::accept_incoming_messages() {
+void sharedSharedEMRA::accept_incoming_messages() {
 
     while (m_core_receive_queues[MSG_DATA_REP]->size()) {
         shared_ptr<message_t> msg = m_core_receive_queues[MSG_DATA_REP]->front();
@@ -1768,7 +1701,7 @@ void privateSharedEMRA::accept_incoming_messages() {
 
 }
 
-void privateSharedEMRA::schedule_requests() {
+void sharedSharedEMRA::schedule_requests() {
 
     /* random arbitration */
     boost::function<int(int)> rr_fn = bind(&random_gen::random_range, ran, _1);
@@ -1812,7 +1745,6 @@ void privateSharedEMRA::schedule_requests() {
             new_entry->core_req = req;
             new_entry->status = (req->is_read())? _WORK_WAIT_CAT_AND_L1_FOR_LOCAL_READ : _WORK_WAIT_CAT_AND_L1_FOR_LOCAL_WRITE;
 
-#ifdef REPORT_BREAKDOWN
             new_entry->breakdown = shared_ptr<breakdownInfo>(new breakdownInfo());
             new_entry->breakdown->mem_serialization = system_time - req->milestone_time();
             new_entry->breakdown->cat_serialization = 0;
@@ -1837,9 +1769,6 @@ void privateSharedEMRA::schedule_requests() {
             new_entry->breakdown->temp_dram_req_onchip_network_plus_serialization = 0;
             new_entry->breakdown->temp_dram_rep_onchip_network_plus_serialization = 0;
             new_entry->breakdown->temp_dram_offchip = 0;
-#else
-            new_entry->breakdown = shared_ptr<breakdownInfo>();
-#endif
 
             shared_ptr<cacheRequest> l1_req (new cacheRequest(req->maddr(),
                                                               req->is_read()? CACHE_REQ_READ : CACHE_REQ_WRITE,
@@ -1904,9 +1833,7 @@ void privateSharedEMRA::schedule_requests() {
                     (is_read)? _WORK_WAIT_L2_FOR_REMOTE_READ : _WORK_WAIT_L1_AND_L2_FOR_REMOTE_WRITE;
 
                 new_entry->breakdown = req->breakdown;
-                if (new_entry->breakdown) {
-                    new_entry->breakdown->ra_req_network_plus_serialization += system_time - req->milestone_time;
-                }
+                new_entry->breakdown->ra_req_network_plus_serialization += system_time - req->milestone_time;
 
                 shared_ptr<cacheRequest> l2_req (new cacheRequest(req->maddr,
                                                                   (is_read)? CACHE_REQ_READ : CACHE_REQ_WRITE,
@@ -1968,9 +1895,7 @@ void privateSharedEMRA::schedule_requests() {
         if (m_dram_controller->available()) {
             if (msg->req->is_read()) {
 
-                if (breakdown) {
-                    breakdown->dram_req_onchip_network_plus_serialization = system_time - msg->milestone_time;
-                }
+                breakdown->dram_req_onchip_network_plus_serialization = system_time - msg->milestone_time;
 
                 mh_assert(!m_dram_work_table.count(msg->req->maddr()));
 
@@ -2009,9 +1934,7 @@ void privateSharedEMRA::schedule_requests() {
 
             if (msg->req->is_read()) {
 
-                if (breakdown) {
-                    breakdown->dram_req_onchip_network_plus_serialization = system_time - msg->milestone_time;
-                }
+                breakdown->dram_req_onchip_network_plus_serialization = system_time - msg->milestone_time;
 
                 shared_ptr<toDRAMEntry> new_entry(new toDRAMEntry);
                 new_entry->dram_req = msg;
@@ -2084,9 +2007,7 @@ void privateSharedEMRA::schedule_requests() {
         if (cat_req->milestone_time() != UINT64_MAX) {
             shared_ptr<breakdownInfo> breakdown =
                 static_pointer_cast<breakdownInfo>(cat_req->stats_info());
-            if (breakdown) {
-                breakdown->temp_cat_serialization += system_time - cat_req->milestone_time();
-            }
+            breakdown->temp_cat_serialization += system_time - cat_req->milestone_time();
             cat_req->set_milestone_time(system_time);
         }
         m_cat_req_schedule_q.erase(m_cat_req_schedule_q.begin());
@@ -2105,9 +2026,7 @@ void privateSharedEMRA::schedule_requests() {
         }
         if (l1_req->milestone_time() != UINT64_MAX) {
             shared_ptr<breakdownInfo> breakdown = static_pointer_cast<breakdownInfo>(l1_req->stats_info());
-            if (breakdown) {
-                breakdown->temp_l1_serialization += system_time - l1_req->milestone_time();
-            }
+            breakdown->temp_l1_serialization += system_time - l1_req->milestone_time();
             l1_req->set_milestone_time(system_time);
         }
         m_l1_read_req_schedule_q.erase(m_l1_read_req_schedule_q.begin());
@@ -2126,9 +2045,7 @@ void privateSharedEMRA::schedule_requests() {
         }
         if (l1_req->milestone_time() != UINT64_MAX) {
             shared_ptr<breakdownInfo> breakdown = static_pointer_cast<breakdownInfo>(l1_req->stats_info());
-            if (breakdown) {
-                breakdown->temp_l1_serialization += system_time - l1_req->milestone_time();
-            }
+            breakdown->temp_l1_serialization += system_time - l1_req->milestone_time();
             l1_req->set_milestone_time(system_time);
         }
         m_l1_write_req_schedule_q.erase(m_l1_write_req_schedule_q.begin());
@@ -2147,9 +2064,7 @@ void privateSharedEMRA::schedule_requests() {
         }
         if (l2_req->milestone_time() != UINT64_MAX) {
             shared_ptr<breakdownInfo> breakdown = static_pointer_cast<breakdownInfo>(l2_req->stats_info());
-            if (breakdown) {
-                breakdown->temp_l2_serialization += system_time - l2_req->milestone_time();
-            }
+            breakdown->temp_l2_serialization += system_time - l2_req->milestone_time();
             l2_req->set_milestone_time(system_time);
         }
         m_l2_read_req_schedule_q.erase(m_l2_read_req_schedule_q.begin());
@@ -2168,9 +2083,7 @@ void privateSharedEMRA::schedule_requests() {
         }
         if (l2_req->milestone_time() != UINT64_MAX) {
             shared_ptr<breakdownInfo> breakdown = static_pointer_cast<breakdownInfo>(l2_req->stats_info());
-            if (breakdown) {
-                breakdown->temp_l2_serialization += system_time - l2_req->milestone_time();
-            }
+            breakdown->temp_l2_serialization += system_time - l2_req->milestone_time();
             l2_req->set_milestone_time(system_time);
         }
         m_l2_write_req_schedule_q.erase(m_l2_write_req_schedule_q.begin());

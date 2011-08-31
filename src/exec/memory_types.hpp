@@ -17,7 +17,8 @@ typedef enum {
     MEM_PRIVATE_SHARED_MSI_MESI = 0,
     MEM_PRIVATE_SHARED_LCC = 1,
     MEM_PRIVATE_SHARED_EMRA = 2,
-    MEM_PRIVATE_PRIVATE_MOESI = 3
+    MEM_SHARED_SHARED_EMRA = 3,
+    MEM_SHARED_SHARED_LCC = 4
 } memoryType_t;
 
 /* do not change order */
