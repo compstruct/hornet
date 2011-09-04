@@ -32,9 +32,12 @@ public:
     inline uint32_t home() { return m_home; }
     inline uint32_t word_count() { return m_word_count; }
 
-    /* cost breakdown study */
-    uint64_t milestone_time() { return m_milestone_time; }
-    inline void set_milestone_time(uint64_t time) { m_milestone_time = time; }
+    /* TRANSITION - remove */
+    inline uint64_t serialization_begin_time() { return m_serialization_begin_time; }
+    inline void set_serialization_begin_time(uint64_t time) { m_serialization_begin_time = time; }
+
+    inline void set_per_mem_instr_runtime_info(shared_ptr<shared_ptr<void> > info) { m_per_mem_instr_runtime_info = info; }
+    inline shared_ptr<shared_ptr<void> > per_mem_instr_runtime_info() { return m_per_mem_instr_runtime_info; }
 
     friend class memory;
 
@@ -47,8 +50,9 @@ private:
     shared_array<uint32_t> m_data;
     uint32_t m_home;
 
-    uint64_t m_milestone_time;
+    uint64_t m_serialization_begin_time;
 
+    shared_ptr<shared_ptr<void> > m_per_mem_instr_runtime_info;
 };
 
 class memory {
@@ -86,8 +90,8 @@ protected:
     logger &log;
     shared_ptr<random_gen> ran;
 
-    dramController* m_dram_controller;
-    uint32_t m_dram_controller_location;
+    dramController* m_dramctrl;
+    uint32_t m_dramctrl_location;
 
     map<uint32_t/*msg type*/, shared_ptr<messageQueue> > m_core_send_queues;
     map<uint32_t/*msg type*/, shared_ptr<messageQueue> > m_core_receive_queues;

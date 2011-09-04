@@ -59,6 +59,8 @@ public:
     inline bool stats_enabled() { return (m_stats != shared_ptr<memtraceThreadStatsPerThread>()); }
     inline shared_ptr<memtraceThreadStatsPerThread> stats() { return m_stats; }
 
+    inline shared_ptr<shared_ptr<void> > per_mem_instr_runtime_info() { return m_cur.per_mem_instr_runtime_info; }
+
 private:
     typedef struct {
         uint32_t repeats;
@@ -71,6 +73,7 @@ private:
         /* stats */
         bool first_memory_issued;
         uint64_t first_memory_issued_time;
+        shared_ptr<shared_ptr<void> > per_mem_instr_runtime_info;
     } inst_t;
 
     uint32_t m_id;
@@ -82,6 +85,7 @@ private:
     vector<inst_t> m_insts;
 
     int m_native_core;
+
 };
 
 class memtraceThreadPool {

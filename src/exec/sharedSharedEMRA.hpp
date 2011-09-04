@@ -67,50 +67,18 @@ public:
     inline shared_ptr<sharedSharedEMRAStatsPerTile> stats() { return m_stats; }
 
     typedef enum {
-        MSG_DRAM_REQ = 0,
-        MSG_DRAM_REP,
-        MSG_DATA_REQ,
-        MSG_DATA_REP,
+        MSG_DRAMCTRL_REQ = 0,
+        MSG_DRAMCTRL_REP,
+        MSG_RA_REQ,
+        MSG_RA_REP,
         NUM_MSG_TYPES
     } sharedSharedEMRAMsgType_t;
 
-    typedef struct {
-        shared_ptr<bool> in_l1; /* evictions in L1 is snooped at L2 */
-    } coherenceInfo;
-
     typedef enum {
-        DATA_READ_REQ = 0,
-        DATA_WRITE_REQ,
-        DATA_REP,
+        RA_READ_REQ = 0,
+        RA_WRITE_REQ,
+        RA_REP,
     } coherenceMsgType_t;
-
-    typedef struct {
-        uint64_t mem_serialization;
-        uint64_t cat_serialization;
-        uint64_t cat_action;
-        uint64_t l1_serialization;
-        uint64_t l1_action;
-        uint64_t ra_req_network_plus_serialization;
-        uint64_t ra_rep_network_plus_serialization;
-        uint64_t l2_serialization;
-        uint64_t l2_action;
-        uint64_t dram_req_onchip_network_plus_serialization;
-        uint64_t dram_rep_onchip_network_plus_serialization;
-        uint64_t dram_offchip;
-
-        uint64_t temp_cat_serialization;
-        uint64_t temp_cat_action;
-        uint64_t temp_l1_serialization;
-        uint64_t temp_l1_action;
-        uint64_t temp_ra_req_network_plus_serialization;
-        uint64_t temp_ra_rep_network_plus_serialization;
-        uint64_t temp_l2_serialization;
-        uint64_t temp_l2_action;
-        uint64_t temp_dram_req_onchip_network_plus_serialization;
-        uint64_t temp_dram_rep_onchip_network_plus_serialization;
-        uint64_t temp_dram_offchip;
-
-    } breakdownInfo;
 
     typedef struct {
         uint32_t sender;
@@ -120,114 +88,92 @@ public:
         maddr_t maddr;
         shared_array<uint32_t> data;
 
-        shared_ptr<bool> in_l1; /* evictions in L1 is snooped at L2 */
+        /* status */
+        bool sent;
 
-        /* this messy flag conveniently lets the issuer of this message know whether it has to send it again */
-        bool did_win_last_arbitration;
+        /* fot stats */
+        shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
+        uint64_t birthtime;
 
         /* debug purpose - erase later */
         uint64_t waited;
-
-        /* cost breakdown study */
-        uint64_t milestone_time;
-        shared_ptr<breakdownInfo> breakdown;
-
     } coherenceMsg;
 
     typedef struct {
         uint32_t sender;
         uint32_t receiver;
-        shared_ptr<dramRequest> req;
-        bool did_win_last_arbitration;
+        shared_ptr<dramRequest> dram_req;
+        maddr_t maddr;
 
-        /* cost breakdown study */
-        uint64_t milestone_time;
-        shared_ptr<breakdownInfo> breakdown;
+        /* status */
+        bool sent;
 
-    } dramMsg;
+        /* for stats */
+        uint64_t birthtime;
+        shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
+    } dramctrlMsg;
 
 private:
 
     typedef enum {
-        _WORK_WAIT_CAT_AND_L1_FOR_LOCAL_READ = 0,
-        _WORK_WAIT_CAT_AND_L1_FOR_LOCAL_WRITE,
-        _WORK_WAIT_L2_FOR_LOCAL,
-        _WORK_DRAM_WRITEBACK_AND_FEED,
-        _WORK_SEND_DRAM_FEED_REQ,
-        _WORK_WAIT_DRAM_FEED,
-        _WORK_WAIT_L1_WRITE_AFTER_L2,
-        _WORK_UPDATE_L1,
-        _WORK_UPDATE_L1_AND_L2,
-        _WORK_DRAM_WRITEBACK_AND_UPDATE_L1_AND_L2,
-
-        _WORK_SEND_REMOTE_DATA_REQ,
-        _WORK_WAIT_REMOTE_DATA_REP,
-        _WORK_WAIT_L2_FOR_REMOTE_READ,
-        _WORK_WAIT_L1_AND_L2_FOR_REMOTE_WRITE,
-        _WORK_SEND_REMOTE_DATA_REP,
-        _WORK_UPDATE_L2
+        _CAT_AND_L1_FOR_LOCAL = 0,
+        _L1_FOR_REMOTE,
+        _L2,
+        _FILL_L1,
+        _FILL_L2,
+        _SEND_DRAMCTRL_REQ,
+        _WAIT_DRAMCTRL_REP,
+        _WRITEBACK_L2,
+        _WRITEBACK_DRAMCTRL_FOR_L1_FILL,
+        _WRITEBACK_DRAMCTRL_FOR_L2_FILL,
+        _SEND_RA_REQ,
+        _SEND_RA_REP,
+        _WAIT_RA_REP
     } entryStatus;
 
     typedef struct {
         entryStatus status;
 
         shared_ptr<memoryRequest> core_req;
-        shared_ptr<coherenceMsg> data_req;
-
         shared_ptr<catRequest> cat_req;
         shared_ptr<cacheRequest> l1_req;
-        shared_ptr<cacheRequest> l1_evict_req;
         shared_ptr<cacheRequest> l2_req;
+        shared_ptr<coherenceMsg> ra_req;
+        shared_ptr<coherenceMsg> ra_rep;
+        shared_ptr<dramctrlMsg> dramctrl_req;
+        shared_ptr<dramctrlMsg> dramctrl_rep;
 
-        shared_ptr<coherenceMsg> data_rep;
-
-        /* writeback is prior to other requests */
-        shared_ptr<dramMsg> dram_req;
-        shared_ptr<dramMsg> dram_rep;
-
-        /* for performance */
-        shared_ptr<message_t> net_msg_to_send;
-
-        /* cost breakdown study */
-        uint64_t requested_time;
-        uint64_t milestone_time;
-        shared_ptr<breakdownInfo> breakdown;
+        /* for stats */
+        shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
 
     } tableEntry;
 
     typedef struct {
-        shared_ptr<dramMsg> dram_req;
-        shared_ptr<dramMsg> dram_rep;
-        /* for performance */
+        shared_ptr<dramctrlMsg> dramctrl_req;
+        shared_ptr<dramctrlMsg> dramctrl_rep;
         shared_ptr<message_t> net_msg_to_send;
 
-        /* cost breakdown study */
-        uint64_t milestone_time;
-        shared_ptr<breakdownInfo> breakdown;
-        
-    } toDRAMEntry;
+        /* for stats */
+        uint64_t operation_begin_time;
+        shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
+
+    } dramctrlTableEntry;
 
     typedef map<maddr_t, shared_ptr<tableEntry> > workTable;
-    typedef map<maddr_t, shared_ptr<toDRAMEntry> > toDRAMTable;
+    typedef map<maddr_t, shared_ptr<dramctrlTableEntry> > dramctrlTable;
 
     inline maddr_t get_start_maddr_in_line(maddr_t maddr) { 
         maddr.address -= (maddr.address)%(m_cfg.words_per_cache_line*4); return maddr; 
     }
 
     inline uint32_t get_flit_count(uint32_t bytes) { return (bytes + m_cfg.bytes_per_flit - 1) / m_cfg.bytes_per_flit; }
-    uint64_t get_expiration_time(shared_ptr<cacheLine> line);
 
     /* logics */
 
     void schedule_requests();
-
-    void work_table_update();
-
-    void dram_work_table_update();
-
+    void update_work_table();
+    void update_dramctrl_work_table();
     void accept_incoming_messages();
-
-    void apply_breakdown_info(shared_ptr<breakdownInfo> breakdown);
 
     /* instance variables */
 
@@ -240,29 +186,30 @@ private:
     shared_ptr<sharedSharedEMRAStatsPerTile> m_stats;
 
     workTable m_work_table;
-    toDRAMTable m_dram_work_table;
-
-    /* scheduler queues */
-    vector<shared_ptr<memoryRequest> > m_core_port_schedule_q; 
-    vector<tuple<bool/* is a memoryRequest type */, shared_ptr<void> > > m_req_schedule_q;
-
-    vector<shared_ptr<dramMsg> > m_to_dram_writeback_req_schedule_q;
-    vector<shared_ptr<dramMsg> > m_to_dram_req_schedule_q;
-
-    /* scheduler queues for sending messages to the network */
-    map<uint32_t/* per channel*/, vector<shared_ptr<message_t> > > m_to_network_schedule_q;
-    map<uint32_t/* per channel*/, vector<shared_ptr<message_t> > > m_to_network_schedule_q_priority;
-
-    /* to-memory request scheduler */
-    vector<shared_ptr<catRequest> > m_cat_req_schedule_q;
-    vector<shared_ptr<cacheRequest> > m_l1_read_req_schedule_q;
-    vector<shared_ptr<cacheRequest> > m_l1_write_req_schedule_q;
-    vector<shared_ptr<cacheRequest> > m_l2_read_req_schedule_q;
-    vector<shared_ptr<cacheRequest> > m_l2_write_req_schedule_q;
-    vector<shared_ptr<dramRequest> > m_dram_req_schedule_q;
+    dramctrlTable m_dramctrl_work_table;
 
     uint32_t m_work_table_vacancy;
     uint32_t m_available_core_ports;
+
+    /* keep track of writeback requests to priortize it. no real hw, for simulation performance */
+    map<maddr_t, shared_ptr<tableEntry> > m_l2_writeback_status;
+    map<maddr_t, shared_ptr<tableEntry> > m_dramctrl_writeback_status;
+
+    /* SCHEDULER QUEUES */
+    /* no real hardware... volatile at clock boundaries */
+
+    vector<shared_ptr<memoryRequest> > m_core_port_schedule_q; 
+    vector<tuple<bool/* is remote */, shared_ptr<void> > > m_new_work_table_entry_schedule_q;
+
+    vector<shared_ptr<tableEntry> > m_cat_req_schedule_q;
+    vector<shared_ptr<tableEntry> > m_l1_read_req_schedule_q;
+    vector<shared_ptr<tableEntry> > m_l1_write_req_schedule_q;
+    vector<shared_ptr<tableEntry> > m_l2_read_req_schedule_q;
+    vector<shared_ptr<tableEntry> > m_l2_write_req_schedule_q;
+    vector<shared_ptr<tableEntry> > m_ra_req_schedule_q;
+    vector<shared_ptr<tableEntry> > m_ra_rep_schedule_q;
+    vector<tuple<bool/* is remote */, shared_ptr<void> > > m_dramctrl_req_schedule_q;
+    vector<shared_ptr<dramctrlTableEntry> > m_dramctrl_rep_schedule_q;
 
 };
 

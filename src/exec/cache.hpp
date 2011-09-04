@@ -11,6 +11,8 @@
 #include "random.hpp"
 #include "memory_types.hpp"
 
+/* TODO : cache.hpp / cache.cpp will be cleaned up in 2011 September */
+
 using namespace std;
 using namespace boost;
 
@@ -22,8 +24,8 @@ typedef enum {
 } replacementPolicy_t;
 
 typedef struct {
-    bool empty; /* if yes, no acitivity at all on this line. anyone can take this line */
-    bool valid; /* if both empty and valid is false, the line is reserved and waiting for data */
+    bool empty; /* !claimed */
+    bool valid; /* ready */
     bool dirty;
     maddr_t start_maddr;;
     shared_array<uint32_t> data;
@@ -34,7 +36,8 @@ typedef struct {
 typedef enum {
     CACHE_REQ_READ = 0,
     CACHE_REQ_WRITE,      
-    CACHE_REQ_UPDATE, /* update and validate the cache line */ 
+    CACHE_REQ_UPDATE, /* To write the entire line ONLY if it his (may miss). set dirty if clean write is not set */
+    CACHE_REQ_FILL,   /* To write the entire line whenever possible. If evict NEW - provide the whole information for a cache line */
     CACHE_REQ_INVALIDATE
 
 } cacheReqType_t;
@@ -61,8 +64,12 @@ public:
     inline shared_ptr<cacheLine> line_copy() { return m_line_copy; }
     inline shared_ptr<cacheLine> victim_line_copy() { return m_victim_line_copy; }
 
+    inline bool use_read_ports() { return m_request_type == CACHE_REQ_READ; }
+
     inline cacheReqType_t request_type() { return m_request_type; }
     inline maddr_t maddr() { return m_maddr; }
+    inline uint32_t word_count() { return m_word_count; }
+    inline shared_array<uint32_t> data_to_write() { return m_data_to_write; }
 
     inline void reset() { assert(m_status != CACHE_REQ_WAIT); 
                           m_status = CACHE_REQ_NEW; 
@@ -74,9 +81,14 @@ public:
     inline void set_reserve(bool enable) { m_do_reserve = enable; }
     inline void set_evict(bool enable) { m_do_evict = enable; }
 
-    /* cost breakdown study */
-    inline void set_milestone_time(uint64_t time) { m_milestone_time = time; }
-    inline uint64_t milestone_time(){ return m_milestone_time; }
+    /* TRANSITION - remove */
+    inline void set_milestone_time(uint64_t time) { m_operation_begin_time = time; }
+    inline uint64_t milestone_time(){ return m_operation_begin_time; }
+
+    inline void set_serialization_begin_time(uint64_t time) { m_serialization_begin_time = time; }
+    inline uint64_t serialization_begin_time(){ return m_serialization_begin_time; }
+    inline void set_operation_begin_time(uint64_t time) { m_operation_begin_time = time; }
+    inline uint64_t operation_begin_time(){ return m_operation_begin_time; }
     inline void set_stats_info(shared_ptr<void> info) { m_stats_info = info; }
     inline shared_ptr<void> stats_info() { return m_stats_info; }
 
@@ -87,8 +99,6 @@ public:
     inline uint32_t requesting_core() { return m_core; }
 
 private:
-    inline bool use_read_ports() { return m_request_type == CACHE_REQ_READ ||
-                                          m_request_type == CACHE_REQ_INVALIDATE; }
 
     cacheReqType_t m_request_type;
     maddr_t m_maddr;
@@ -105,7 +115,8 @@ private:
     bool m_do_evict;
 
     /* cost breakdown study */
-    uint64_t m_milestone_time;
+    uint64_t m_serialization_begin_time;
+    uint64_t m_operation_begin_time;
     shared_ptr<void> m_stats_info;
 
     /* aux info */
@@ -203,6 +214,7 @@ private:
 
     set<tuple<uint32_t/*idx*/, uint32_t/*ways*/> > m_lines_to_evict; /* and leave it empty */
     set<tuple<uint32_t/*idx*/, uint32_t/*way*/, maddr_t> > m_lines_to_evict_and_reserve; /* evict and reserve it for another line */
+    set<tuple<uint32_t/*idx*/, uint32_t/*way*/, shared_ptr<cacheRequest> > > m_lines_to_evict_and_feed; 
 
 };
 

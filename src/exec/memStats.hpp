@@ -12,9 +12,13 @@ public:
     memStatsPerTile(uint32_t id, const uint64_t &system_time);
     virtual ~memStatsPerTile();
 
-    inline void did_finish_read(uint64_t latency) { m_read_latencies.add(latency, 1); }
-    inline void did_finish_write(uint64_t latency) { m_write_latencies.add(latency, 1); }
-    inline uint64_t total_served() { return m_read_latencies.sample_count() + m_write_latencies.sample_count(); }
+    /* TRANSITION - remove */
+    inline void did_finish_read(uint64_t latency) { ++m_reads; }
+    inline void did_finish_write(uint64_t latency) { ++m_writes; }
+
+    inline void did_finish_read() { ++m_reads; }
+    inline void did_finish_write() { ++m_writes; }
+    inline uint64_t total_served() { return m_reads + m_writes; }
 
     friend class memStats;
 
@@ -22,9 +26,8 @@ private:
     uint32_t m_id;
     const uint64_t &system_time;
 
-    running_stats m_read_latencies;
-    running_stats m_write_latencies;
-
+    uint64_t m_reads;
+    uint64_t m_writes;
 };
 
 class memStats : public aux_statistics {

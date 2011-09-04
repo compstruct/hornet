@@ -35,11 +35,16 @@ public:
     inline uint32_t home() { return m_home; }
     inline maddr_t maddr() { return m_maddr; }
 
-    /* cost breakdown study */
-    inline void set_milestone_time(uint64_t time) { m_milestone_time = time; }
-    inline uint64_t milestone_time() { return m_milestone_time; }
+    /* LEGACY - remove */
+    inline void set_milestone_time(uint64_t time) { m_serialization_begin_time = time; }
+    inline uint64_t milestone_time() { return m_serialization_begin_time; }
     inline void set_stats_info(shared_ptr<void> info) { m_stats_info = info; }
     inline shared_ptr<void> stats_info() { return m_stats_info; }
+
+    inline void set_serialization_begin_time(uint64_t time) { m_serialization_begin_time = time; }
+    inline uint64_t serialization_begin_time() { return m_serialization_begin_time; }
+    inline void set_operation_begin_time(uint64_t time) { m_operation_begin_time = time; }
+    inline uint64_t operation_begin_time() { return m_operation_begin_time; }
     
     friend class cat;
 
@@ -50,7 +55,10 @@ private:
     uint32_t m_home;
 
     /* cost breakdown study */
-    uint64_t m_milestone_time;
+    uint64_t m_serialization_begin_time;
+    uint64_t m_operation_begin_time;
+
+    /* LEGACY - remove */
     shared_ptr<void> m_stats_info;
 
 };

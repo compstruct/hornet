@@ -3,40 +3,182 @@
 
 #include "sharedSharedEMRAStats.hpp"
 
+sharedSharedEMRAStatsPerMemInstr::sharedSharedEMRAStatsPerMemInstr() :
+    m_did_core_miss(false),
+    m_did_migrate(false),
+    m_mig_depart_time(0),
+    m_mem_srz(0),
+    m_l1_srz(0),
+    m_l1_ops(0),
+    m_cat_srz(0),
+    m_cat_ops(0),
+    m_ra_req_nas(0),
+    m_ra_rep_nas(0),
+    m_l2_srz(0),
+    m_l2_ops(0),
+    m_dramctrl_req_nas(0),
+    m_dramctrl_rep_nas(0),
+    m_dram_ops(0),
+    m_mig(0)
+{}
+
+sharedSharedEMRAStatsPerMemInstr::~sharedSharedEMRAStatsPerMemInstr() {}
+
+void sharedSharedEMRAStatsPerMemInstr::add(const sharedSharedEMRAStatsPerMemInstr& other) {
+    m_mem_srz += other.m_mem_srz;
+    m_l1_srz += other.m_l1_srz;
+    m_l1_ops += other.m_l1_ops;
+    m_cat_srz += other.m_cat_srz;
+    m_cat_ops += other.m_cat_ops;
+    m_ra_req_nas += other.m_ra_req_nas;
+    m_ra_rep_nas += other.m_ra_rep_nas;
+    m_l2_srz += other.m_l2_srz;
+    m_l2_ops += other.m_l2_ops;
+    m_dramctrl_req_nas += other.m_dramctrl_req_nas;
+    m_dramctrl_rep_nas += other.m_dramctrl_rep_nas;
+    m_dram_ops += other.m_dram_ops;
+    m_mig += other.m_mig;
+}
+
+uint64_t sharedSharedEMRAStatsPerMemInstr::total_cost() { 
+    return m_mem_srz + m_l1_srz + m_l1_ops + m_cat_srz + m_cat_ops + m_ra_req_nas + m_ra_rep_nas + m_l2_srz
+           + m_l2_ops + m_dramctrl_req_nas + m_dramctrl_rep_nas + m_dram_ops + m_mig;
+}
+
+bool sharedSharedEMRAStatsPerMemInstr::add_new_tentative_data(int index) {
+    if (m_tentative_data.count(index)) {
+        return false;
+    }
+    shared_ptr<sharedSharedEMRAStatsPerMemInstr> new_tentative_set(new sharedSharedEMRAStatsPerMemInstr());
+    m_tentative_data[index] = new_tentative_set;
+    return true;
+}
+
+shared_ptr<sharedSharedEMRAStatsPerMemInstr> sharedSharedEMRAStatsPerMemInstr::get_tentative_data(int index) {
+    if (!m_tentative_data.count(index)) {
+        add_new_tentative_data(index);
+    }
+    return m_tentative_data[index];
+}
+
+void sharedSharedEMRAStatsPerMemInstr::discard_tentative_data(int index) {
+    if (m_tentative_data.count(index)) {
+        m_tentative_data.erase(index);
+    } 
+}
+
+void sharedSharedEMRAStatsPerMemInstr::commit_tentative_data(int index) {
+    if (m_tentative_data.count(index)) {
+        add(*m_tentative_data[index]);
+    }
+    m_tentative_data.clear();
+}
+
+void sharedSharedEMRAStatsPerMemInstr::commit_max_tentative_data() {
+    uint64_t value = 0;
+    map<int, shared_ptr<sharedSharedEMRAStatsPerMemInstr> >::iterator it;
+    shared_ptr<sharedSharedEMRAStatsPerMemInstr> max = shared_ptr<sharedSharedEMRAStatsPerMemInstr>();
+    for (it = m_tentative_data.begin(); it != m_tentative_data.end(); ++it) {
+        shared_ptr<sharedSharedEMRAStatsPerMemInstr> cur = it->second;
+        if (cur->total_cost() > value) {
+            value = cur->total_cost();
+            max = cur;
+        }
+    }
+
+    if (max) {
+        add(*max);
+        m_tentative_data.clear();
+    }
+}
+
+void sharedSharedEMRAStatsPerMemInstr::commit_min_tentative_data() {
+    uint64_t value = UINT64_MAX;
+    map<int, shared_ptr<sharedSharedEMRAStatsPerMemInstr> >::iterator it;
+    shared_ptr<sharedSharedEMRAStatsPerMemInstr> min = shared_ptr<sharedSharedEMRAStatsPerMemInstr>();
+    for (it = m_tentative_data.begin(); it != m_tentative_data.end(); ++it) {
+        shared_ptr<sharedSharedEMRAStatsPerMemInstr> cur = it->second;
+        if (cur->total_cost() < value) {
+            value = cur->total_cost();
+            min = cur;
+        }
+    }
+
+    if (min) {
+        add(*min);
+        m_tentative_data.clear();
+    }
+}
+
+void sharedSharedEMRAStatsPerMemInstr::apply_mig_latency(const uint64_t cur_time) {
+    if (m_did_migrate) {
+        m_mig += cur_time - m_mig_depart_time;
+        m_did_migrate = false;
+        m_mig_depart_time = 0;
+    }
+}
+
 sharedSharedEMRAStatsPerTile::sharedSharedEMRAStatsPerTile(uint32_t id, const uint64_t &t) :
-    memStatsPerTile(id, t), 
-    /* cost breakdown study */
-    m_memory_subsystem_serialization_cost(0),
-    m_cat_serialization_cost(0), m_cat_action_cost(0),
-    m_l1_serialization_cost(0), m_l1_action_cost(0), 
-    m_ra_req_network_plus_serialization_cost(0), m_ra_rep_network_plus_serialization_cost(0),
-    m_l2_serialization_cost(0), 
-    m_l2_action_cost(0), 
-    m_dram_req_onchip_network_plus_serialization_cost(0),
-    m_dram_rep_onchip_network_plus_serialization_cost(0),
-    m_dram_offchip_network_plus_dram_action_cost(0),
-    m_l1_action(0), m_l2_action(0) { }
+    memStatsPerTile(id, t),
+    m_num_l1_read_instr(0), 
+    m_num_l1_write_instr(0), 
+    m_num_l2_read_instr(0), 
+    m_num_l2_write_instr(0), 
+    m_num_hits_for_l1_read_instr(0), 
+    m_num_hits_for_l1_write_instr(0), 
+    m_num_hits_for_l2_read_instr(0), 
+    m_num_hits_for_l2_write_instr(0), 
+    m_num_core_misses_for_l1_read_instr(0), 
+    m_num_core_misses_for_l1_write_instr(0), 
+    m_num_true_misses_for_l1_read_instr(0), 
+    m_num_true_misses_for_l1_write_instr(0), 
+    m_num_true_misses_for_l2_read_instr(0), 
+    m_num_true_misses_for_l2_write_instr(0), 
+    m_num_core_hit_instr(0),
+    m_num_core_miss_instr(0),
+    m_num_cat_action(0),
+    m_num_l1_action(0),
+    m_num_l2_action(0),
+    m_num_dram_action(0)
+{}
 
 sharedSharedEMRAStatsPerTile::~sharedSharedEMRAStatsPerTile() {}
 
-void sharedSharedEMRAStatsPerTile::did_read_l1(bool hit) {
-    m_l1_read_hits.add(hit? 1:0, 1);
+void sharedSharedEMRAStatsPerTile::add(const sharedSharedEMRAStatsPerTile& other) {
+    m_num_l1_read_instr += other.m_num_l1_read_instr; 
+    m_num_l1_write_instr += other.m_num_l1_write_instr; 
+    m_num_l2_read_instr += other.m_num_l2_read_instr; 
+    m_num_l2_write_instr += other.m_num_l2_write_instr; 
+    m_num_hits_for_l1_read_instr += other.m_num_hits_for_l1_read_instr; 
+    m_num_hits_for_l1_write_instr += other.m_num_hits_for_l1_write_instr; 
+    m_num_hits_for_l2_read_instr += other.m_num_hits_for_l2_read_instr; 
+    m_num_hits_for_l2_write_instr += other.m_num_hits_for_l2_write_instr; 
+    m_num_core_misses_for_l1_read_instr += other.m_num_core_misses_for_l1_read_instr; 
+    m_num_core_misses_for_l1_write_instr += other.m_num_core_misses_for_l1_write_instr; 
+    m_num_true_misses_for_l1_read_instr += other.m_num_true_misses_for_l1_read_instr; 
+    m_num_true_misses_for_l1_write_instr += other.m_num_true_misses_for_l1_write_instr; 
+    m_num_true_misses_for_l2_read_instr += other.m_num_true_misses_for_l2_read_instr; 
+    m_num_true_misses_for_l2_write_instr += other.m_num_true_misses_for_l2_write_instr; 
+    m_num_core_hit_instr += other.m_num_core_hit_instr;
+    m_num_core_miss_instr += other.m_num_core_miss_instr;
+    m_num_cat_action += other.m_num_cat_action;
+    m_num_l1_action += other.m_num_l1_action;
+    m_num_l2_action += other.m_num_l2_action;
+    m_num_dram_action += other.m_num_dram_action;
+
+    m_total_per_mem_instr_info.add(other.m_total_per_mem_instr_info);
 }
 
-void sharedSharedEMRAStatsPerTile::did_write_l1(bool hit) {
-    m_l1_write_hits.add(hit? 1:0, 1);
-}
+void sharedSharedEMRAStatsPerTile::commit_per_mem_instr_stats(const sharedSharedEMRAStatsPerMemInstr& data) {
 
-void sharedSharedEMRAStatsPerTile::did_read_l2(bool hit) {
-    m_l2_read_hits.add(hit? 1:0, 1);
-}
+    if (data.m_did_core_miss) {
+        ++m_num_core_miss_instr;
+    } else {
+        ++m_num_core_hit_instr;
+    }
 
-void sharedSharedEMRAStatsPerTile::did_write_l2(bool hit) {
-    m_l2_write_hits.add(hit? 1:0, 1);
-}
+    m_total_per_mem_instr_info.add(data);
 
-void sharedSharedEMRAStatsPerTile::did_read_cat(bool hit) {
-    m_cat_hits.add(hit? 1 : 0, 1);
 }
 
 sharedSharedEMRAStats::sharedSharedEMRAStats(const uint64_t &t) : memStats(t) {}
@@ -45,47 +187,18 @@ sharedSharedEMRAStats::~sharedSharedEMRAStats() {}
 
 void sharedSharedEMRAStats::print_stats(ostream &out) {
 
+    char str[1024];
+    sharedSharedEMRAStatsPerTile total_tile_info(0, system_time);
+
     memStats::print_stats(out);
 
     /* add sharedSharedEMRA-specific statistics */
 
     out << endl;
     
-    out << "Private-L1 Shared-L2 EMRA Statistics" << endl;
+    out << "Shared-L1 Shared-L2 EMRA Statistics" << endl;
     out << "-----------------------------------" << endl;
     out << endl;
-
-    uint64_t total_l2_reads = 0;
-    uint64_t total_l2_writes = 0;
-    uint64_t total_l2 = 0;
-    uint64_t total_l1_reads = 0;
-    uint64_t total_l1_writes = 0;
-    uint64_t total_l1 = 0;
-    uint64_t total_cat_lookups = 0;
-
-    double total_l2_read_hits = 0.0;
-    double total_l2_write_hits = 0.0;
-    double total_l2_hits = 0.0;
-    double total_l1_read_hits = 0.0;
-    double total_l1_write_hits = 0.0;
-    double total_l1_hits = 0.0;
-    double total_cat_hits = 0.0;
-
-    /* cost breakdown study */
-    uint64_t total_memory_subsystem_serialization_cost = 0;
-    uint64_t total_cat_serialization_cost = 0;
-    uint64_t total_cat_action_cost = 0;
-    uint64_t total_l1_serialization_cost = 0;
-    uint64_t total_l1_action_cost = 0;
-    uint64_t total_ra_req_network_plus_serialization_cost = 0;
-    uint64_t total_ra_rep_network_plus_serialization_cost = 0;
-    uint64_t total_l2_serialization_cost = 0;
-    uint64_t total_l2_action_cost = 0;
-    uint64_t total_dram_req_onchip_network_plus_serialization_cost = 0;
-    uint64_t total_dram_rep_onchip_network_plus_serialization_cost = 0;
-    uint64_t total_dram_offchip_network_plus_dram_action_cost = 0;
-    uint64_t total_l1_action = 0;
-    uint64_t total_l2_action = 0;
 
     perTileStats_t::iterator it;
     uint32_t num_tiles = 0;
@@ -94,104 +207,112 @@ void sharedSharedEMRAStats::print_stats(ostream &out) {
         uint32_t id = it->first;
         shared_ptr<sharedSharedEMRAStatsPerTile> st = static_pointer_cast<sharedSharedEMRAStatsPerTile>(it->second);
 
-        uint64_t l2_reads = st->m_l2_read_hits.sample_count();
-        uint64_t l2_writes = st->m_l2_write_hits.sample_count();
-        uint64_t l2 = l2_reads + l2_writes;
-        uint64_t l1_reads = st->m_l1_read_hits.sample_count();
-        uint64_t l1_writes = st->m_l1_write_hits.sample_count();
-        uint64_t l1 = l1_reads + l1_writes;
-
-        total_l2_reads += l2_reads;
-        total_l2_writes += l2_writes;
-        total_l2 += l2;
-        total_l1_reads += l1_reads;
-        total_l1_writes += l1_writes;
-        total_l1 += l1;
-
-        double l2_read_rate = st->m_l2_read_hits.get_mean();
-        double l2_read_hits = l2_read_rate * l2_reads;
-        double l2_write_rate = st->m_l2_write_hits.get_mean();
-        double l2_write_hits = l2_write_rate * l2_writes;
-        double l2_hits = l2_read_hits + l2_write_hits;
-        double l2_rate = l2_hits / l2;
-        double l1_read_rate = st->m_l1_read_hits.get_mean();
-        double l1_read_hits = l1_read_rate * l1_reads;
-        double l1_write_rate = st->m_l1_write_hits.get_mean();
-        double l1_write_hits = l1_write_rate * l1_writes;
-        double l1_hits = l1_read_hits + l1_write_hits;
-        double l1_rate = l1_hits / l1;
-        total_l2_read_hits += l2_read_hits;
-        total_l2_write_hits += l2_write_hits;
-        total_l2_hits += l2_hits;
-        total_l1_read_hits += l1_read_hits;
-        total_l1_write_hits += l1_write_hits;
-        total_l1_hits += l1_hits;
-
-        uint64_t cat_lookups = st->m_cat_hits.sample_count();
-        double cat_rate = st->m_cat_hits.get_mean();
-        double cat_hits = cat_rate * cat_lookups;
-        total_cat_lookups += cat_lookups;
-        total_cat_hits += cat_hits;
-
-        /* cost breakdown study */
-        total_memory_subsystem_serialization_cost += st->m_memory_subsystem_serialization_cost;
-        total_cat_serialization_cost += st->m_cat_serialization_cost;
-        total_cat_action_cost += st->m_cat_action_cost;
-        total_l1_serialization_cost += st->m_l1_serialization_cost;
-        total_l1_action_cost += st->m_l1_action_cost;
-        total_ra_req_network_plus_serialization_cost += st->m_ra_req_network_plus_serialization_cost;
-        total_ra_rep_network_plus_serialization_cost += st->m_ra_rep_network_plus_serialization_cost;
-        total_l2_serialization_cost += st->m_l2_serialization_cost;
-        total_l2_action_cost += st->m_l2_action_cost;
-        total_dram_req_onchip_network_plus_serialization_cost += st->m_dram_req_onchip_network_plus_serialization_cost;
-        total_dram_rep_onchip_network_plus_serialization_cost += st->m_dram_rep_onchip_network_plus_serialization_cost;
-        total_dram_offchip_network_plus_dram_action_cost += st->m_dram_offchip_network_plus_dram_action_cost;
-        total_l1_action += st->m_l1_action;
-        total_l2_action += st->m_l2_action;
-
-        char str[1024];
-        sprintf(str, "[Private-shared-EMRA %4d ] L1-read: %ld L1-write: %ld L1hit%%: %.2f read%%: %.2f write%%: %.2f "
-                     "L2-read: %ld L2-write: %ld L2hit%% %.2f read%%: %.2f write%%: %.2f "
-                     "cat%%: %.2f L1ops: %ld L2ops: %ld ",
-                     id, l1_reads, l2_writes, 
-                     100.0*l1_rate, 100.0*l1_read_rate, 100.0*l1_write_rate, 
-                     l2_reads, l2_writes, 100.0*l2_rate, 100.0*l2_read_rate, 100.0*l2_write_rate, 
-                     100.0*cat_rate, st->m_l1_action, st->m_l2_action);
+        sprintf(str, "[S1S2EMRA:Core %d ] %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld",
+                id,
+                st->m_num_l1_read_instr, 
+                st->m_num_l1_write_instr, 
+                st->m_num_l2_read_instr, 
+                st->m_num_l2_write_instr, 
+                st->m_num_hits_for_l1_read_instr, 
+                st->m_num_hits_for_l1_write_instr, 
+                st->m_num_hits_for_l2_read_instr, 
+                st->m_num_hits_for_l2_write_instr, 
+                st->m_num_core_misses_for_l1_read_instr, 
+                st->m_num_core_misses_for_l1_write_instr, 
+                st->m_num_true_misses_for_l1_read_instr, 
+                st->m_num_true_misses_for_l1_write_instr, 
+                st->m_num_true_misses_for_l2_read_instr, 
+                st->m_num_true_misses_for_l2_write_instr, 
+                st->m_num_core_hit_instr,
+                st->m_num_core_miss_instr,
+                st->m_num_cat_action,
+                st->m_num_l1_action,
+                st->m_num_l2_action,
+                st->m_num_dram_action);
 
         out << str << endl;
+
+        total_tile_info.add(*st);
 
     }
 
     out << endl;
 
-    char str[1024];
-    sprintf(str, "[Summary: Private-shared-EMRA ] L1-read: %ld L1-write: %ld L1hit%%: %.2f read%%: %.2f write%%: %.2f "
-                 "L2-read: %ld L2-write: %ld L2hit%% %.2f read%%: %.2f write%%: %.2f "
-                 "cat%%: %.2f L1ops: %ld L2ops: %ld ",
-            total_l1_reads, total_l1_writes,
-            100.0*total_l1_hits/total_l1,
-            100.0*total_l1_read_hits/total_l1_reads,
-            100.0*total_l1_write_hits/total_l1_writes,
-            total_l2_reads, total_l2_writes,
-            100.0*total_l2_hits/total_l2,
-            100.0*total_l2_read_hits/total_l2_reads,
-            100.0*total_l2_write_hits/total_l2_writes,
-            100.0*total_cat_hits/total_cat_lookups,
-            total_l1_action, total_l2_action );
+    sprintf(str, "[S1S2EMRA:Summary A ] for each unique [instruction, core, cache level] pair\n"
+                 "    total-L1-read-instr-at-each-core %ld\n"
+                 "    total-L1-write-instr-at-each-core %ld\n"
+                 "    total-L2-read-instr-at-each-core %ld\n"
+                 "    total-L2-write-instr-at-each-core %ld\n"
+                 "    total-L1-read-instr-hits-at-each-core %ld\n"
+                 "    total-L1-write-instr-hits-at-each-core %ld\n"
+                 "    total-L2-read-instr-hits-at-each-core %ld\n"
+                 "    total-L2-write-instr-hits-at-each-core %ld\n"
+                 "    total-L1-read-instr-core-misses-at-each-core %ld\n"
+                 "    total-L1-write-instr-core-misses-at-each-core %ld\n"
+                 "    total-L1-read-instr-true-misses-at-each-core %ld\n"
+                 "    total-L1-write-instr-true-misses-at-each-core %ld\n"
+                 "    total-L2-read-instr-true-misses-at-each-core %ld\n"
+                 "    total-L2-write-instr-true-misses-at-each-core %ld\n"
+                 "[S1S2EMRA:Summary B ] for each instruction\n"
+                 "    total-core-hits-instr %ld\n"
+                 "    total-core-missed-instr %ld\n"
+                 "[S1S2EMRA:Summary C ] at each core\n"
+                 "    total-CAT-actions-at-each-core %ld\n"
+                 "    total-L1-actions-at-each-core %ld\n"
+                 "    total-L2-actions-at-each-core %ld\n"
+                 "    total-offchip-DRAM-actions-at-each-core %ld\n",
+            total_tile_info.m_num_l1_read_instr, 
+            total_tile_info.m_num_l1_write_instr, 
+            total_tile_info.m_num_l2_read_instr, 
+            total_tile_info.m_num_l2_write_instr, 
+            total_tile_info.m_num_hits_for_l1_read_instr, 
+            total_tile_info.m_num_hits_for_l1_write_instr, 
+            total_tile_info.m_num_hits_for_l2_read_instr, 
+            total_tile_info.m_num_hits_for_l2_write_instr, 
+            total_tile_info.m_num_core_misses_for_l1_read_instr, 
+            total_tile_info.m_num_core_misses_for_l1_write_instr, 
+            total_tile_info.m_num_true_misses_for_l1_read_instr, 
+            total_tile_info.m_num_true_misses_for_l1_write_instr, 
+            total_tile_info.m_num_true_misses_for_l2_read_instr, 
+            total_tile_info.m_num_true_misses_for_l2_write_instr, 
+            total_tile_info.m_num_core_hit_instr,
+            total_tile_info.m_num_core_miss_instr,
+            total_tile_info.m_num_cat_action,
+            total_tile_info.m_num_l1_action,
+            total_tile_info.m_num_l2_action,
+            total_tile_info.m_num_dram_action);
 
     out << str << endl;
 
-    /* cost breakdown study */
-    sprintf(str, "[Latency Breakdown: Private-shared-EMRA ] MEM-S: %ld L1-S: %ld L1: %ld CAT-S: %ld CAT: %ld RAreq-N&S: %ld RArep-N&S: %ld"
-                 "L2-S: %ld L2: %ld DRAMreq-onchip-N&S: %ld DRAMrep-onchip-N&S: %ld DRAM-offchip: %ld", 
-                 total_memory_subsystem_serialization_cost,
-                 total_l1_serialization_cost, total_l1_action_cost, 
-                 total_cat_serialization_cost, total_cat_action_cost,
-                 total_ra_req_network_plus_serialization_cost, total_ra_rep_network_plus_serialization_cost,
-                 total_l2_serialization_cost, total_l2_action_cost,
-                 total_dram_req_onchip_network_plus_serialization_cost, 
-                 total_dram_rep_onchip_network_plus_serialization_cost, 
-                 total_dram_offchip_network_plus_dram_action_cost);
+    out << endl;
+
+    sprintf(str, "[S1S2EMRA Latency Breakdown ]\n"
+            "    total-memory-serialization %ld\n"
+            "    total-outstanding-CAT-serialization %ld\n"
+            "    total-outstanding-CAT-operation %ld\n"
+            "    total-outstanding-L1-serialization %ld\n"
+            "    total-outstanding-L1-operation %ld\n"
+            "    total-RA-request-network-and-serialization %ld\n"
+            "    total-RA-reply-network-and-serialization %ld\n"
+            "    total-outstanding-L2-serialization %ld\n"
+            "    total-outstanding-L2-operation %ld\n"
+            "    total-outstanding-DRAMctrl-request-network-and-serialization %ld\n"
+            "    total-outstanding-DRAMctrl-reply-network-and-serialization %ld\n"
+            "    total-outstanding-DRAM-operation %ld\n"
+            "    total-migration_latency %ld\n",
+            total_tile_info.m_total_per_mem_instr_info.m_mem_srz,
+            total_tile_info.m_total_per_mem_instr_info.m_cat_srz,
+            total_tile_info.m_total_per_mem_instr_info.m_cat_ops,
+            total_tile_info.m_total_per_mem_instr_info.m_l1_srz,
+            total_tile_info.m_total_per_mem_instr_info.m_l1_ops,
+            total_tile_info.m_total_per_mem_instr_info.m_ra_req_nas,
+            total_tile_info.m_total_per_mem_instr_info.m_ra_rep_nas,
+            total_tile_info.m_total_per_mem_instr_info.m_l2_srz,
+            total_tile_info.m_total_per_mem_instr_info.m_l2_ops,
+            total_tile_info.m_total_per_mem_instr_info.m_dramctrl_req_nas,
+            total_tile_info.m_total_per_mem_instr_info.m_dramctrl_rep_nas,
+            total_tile_info.m_total_per_mem_instr_info.m_dram_ops,
+            total_tile_info.m_total_per_mem_instr_info.m_mig);
 
     out << str << endl;
 

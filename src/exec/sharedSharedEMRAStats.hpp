@@ -7,64 +7,127 @@
 #include "memStats.hpp"
 #include "memory_types.hpp"
 
+class sharedSharedEMRAStatsPerMemInstr {
+public:
+    sharedSharedEMRAStatsPerMemInstr();
+    ~sharedSharedEMRAStatsPerMemInstr();
+
+    uint64_t total_cost();
+    void add(const sharedSharedEMRAStatsPerMemInstr& other);
+
+    shared_ptr<sharedSharedEMRAStatsPerMemInstr> get_tentative_data(int index);
+    inline void clear_tentative_data() { m_tentative_data.clear(); }
+    void discard_tentative_data(int index);
+    void commit_tentative_data(int index);
+    void commit_max_tentative_data();
+    void commit_min_tentative_data();
+
+    void apply_mig_latency(const uint64_t cur_time);
+    inline void discard_mig_latency() { m_did_migrate = false; m_mig_depart_time = 0; }
+
+    inline void did_core_miss() { m_did_core_miss = true; }
+    inline void did_migrate(uint64_t depart_time) { m_did_migrate = true; m_mig_depart_time = depart_time; }
+
+    inline void add_mem_srz(uint64_t amnt) { m_mem_srz += amnt; }
+    inline void add_l1_srz(uint64_t amnt) { m_l1_srz += amnt; }
+    inline void add_l1_ops(uint64_t amnt) { m_l1_ops += amnt; }
+    inline void add_cat_srz(uint64_t amnt) { m_cat_srz += amnt; }
+    inline void add_cat_ops(uint64_t amnt) { m_cat_ops += amnt; }
+    inline void add_ra_req_nas(uint64_t amnt) { m_ra_req_nas += amnt; }
+    inline void add_ra_rep_nas(uint64_t amnt) { m_ra_rep_nas += amnt; }
+    inline void add_l2_srz(uint64_t amnt) { m_l2_srz += amnt; }
+    inline void add_l2_ops(uint64_t amnt) { m_l2_ops += amnt; }
+    inline void add_dramctrl_req_nas(uint64_t amnt) { m_dramctrl_req_nas += amnt; }
+    inline void add_dramctrl_rep_nas(uint64_t amnt) { m_dramctrl_rep_nas += amnt; }
+    inline void add_dram_ops(uint64_t amnt) { m_dram_ops += amnt; }
+
+    friend class sharedSharedEMRAStatsPerTile;
+    friend class sharedSharedEMRAStats;
+
+private:
+    bool add_new_tentative_data(int index);
+
+    bool m_did_core_miss;
+    bool m_did_migrate;
+    uint64_t m_mig_depart_time;
+
+    uint64_t m_mem_srz;
+    uint64_t m_l1_srz;
+    uint64_t m_l1_ops;
+    uint64_t m_cat_srz;
+    uint64_t m_cat_ops;
+    uint64_t m_ra_req_nas;
+    uint64_t m_ra_rep_nas;
+    uint64_t m_l2_srz;
+    uint64_t m_l2_ops;
+    uint64_t m_dramctrl_req_nas;
+    uint64_t m_dramctrl_rep_nas;
+    uint64_t m_dram_ops;
+    uint64_t m_mig;
+
+    map<int, shared_ptr<sharedSharedEMRAStatsPerMemInstr> > m_tentative_data;
+    
+};
+
 class sharedSharedEMRAStatsPerTile : public memStatsPerTile {
 public:
     sharedSharedEMRAStatsPerTile(uint32_t id, const uint64_t &system_time);
     virtual ~sharedSharedEMRAStatsPerTile();
 
-    void did_read_l1(bool hit);
-    void did_write_l1(bool hit);
-    void did_read_l2(bool hit);
-    void did_write_l2(bool hit);
-    void did_read_cat(bool hit);
+    inline void new_read_instr_at_L1() { ++m_num_l1_read_instr; }
+    inline void new_write_instr_at_L1() { ++m_num_l1_write_instr; }
+    inline void new_read_instr_at_L2() { ++m_num_l2_read_instr; }
+    inline void new_write_instr_at_L2() { ++m_num_l2_write_instr; }
 
-    /* cost breakdown study - outstanding costs only */
-    /* cost means something that causes an increase in the latency for a memory request */
-    /* if a latency of a certain action is hidden and not seen by any memory request, it's not a cost */
-    /* all costs except for serialization costs are measured only on single memory request that directly decides actions */
-    /* if an action (i.e. an invalidation) may affect other memory requests, those requests will see this effect only on */
-    /* serialization costs */
-    inline void add_memory_subsystem_serialization_cost(uint64_t cost) { m_memory_subsystem_serialization_cost += cost; }
-    inline void add_cat_serialization_cost(uint64_t cost) { m_cat_serialization_cost += cost; }
-    inline void add_cat_action_cost(uint64_t cost) { m_cat_action_cost += cost; }
-    inline void add_l1_serialization_cost(uint64_t cost) { m_l1_serialization_cost += cost; }
-    inline void add_l1_action_cost(uint64_t cost) { m_l1_action_cost += cost; }
-    inline void add_ra_req_network_plus_serialization_cost(uint64_t cost) { m_ra_req_network_plus_serialization_cost += cost; }
-    inline void add_ra_rep_network_plus_serialization_cost(uint64_t cost) { m_ra_rep_network_plus_serialization_cost += cost; }
-    inline void add_l2_serialization_cost(uint64_t cost) { m_l2_serialization_cost += cost; }
-    inline void add_l2_action_cost(uint64_t cost) { m_l2_action_cost += cost; }
-    inline void add_dram_req_onchip_network_plus_serialization_cost(uint64_t cost) { m_dram_req_onchip_network_plus_serialization_cost += cost; }
-    inline void add_dram_rep_onchip_network_plus_serialization_cost(uint64_t cost) { m_dram_rep_onchip_network_plus_serialization_cost += cost; }
-    inline void add_dram_offchip_network_plus_dram_action_cost(uint64_t cost) { m_dram_offchip_network_plus_dram_action_cost += cost; }
-    inline void add_l1_action() { ++m_l1_action; }
-    inline void add_l2_action() { ++m_l2_action; }
+    inline void hit_for_read_instr_at_L1() { ++m_num_hits_for_l1_read_instr; }
+    inline void hit_for_write_instr_at_L1() { ++m_num_hits_for_l1_write_instr; }
+    inline void hit_for_read_instr_at_L2() { ++m_num_hits_for_l2_read_instr; }
+    inline void hit_for_write_instr_at_L2() { ++m_num_hits_for_l2_write_instr; }
+
+    inline void core_miss_for_read_instr_at_L1() { ++m_num_core_misses_for_l1_read_instr; }
+    inline void core_miss_for_write_instr_at_L1() { ++m_num_core_misses_for_l1_write_instr; }
+
+    inline void true_miss_for_read_instr_at_L1() { ++m_num_true_misses_for_l1_read_instr; }
+    inline void true_miss_for_write_instr_at_L1() { ++m_num_true_misses_for_l1_write_instr; }
+    inline void true_miss_for_read_instr_at_L2() { ++m_num_true_misses_for_l2_read_instr; }
+    inline void true_miss_for_write_instr_at_L2() { ++m_num_true_misses_for_l2_write_instr; }
+
+    inline void add_cat_action() { ++m_num_cat_action; }
+    inline void add_l1_action() { ++m_num_l1_action; }
+    inline void add_l2_action() { ++m_num_l2_action; }
+    inline void add_dram_action() { ++m_num_dram_action; }
+
+    void add(const sharedSharedEMRAStatsPerTile& other);
+    void commit_per_mem_instr_stats(const sharedSharedEMRAStatsPerMemInstr& data);
+    inline void commit_per_mem_instr_stats(shared_ptr<sharedSharedEMRAStatsPerMemInstr> data) { commit_per_mem_instr_stats(*data); }
 
     friend class sharedSharedEMRAStats;
 
 private:
+    uint64_t m_num_l1_read_instr; 
+    uint64_t m_num_l1_write_instr; 
+    uint64_t m_num_l2_read_instr; 
+    uint64_t m_num_l2_write_instr; 
+    uint64_t m_num_hits_for_l1_read_instr; 
+    uint64_t m_num_hits_for_l1_write_instr; 
+    uint64_t m_num_hits_for_l2_read_instr; 
+    uint64_t m_num_hits_for_l2_write_instr; 
+    uint64_t m_num_core_misses_for_l1_read_instr; 
+    uint64_t m_num_core_misses_for_l1_write_instr; 
+    uint64_t m_num_true_misses_for_l1_read_instr; 
+    uint64_t m_num_true_misses_for_l1_write_instr; 
+    uint64_t m_num_true_misses_for_l2_read_instr; 
+    uint64_t m_num_true_misses_for_l2_write_instr; 
 
-    running_stats m_l1_read_hits;
-    running_stats m_l1_write_hits;
-    running_stats m_l2_read_hits;
-    running_stats m_l2_write_hits;
+    uint64_t m_num_core_hit_instr;
+    uint64_t m_num_core_miss_instr;
 
-    running_stats m_cat_hits;
+    uint64_t m_num_cat_action;
+    uint64_t m_num_l1_action;
+    uint64_t m_num_l2_action;
+    uint64_t m_num_dram_action;
 
-    /* cost breakdown study */
-    uint64_t m_memory_subsystem_serialization_cost;
-    uint64_t m_cat_serialization_cost;
-    uint64_t m_cat_action_cost;
-    uint64_t m_l1_serialization_cost;
-    uint64_t m_l1_action_cost;
-    uint64_t m_ra_req_network_plus_serialization_cost;
-    uint64_t m_ra_rep_network_plus_serialization_cost;
-    uint64_t m_l2_serialization_cost;
-    uint64_t m_l2_action_cost;
-    uint64_t m_dram_req_onchip_network_plus_serialization_cost;
-    uint64_t m_dram_rep_onchip_network_plus_serialization_cost;
-    uint64_t m_dram_offchip_network_plus_dram_action_cost;
-    uint64_t m_l1_action;
-    uint64_t m_l2_action;
+    sharedSharedEMRAStatsPerMemInstr m_total_per_mem_instr_info;
 
 };
 

@@ -3,7 +3,16 @@
 
 #include "memtraceCore.hpp"
 
-#define DBG_PRINT
+#define DEBUG
+#undef DEBUG
+
+#ifdef DEBUG
+#define mh_log(X) if(true) cout
+#define mh_assert(X) assert(X)
+#else
+#define mh_assert(X) 
+#define mh_log(X) LOG(log,X)
+#endif
 
 memtraceCore::memtraceCore(const pe_id &id, const uint64_t &t,
                            shared_ptr<id_factory<packet_id> > pif,
@@ -156,14 +165,14 @@ void memtraceCore::execute() {
                         cur.req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), cur.thread->word_count(), dummy));
                     }
 
-                    /* cost breakdown study */
-                    cur.req->set_milestone_time(system_time);
+                    cur.req->set_per_mem_instr_runtime_info(cur.thread->per_mem_instr_runtime_info());
+                    cur.req->set_serialization_begin_time(system_time);
 
                     m_memory->request(cur.req);
                     cur.status = LANE_WAIT;
-                    LOG(log,4) << "[thread " << cur.thread->get_id() << " @ " << system_time 
-                        << " ] is making a memory request on core " 
-                        << get_id().get_numeric_id() << " for address " << cur.thread->maddr() << endl;
+                    mh_log(4) << "[thread " << cur.thread->get_id() << " @ " << system_time 
+                              << " ] is making a memory request on core " 
+                              << get_id().get_numeric_id() << " for address " << cur.thread->maddr() << endl;
                 } else if (cur.thread->type() == memtraceThread::INST_OTHER) {
                     cur.status = LANE_IDLE;
                 }
@@ -210,23 +219,23 @@ void memtraceCore::update_from_memory_requests() {
                         entry.thread->stats()->did_finish_write(system_time - entry.thread->first_memory_issued_time());
                     }
                 }
-                LOG(log,4) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
-                    << " ] finished memory operation : "; 
+                mh_log(4) << "[core " << get_id().get_numeric_id() << " @ " << system_time 
+                          << " ] finished memory operation : "; 
                 if (entry.req->is_read())  {
-                    LOG(log,4) << " read ";
+                    mh_log(4) << " read ";
                 } else {
-                    LOG(log,4) << " written ";
+                    mh_log(4) << " written ";
                 }
                 for (uint32_t j = 0; j < entry.req->word_count(); ++j) {
-                    LOG(log,4) << hex << entry.req->data()[j] << dec;
+                    mh_log(4) << hex << entry.req->data()[j] << dec;
                 }
-                LOG(log,4) <<  " on addr " << hex << entry.req->maddr().address << dec << endl; 
+                mh_log(4) <<  " on addr " << hex << entry.req->maddr().address << dec << endl; 
                 entry.status = LANE_IDLE;
             } else if (i->req->status() == REQ_RETRY) {
                 /* the memory couldn't accept the last request */
-
-                /* cost breakdown study */
-                i->req->set_milestone_time(system_time);
+                mh_log(4) << "[thread " << entry.thread->get_id() << " @ " << system_time 
+                          << " ] is making a memory RE-request on core " 
+                          << get_id().get_numeric_id() << " for address " << entry.thread->maddr() << endl;
 
                 m_memory->request(i->req); /* it's supposed to be in the positive tick of the next cycle, but doing here is equivalent */             
             } else if (m_support_em && entry.req->status() == REQ_MIGRATE) {

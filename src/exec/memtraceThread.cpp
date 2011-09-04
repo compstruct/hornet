@@ -3,6 +3,17 @@
 
 #include "memtraceThread.hpp"
 
+#define DEBUG
+#undef DEBUG
+
+#ifdef DEBUG
+#define mh_log(X) if(true) cout
+#define mh_assert(X) assert(X)
+#else
+#define mh_assert(X) 
+#define mh_log(X) LOG(log,X)
+#endif
+
 memtraceThread::memtraceThread(uint32_t id, const uint64_t &t, logger &l) : 
     m_id(id), system_time(t), log(l), m_stats(shared_ptr<memtraceThreadStatsPerThread>())
 {
@@ -32,6 +43,7 @@ void memtraceThread::add_mem_inst(uint32_t alu_cost, bool write, maddr_t maddr, 
     new_inst.maddr = maddr;
     new_inst.word_count = word_count;
     new_inst.first_memory_issued = false;
+    new_inst.per_mem_instr_runtime_info = shared_ptr<shared_ptr<void> >(new shared_ptr<void>(shared_ptr<void>()));
     m_insts.push_back(new_inst);
 }
 
@@ -43,8 +55,9 @@ void memtraceThread::fetch() {
         m_cur = m_insts.front();
         --(m_cur.repeats);
         m_insts.erase(m_insts.begin());
+        mh_log(4) << "[thread " << get_id() << " ] fetched a new instruction " << endl;
     } else {
-        LOG(log,1) << "[thread " << get_id() << " ] finished " << endl;
+        mh_log(1) << "[thread " << get_id() << " ] finished " << endl;
         m_cur.type = INST_NONE;
     }
 }

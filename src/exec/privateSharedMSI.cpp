@@ -177,8 +177,8 @@ void privateSharedMSI::tick_positive_edge() {
     m_l1->tick_positive_edge();
     m_l2->tick_positive_edge();
     m_cat->tick_positive_edge();
-    if(m_dram_controller) {
-        m_dram_controller->tick_positive_edge();
+    if(m_dramctrl) {
+        m_dramctrl->tick_positive_edge();
     }
 }
 
@@ -187,8 +187,8 @@ void privateSharedMSI::tick_negative_edge() {
     m_l1->tick_negative_edge();
     m_l2->tick_negative_edge();
     m_cat->tick_negative_edge();
-    if(m_dram_controller) {
-        m_dram_controller->tick_negative_edge();
+    if(m_dramctrl) {
+        m_dramctrl->tick_negative_edge();
     }
 
     /* accept messages and write into tables */
@@ -1015,7 +1015,7 @@ void privateSharedMSI::l2_work_table_update() {
                         if (victim && victim->dirty) {
                             dram_req = shared_ptr<dramMsg>(new dramMsg);
                             dram_req->sender = m_id;
-                            dram_req->receiver = m_dram_controller_location;
+                            dram_req->receiver = m_dramctrl_location;
                             dram_req->req = shared_ptr<dramRequest>(new dramRequest(victim->start_maddr,
                                                                                     DRAM_REQ_WRITE,
                                                                                     m_cfg.words_per_cache_line,
@@ -1026,12 +1026,12 @@ void privateSharedMSI::l2_work_table_update() {
                             dram_req->milestone_time = system_time;
 
                             entry->dram_req = dram_req;
-                            if (m_dram_controller_location == m_id) {
+                            if (m_dramctrl_location == m_id) {
                                 m_to_dram_req_schedule_q.push_back(entry->dram_req);
                             } else {
                                 entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
                                 entry->net_msg_to_send->src = m_id;
-                                entry->net_msg_to_send->dst = m_dram_controller_location;
+                                entry->net_msg_to_send->dst = m_dramctrl_location;
                                 entry->net_msg_to_send->type = MSG_DRAM_REQ;
                                 entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
                                 entry->net_msg_to_send->content = dram_req;
@@ -1041,7 +1041,7 @@ void privateSharedMSI::l2_work_table_update() {
                         } else {
                             dram_req = shared_ptr<dramMsg>(new dramMsg);
                             dram_req->sender = m_id;
-                            dram_req->receiver = m_dram_controller_location;
+                            dram_req->receiver = m_dramctrl_location;
                             dram_req->req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
                                                                                     DRAM_REQ_READ,
                                                                                     m_cfg.words_per_cache_line));
@@ -1051,12 +1051,12 @@ void privateSharedMSI::l2_work_table_update() {
                             /* cost breakdown study */
                             dram_req->milestone_time = system_time;
 
-                            if (m_dram_controller_location == m_id) {
+                            if (m_dramctrl_location == m_id) {
                                 m_to_dram_req_schedule_q.push_back(entry->dram_req);
                             } else {
                                 entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
                                 entry->net_msg_to_send->src = m_id;
-                                entry->net_msg_to_send->dst = m_dram_controller_location;
+                                entry->net_msg_to_send->dst = m_dramctrl_location;
                                 entry->net_msg_to_send->type = MSG_DRAM_REQ;
                                 entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes);
                                 entry->net_msg_to_send->content = dram_req;
@@ -1120,7 +1120,7 @@ void privateSharedMSI::l2_work_table_update() {
                 mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] sent a DRAM writeback for "
                           << dram_req->req->maddr() << endl;
                 entry->status = _L2_WORK_UPDATE_L2_AND_FINISH;
-            } else if (m_dram_controller_location == m_id) {
+            } else if (m_dramctrl_location == m_id) {
                 m_to_dram_req_schedule_q.push_back(entry->dram_req);
             } else {
                 m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
@@ -1146,7 +1146,7 @@ void privateSharedMSI::l2_work_table_update() {
                     if (line->dirty) {
                         dram_req = shared_ptr<dramMsg>(new dramMsg);
                         dram_req->sender = m_id;
-                        dram_req->receiver = m_dram_controller_location;
+                        dram_req->receiver = m_dramctrl_location;
                         dram_req->req = shared_ptr<dramRequest>(new dramRequest(line->start_maddr,
                                                                                 DRAM_REQ_WRITE,
                                                                                 m_cfg.words_per_cache_line,
@@ -1157,12 +1157,12 @@ void privateSharedMSI::l2_work_table_update() {
                         dram_req->milestone_time = UINT64_MAX;
 
                         entry->dram_req = dram_req;
-                        if (m_dram_controller_location == m_id) {
+                        if (m_dramctrl_location == m_id) {
                             m_to_dram_req_schedule_q.push_back(entry->dram_req);
                         } else {
                             entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
                             entry->net_msg_to_send->src = m_id;
-                            entry->net_msg_to_send->dst = m_dram_controller_location;
+                            entry->net_msg_to_send->dst = m_dramctrl_location;
                             entry->net_msg_to_send->type = MSG_DRAM_REQ;
                             entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
                             entry->net_msg_to_send->content = dram_req;
@@ -1392,7 +1392,7 @@ void privateSharedMSI::l2_work_table_update() {
                     if (victim && victim->dirty) {
                         dram_req = shared_ptr<dramMsg>(new dramMsg);
                         dram_req->sender = m_id;
-                        dram_req->receiver = m_dram_controller_location;
+                        dram_req->receiver = m_dramctrl_location;
                         dram_req->req = shared_ptr<dramRequest>(new dramRequest(victim->start_maddr,
                                                                                 DRAM_REQ_WRITE,
                                                                                 m_cfg.words_per_cache_line,
@@ -1403,12 +1403,12 @@ void privateSharedMSI::l2_work_table_update() {
                         dram_req->milestone_time = system_time;
 
                         entry->dram_req = dram_req;
-                        if (m_dram_controller_location == m_id) {
+                        if (m_dramctrl_location == m_id) {
                             m_to_dram_req_schedule_q.push_back(entry->dram_req);
                         } else {
                             entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
                             entry->net_msg_to_send->src = m_id;
-                            entry->net_msg_to_send->dst = m_dram_controller_location;
+                            entry->net_msg_to_send->dst = m_dramctrl_location;
                             entry->net_msg_to_send->type = MSG_DRAM_REQ;
                             entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
                             entry->net_msg_to_send->content = dram_req;
@@ -1460,7 +1460,7 @@ void privateSharedMSI::l2_work_table_update() {
                           << dram_req->req->maddr() << endl;
                 l2_req->reset();
                 entry->status = _L2_WORK_UPDATE_L2_AND_SEND_REP;
-            } else if (m_dram_controller_location == m_id) {
+            } else if (m_dramctrl_location == m_id) {
                 m_to_dram_req_schedule_q.push_back(entry->dram_req);
             } else {
                 m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
@@ -1485,7 +1485,7 @@ void privateSharedMSI::l2_work_table_update() {
 
                 dram_req = shared_ptr<dramMsg>(new dramMsg);
                 dram_req->sender = m_id;
-                dram_req->receiver = m_dram_controller_location;
+                dram_req->receiver = m_dramctrl_location;
                 dram_req->req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
                                                                         DRAM_REQ_READ,
                                                                         m_cfg.words_per_cache_line));
@@ -1495,19 +1495,19 @@ void privateSharedMSI::l2_work_table_update() {
                 dram_req->milestone_time = system_time;
 
                 entry->dram_req = dram_req;
-                if (m_dram_controller_location == m_id) {
+                if (m_dramctrl_location == m_id) {
                     m_to_dram_req_schedule_q.push_back(entry->dram_req);
                 } else {
                     entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
                     entry->net_msg_to_send->src = m_id;
-                    entry->net_msg_to_send->dst = m_dram_controller_location;
+                    entry->net_msg_to_send->dst = m_dramctrl_location;
                     entry->net_msg_to_send->type = MSG_DRAM_REQ;
                     entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes);
                     entry->net_msg_to_send->content = dram_req;
                     m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
                 }
                 entry->status = _L2_WORK_SEND_DRAM_FEED_REQ;
-            } else if (m_dram_controller_location == m_id) {
+            } else if (m_dramctrl_location == m_id) {
                 m_to_dram_req_schedule_q.push_back(entry->dram_req);
             } else {
                 m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
@@ -1526,7 +1526,7 @@ void privateSharedMSI::l2_work_table_update() {
                           << dram_req->req->maddr() << endl;
 
                 entry->status = _L2_WORK_WAIT_DRAM_FEED;
-            } else if (m_dram_controller_location == m_id) {
+            } else if (m_dramctrl_location == m_id) {
                 m_to_dram_req_schedule_q.push_back(entry->dram_req);
             } else {
                 m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
@@ -1825,19 +1825,12 @@ void privateSharedMSI::schedule_requests() {
     random_shuffle(m_core_port_schedule_q.begin(), m_core_port_schedule_q.end(), rr_fn);
     uint32_t count = 0;
     while (m_core_port_schedule_q.size()) {
+        shared_ptr<memoryRequest> req = m_core_port_schedule_q.front();
         if (count < m_available_core_ports) {
-            m_to_cache_req_schedule_q.push_back(make_tuple(true, m_core_port_schedule_q.front()));
+            m_to_cache_req_schedule_q.push_back(make_tuple(true, req));
             ++count;
         } else {
-            /* sorry */
-            mh_log(4) << "you have to retry" << endl;
-            set_req_status(m_core_port_schedule_q.front(), REQ_RETRY);
-
-            /* cost breakdown study */
-            if (stats_enabled()) {
-                stats()->add_memory_subsystem_serialization_cost(system_time - m_core_port_schedule_q.front()->milestone_time());
-            }
-
+            set_req_status(req, REQ_RETRY);
         }
         m_core_port_schedule_q.erase(m_core_port_schedule_q.begin());
     }
@@ -1854,13 +1847,12 @@ void privateSharedMSI::schedule_requests() {
                 mh_log(4) << "you have to retry" << endl;
                 set_req_status(req, REQ_RETRY);
 
-                /* cost breakdown study */
-                if (stats_enabled()) {
-                    stats()->add_memory_subsystem_serialization_cost(system_time - req->milestone_time());
-                }
-
                 m_to_cache_req_schedule_q.erase(m_to_cache_req_schedule_q.begin());
                 continue;
+            }
+
+            if (stats_enabled()) {
+                stats()->add_memory_subsystem_serialization_cost(system_time - req->serialization_begin_time());
             }
 
             shared_ptr<toL1Entry> new_entry(new toL1Entry);
@@ -2102,9 +2094,9 @@ void privateSharedMSI::schedule_requests() {
     /* 4 : arbitrate inputs to dram work table */
     random_shuffle(m_to_dram_req_schedule_q.begin(), m_to_dram_req_schedule_q.end(), rr_fn);
     while (m_to_dram_req_schedule_q.size()) {
-        mh_assert(m_dram_controller);
+        mh_assert(m_dramctrl);
         shared_ptr<dramMsg> msg = m_to_dram_req_schedule_q.front();
-        if (m_dram_controller->available()) {
+        if (m_dramctrl->available()) {
             if (msg->req->is_read()) {
 
                 /* cost breakdown study */
@@ -2124,7 +2116,7 @@ void privateSharedMSI::schedule_requests() {
                 m_dram_work_table[msg->req->maddr()] = new_entry;
             }
                 /* if write, make a request and done */
-            m_dram_controller->request(msg->req);
+            m_dramctrl->request(msg->req);
             msg->did_win_last_arbitration = true;
         }
         m_to_dram_req_schedule_q.erase(m_to_dram_req_schedule_q.begin());

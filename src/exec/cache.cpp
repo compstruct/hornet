@@ -17,6 +17,8 @@
 #define mh_log(X) LOG(log,X)
 #endif
 
+/* TODO : cache.hpp / cache.cpp will be cleaned up in 2011 September */
+
 cacheRequest::cacheRequest(maddr_t maddr, cacheReqType_t request_type, uint32_t word_count,
                            shared_array<uint32_t> data_to_write, shared_ptr<void> coherence_info_to_write) :
     m_request_type(request_type), m_maddr(maddr), m_word_count(word_count),
@@ -122,11 +124,6 @@ void cache::request(shared_ptr<cacheRequest> req) {
     maddr_t start_maddr = get_start_maddr_in_line(req->m_maddr);
     m_req_table[start_maddr].push_back(new_entry);
 
-#if 0
-    if (get_start_maddr_in_line(req->m_maddr).address == 0xdfef00) {
-        cerr << " REQ " << req->m_maddr << " was requested @ " << system_time << endl;
-    } 
-#endif
     return;
 
 }
@@ -141,146 +138,153 @@ void cache::tick_positive_edge() {
         reqEntry &head = q.front();;
         shared_ptr<cacheRequest> req = head.request;
 
-        if (head.status == ENTRY_DONE) {
+        if (head.status != ENTRY_DONE) {
+            ++it_q;
+            continue;
+        }
 
-            //printf("Processing cache request @ level %d\n", m_level);
-            //printf("Request space,address: %d,%x\n", (uint32_t) req->maddr().space, (uint32_t) req->maddr().address);
-            //if (req->m_word_count == 1) 
-            //    //printf("Request data 0: %x\n", req->m_data_to_write[0]);
-            //if (req->m_word_count == 2)
-            //    //printf("Request data 1: %x\n", req->m_data_to_write[1]);
-            //if (req->m_word_count > 2) assert(false);
-
-            uint32_t idx = get_index(req->m_maddr);
-            maddr_t start_maddr = get_start_maddr_in_line(req->m_maddr);
-            if (m_cache.count(idx) == 0) {
-                m_cache[idx] = new cacheLine[m_associativity];
-                for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
-                    m_cache[idx][it_way].empty = true;
-                    m_cache[idx][it_way].valid = false;
-                    m_cache[idx][it_way].data = shared_array<uint32_t>(new uint32_t[m_words_per_line]);
-                    m_cache[idx][it_way].coherence_info = shared_ptr<void>();
-                }
-            }
-            bool matched = false;
-            vector<uint32_t> empties;
+        uint32_t idx = get_index(req->m_maddr);
+        maddr_t start_maddr = get_start_maddr_in_line(req->m_maddr);
+        if (m_cache.count(idx) == 0) {
+            m_cache[idx] = new cacheLine[m_associativity];
             for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
-                cacheLine &line = m_cache[idx][it_way];
-                if (!line.empty && start_maddr == line.start_maddr) {
-                    matched = true;
+                m_cache[idx][it_way].empty = true;
+                m_cache[idx][it_way].valid = false;
+                m_cache[idx][it_way].data = shared_array<uint32_t>(new uint32_t[m_words_per_line]);
+                m_cache[idx][it_way].coherence_info = shared_ptr<void>();
+            }
+        }
+        bool matched = false;
+        vector<uint32_t> empties;
+        for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
+            cacheLine &line = m_cache[idx][it_way];
+            if (!line.empty && start_maddr == line.start_maddr) {
+                matched = true;
 
-#if 0
-                    if (start_maddr.address == 0xdfef00) {
-                        cerr << " Testing " << start_maddr << " request for " << req->m_request_type << endl;
-                        if (system_time > 26800) {
-                            cerr << " hmm" << endl;
-                        }
-                    }
-#endif
+                /* is it a real hit? */
+                bool hit = 
+                    /* update is always a hit if matched. */
+                    req->m_request_type == CACHE_REQ_FILL || 
+                    req->m_request_type == CACHE_REQ_UPDATE ||
+                    /* invalidate also does not care either */
+                    req->m_request_type == CACHE_REQ_INVALIDATE ||
+                    (line.valid && /* need to be valid (otherwise, the line is still waiting for data or will be invalidated */
+                           (!m_helper_is_hit ||  /* if it doesn't care coherency, it's a hit here */
+                            !line.coherence_info ||  /* if it has no coherence information, it's regarded a hit too */
+                            (*m_helper_is_hit)(req, line, system_time) /* otherwise the helper should say it's a hit */
+                           ));
 
-                    /* is it a real hit? */
-                    bool hit = 
-                        /* update is always a hit if matched. */
-                        req->m_request_type == CACHE_REQ_UPDATE ||
-                        /* invalidate also does not care either */
-                        req->m_request_type == CACHE_REQ_INVALIDATE ||
-                        (line.valid && /* need to be valid (otherwise, the line is still waiting for data or will be invalidated */
-                               (!m_helper_is_hit ||  /* if it doesn't care coherency, it's a hit here */
-                                !line.coherence_info ||  /* if it has no coherence information, it's regarded a hit too */
-                                (*m_helper_is_hit)(req, line, system_time) /* otherwise the helper should say it's a hit */
-                               ));
+                if (hit) {
 
-                    if (hit) {
-                        //printf("Request was a HIT in the cache\n");
-
-                        req->m_status = CACHE_REQ_HIT;
-                        line.last_access_time = system_time;
-                        switch (req->m_request_type) {
-                        case CACHE_REQ_UPDATE:
-                            //printf("\tRequest was an UPDATE\n");
-#if 0
-                            if (m_id == 62 && idx == 888) {
-                                cerr << "  a line for " << start_maddr << " got into the cache 82 index 888 way " << it_way << " @ " << system_time << endl;
+                    req->m_status = CACHE_REQ_HIT;
+                    line.last_access_time = system_time;
+                    switch (req->m_request_type) {
+                    case CACHE_REQ_UPDATE:
+                    case CACHE_REQ_FILL:
+                        line.valid = true;
+                        line.dirty = false;
+                    case CACHE_REQ_WRITE:
+                        {
+                            //printf("\tRequest was an HIT\n");
+                            //printf("\tWRITING TO THE CACHE, level: %d, index: %d\n", m_level, idx);
+                            mh_assert(req->m_data_to_write);
+                            
+                            uint32_t offset = get_offset(req->m_maddr) / 4;
+                            for (uint32_t i = 0; i < req->m_word_count; ++i) {
+                                line.data[offset + i] = req->m_data_to_write[i];
+                                //printf("\tWriting: %x\n", req->m_data_to_write[i]);
                             }
-#endif
-                            line.valid = true;
-                            line.dirty = false;
-                        case CACHE_REQ_WRITE:
-                            {
-                                //printf("\tRequest was an HIT\n");
-                                //printf("\tWRITING TO THE CACHE, level: %d, index: %d\n", m_level, idx);
-                                mh_assert(req->m_data_to_write);
-                                
-                                uint32_t offset = get_offset(req->m_maddr) / 4;
-                                for (uint32_t i = 0; i < req->m_word_count; ++i) {
-                                    line.data[offset + i] = req->m_data_to_write[i];
-                                    //printf("\tWriting: %x\n", req->m_data_to_write[i]);
-                                }
-                                //printf("\n");
-                                if (req->m_coherence_info_to_write) {
-                                    line.coherence_info = req->m_coherence_info_to_write;
-                                }
-                                if (!req->m_do_clean_write) {
-                                    line.dirty = true;
-                                }
-                                written_lines.insert(start_maddr);
-                                req->m_line_copy = copy_cache_line(line);
-
-                                //print_contents();
-
-                                break;
+                            //printf("\n");
+                            if (req->m_coherence_info_to_write) {
+                                line.coherence_info = req->m_coherence_info_to_write;
                             }
-                        case CACHE_REQ_INVALIDATE:
-                            {
-                                if (req->m_do_reserve) {
-                                    req->m_line_copy = copy_cache_line(line);
-                                    req->m_line_copy->start_maddr = start_maddr;
-                                    req->m_line_copy->empty = false;
-                                    req->m_line_copy->valid = false;
-                                    if (m_helper_reserve_line) {
-                                        (*m_helper_reserve_line)(*req->m_line_copy);
-                                    }
-                                    m_lines_to_evict_and_reserve.insert(make_tuple(idx, it_way, start_maddr));
-                                } else {
-                                    req->m_line_copy = copy_cache_line(line);
-                                    req->m_line_copy->empty = true;
-                                    mh_log(4) << "[cache " << m_id << " L" << m_level << " @ " << system_time << " ] evicted a line (due to requests) " 
-                                        << line.start_maddr << endl;
-                                    req->m_line_copy->valid = false;
-                                    m_lines_to_evict.insert(make_tuple(idx, it_way));
-                                    if (m_helper_invalidate_hook) {
-                                        (*m_helper_invalidate_hook)(line);
-                                    }
-                                }
-                                break;
+                            if (!req->m_do_clean_write) {
+                                line.dirty = true;
                             }
-                        case CACHE_REQ_READ:
-                            //printf("\t[cache 0%d] Request was an READ\n",  m_id);
+                            written_lines.insert(start_maddr);
                             req->m_line_copy = copy_cache_line(line);
+
+                            //print_contents();
+
                             break;
                         }
-                        /* returns a copy of the updated line in any case (even for invalidate) */
-                        break;
-                    } else {
-                        /* it's either invalid, or a coherence miss */
-                        //printf("\t[cache 0%d] Request was INVALID or a COHERENCE MISS\n",  m_id);
-                        req->m_status = CACHE_REQ_MISS;
-                        mh_log(4) << "[cache " << m_id << " @ " << system_time << " ] a miss by invalid/coherence for address "
-                            << start_maddr << endl;
-                        line.last_access_time = system_time;
+                    case CACHE_REQ_INVALIDATE:
+                        {
+                            if (req->m_do_reserve) {
+                                req->m_line_copy = copy_cache_line(line);
+                                req->m_line_copy->start_maddr = start_maddr;
+                                req->m_line_copy->empty = false;
+                                req->m_line_copy->valid = false;
+                                if (m_helper_reserve_line) {
+                                    (*m_helper_reserve_line)(*req->m_line_copy);
+                                }
+                                m_lines_to_evict_and_reserve.insert(make_tuple(idx, it_way, start_maddr));
+                            } else {
+                                req->m_line_copy = copy_cache_line(line);
+                                req->m_line_copy->empty = true;
+                                mh_log(4) << "[cache " << m_id << " L" << m_level << " @ " << system_time << " ] evicted a line (due to requests) " 
+                                    << line.start_maddr << endl;
+                                req->m_line_copy->valid = false;
+                                m_lines_to_evict.insert(make_tuple(idx, it_way));
+                                if (m_helper_invalidate_hook) {
+                                    (*m_helper_invalidate_hook)(line);
+                                }
+                            }
+                            break;
+                        }
+                    case CACHE_REQ_READ:
+                        //printf("\t[cache 0%d] Request was an READ\n",  m_id);
                         req->m_line_copy = copy_cache_line(line);
                         break;
                     }
-                    /* doesn't reach here */
-                } else if (line.empty) {
-                    empties.push_back(it_way);
+                    /* returns a copy of the updated line in any case (even for invalidate) */
+                    break;
+                } else {
+                    /* it's either invalid, or a coherence miss */
+                    //printf("\t[cache 0%d] Request was INVALID or a COHERENCE MISS\n",  m_id);
+                    req->m_status = CACHE_REQ_MISS;
+                    mh_log(4) << "[cache " << m_id << " @ " << system_time << " ] a miss by invalid/coherence for address "
+                        << start_maddr << endl;
+                    line.last_access_time = system_time;
+                    req->m_line_copy = copy_cache_line(line);
+                    break;
                 }
+                /* doesn't reach here */
+            } else if (line.empty) {
+                empties.push_back(it_way);
             }
-            if (!matched) {
-                /* no entry */
+        }
+        if (!matched) {
+            /* no entry */
+            if (req->m_request_type == CACHE_REQ_FILL && req->m_do_reserve && !empties.empty()) {
+                req->m_status = CACHE_REQ_HIT;
+
+                cacheLine &line = m_cache[idx][*empties.begin()];
+                line.start_maddr = start_maddr;
+                line.empty = false;
+                line.valid = true;
+                line.dirty = false;
+
+                mh_assert(req->m_data_to_write);
+
+                uint32_t offset = get_offset(req->m_maddr) / 4;
+                for (uint32_t i = 0; i < req->m_word_count; ++i) {
+                    line.data[offset + i] = req->m_data_to_write[i];
+                }
+                if (req->m_coherence_info_to_write) {
+                    line.coherence_info = req->m_coherence_info_to_write;
+                }
+                if (!req->m_do_clean_write) {
+                    line.dirty = true;
+                }
+                written_lines.insert(start_maddr);
+                req->m_line_copy = copy_cache_line(line);
+
+            } else {
+
                 req->m_status = CACHE_REQ_MISS;
                 mh_log(4) << "[cache " << m_id << " @ " << system_time << " ] a miss by mismatch for address "
-                          << start_maddr << endl;
+                    << start_maddr << endl;
                 if (req->m_do_reserve) {
                     if (!empties.empty()) {
                         /* reserve line */
@@ -302,86 +306,8 @@ void cache::tick_positive_edge() {
                     }
                 }
             }
-            if (!head.need_to_evict_and_reserve) {
-                /* exit code */
-                if (req->use_read_ports()) {
-                    ++m_available_read_ports;
-                } else {
-                    ++m_available_write_ports;
-                }
-                q.erase(q.begin());
-                if (q.size() == 0) {
-                    m_req_table.erase(it_q++);
-                    continue;
-                }
-            }
-            ++it_q;
-        } else {
-            ++it_q;
         }
-    }
-
-    for (reqTable::iterator it_q = m_req_table.begin(); it_q != m_req_table.end(); ) {
-        reqQueue &q = it_q->second;
-        reqEntry &head = q.front();;
-        shared_ptr<cacheRequest> req = head.request;
-        if (head.status == ENTRY_DONE) {
-            /* assert(head.need_to_evict_and_reserve) */
-            uint32_t idx = get_index(req->m_maddr);
-            maddr_t start_maddr = get_start_maddr_in_line(req->m_maddr);
-            vector<uint32_t> evictables;
-            uint64_t lru_time = UINT64_MAX;
-            uint32_t lru_way = 0;
-            for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
-                cacheLine &line = m_cache[idx][it_way];
-                if (line.valid && written_lines.count(line.start_maddr) == 0 && req->m_do_evict) {
-                    evictables.push_back(it_way);
-                    if (line.last_access_time < lru_time) {
-                        lru_way = it_way;
-                        lru_time = line.last_access_time;
-                    }
-                }
-            }
-            if (!evictables.empty()) {
-                uint32_t victim_way = 0;
-                switch (m_replacement_policy) {
-                case REPLACE_RANDOM:
-                    victim_way = evictables[ran->random_range(evictables.size())];
-                    break;
-                case REPLACE_LRU:
-                    victim_way = lru_way;
-                    break;
-                case REPLACE_CUSTOM:
-                    mh_assert(m_helper_replacement_policy);
-                    victim_way = (*m_helper_replacement_policy)(evictables, m_cache[idx], system_time, ran);
-                    break;
-                default:
-                    break;
-                }
-                cacheLine &line = m_cache[idx][victim_way];
-                req->m_victim_line_copy = copy_cache_line(line);
-
-                if (!m_helper_can_evict_line ||
-                    (m_helper_can_evict_line && (*m_helper_can_evict_line)(line, system_time))) {
-
-                    if (m_helper_invalidate_hook) {
-                        (*m_helper_invalidate_hook)(line);
-                    }
-                    mh_log(4) << "[cache " << m_id << " L" << m_level << " @ " << system_time << " ] evicted a line " 
-                              << line.start_maddr << endl;
-                    /* if we can evict right now */
-                    req->m_line_copy = copy_cache_line(line);
-                    req->m_line_copy->start_maddr = start_maddr;
-                    req->m_line_copy->dirty = false;
-                    req->m_line_copy->valid = false;
-                    if (m_helper_reserve_line) {
-                        (*m_helper_reserve_line)(*req->m_line_copy);
-                    }
-                    /* this line is reserved so returns it */
-                    /* here's another case of first-come first-served arbitration (see above comments) */
-                    m_lines_to_evict_and_reserve.insert(make_tuple(idx, victim_way, start_maddr));
-                }
-            }
+        if (!head.need_to_evict_and_reserve) {
             /* exit code */
             if (req->use_read_ports()) {
                 ++m_available_read_ports;
@@ -393,11 +319,99 @@ void cache::tick_positive_edge() {
                 m_req_table.erase(it_q++);
                 continue;
             }
-            ++it_q;
-        } else {
-            /* not ready yet. proceed to the next entry */
-            ++it_q;
         }
+        ++it_q;
+    }
+
+    set<tuple<uint32_t, uint32_t> > evicted_slots;
+
+    for (reqTable::iterator it_q = m_req_table.begin(); it_q != m_req_table.end(); ) {
+        reqQueue &q = it_q->second;
+        reqEntry &head = q.front();;
+        shared_ptr<cacheRequest> req = head.request;
+
+        if (head.status != ENTRY_DONE) {
+            ++it_q;
+            continue;
+        }
+
+        /* assert(head.need_to_evict_and_reserve) */
+        uint32_t idx = get_index(req->m_maddr);
+        maddr_t start_maddr = get_start_maddr_in_line(req->m_maddr);
+        vector<uint32_t> evictables;
+        uint64_t lru_time = UINT64_MAX;
+        uint32_t lru_way = 0;
+        for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
+            cacheLine &line = m_cache[idx][it_way];
+            if (line.valid && written_lines.count(line.start_maddr) == 0 && req->m_do_evict 
+                && evicted_slots.count(make_tuple(idx,it_way)) == 0) {
+                evictables.push_back(it_way);
+                if (line.last_access_time < lru_time) {
+                    lru_way = it_way;
+                    lru_time = line.last_access_time;
+                }
+            }
+        }
+        if (!evictables.empty()) {
+            uint32_t victim_way = 0;
+            switch (m_replacement_policy) {
+            case REPLACE_RANDOM:
+                victim_way = evictables[ran->random_range(evictables.size())];
+                break;
+            case REPLACE_LRU:
+                victim_way = lru_way;
+                break;
+            case REPLACE_CUSTOM:
+                mh_assert(m_helper_replacement_policy);
+                victim_way = (*m_helper_replacement_policy)(evictables, m_cache[idx], system_time, ran);
+                break;
+            default:
+                break;
+            }
+            cacheLine &line = m_cache[idx][victim_way];
+            req->m_victim_line_copy = copy_cache_line(line);
+
+            if (!m_helper_can_evict_line ||
+                (m_helper_can_evict_line && (*m_helper_can_evict_line)(line, system_time))) {
+
+                if (m_helper_invalidate_hook) {
+                    (*m_helper_invalidate_hook)(line);
+                }
+                mh_log(4) << "[cache " << m_id << " L" << m_level << " @ " << system_time << " ] evicted a line " 
+                          << line.start_maddr << endl;
+                /* if we can evict right now */
+
+                if (req->m_request_type == CACHE_REQ_FILL) {
+                    evicted_slots.insert(make_tuple(idx, victim_way));
+                    m_lines_to_evict_and_feed.insert(make_tuple(idx, victim_way, req));
+
+                } else {
+                    req->m_line_copy = copy_cache_line(line);
+                    req->m_line_copy->start_maddr = start_maddr;
+                    req->m_line_copy->dirty = false;
+                    req->m_line_copy->valid = false;
+                    if (m_helper_reserve_line) {
+                        (*m_helper_reserve_line)(*req->m_line_copy);
+                    }
+                    /* this line is reserved so returns it */
+                    /* here's another case of first-come first-served arbitration (see above comments) */
+                    evicted_slots.insert(make_tuple(idx, victim_way));
+                    m_lines_to_evict_and_reserve.insert(make_tuple(idx, victim_way, start_maddr));
+                }
+            }
+        }
+        /* exit code */
+        if (req->use_read_ports()) {
+            ++m_available_read_ports;
+        } else {
+            ++m_available_write_ports;
+        }
+        q.erase(q.begin());
+        if (q.size() == 0) {
+            m_req_table.erase(it_q++);
+            continue;
+        }
+        ++it_q;
     }
 
 }
@@ -427,6 +441,37 @@ void cache::tick_negative_edge() {
         }
     }
     m_lines_to_evict_and_reserve.clear();
+
+    for (set<tuple<uint32_t, uint32_t, shared_ptr<cacheRequest> > >::iterator it = m_lines_to_evict_and_feed.begin(); 
+         it != m_lines_to_evict_and_feed.end(); ++it) 
+    {
+        /* reserving case */
+        cacheLine &line = m_cache[it->get<0>()][it->get<1>()];
+        shared_ptr<cacheRequest> req = it->get<2>();
+        line.start_maddr = get_start_maddr_in_line(req->maddr());
+
+        req->m_status = CACHE_REQ_HIT;
+
+        line.empty = false;
+        line.valid = true;
+        line.dirty = false;
+
+        mh_assert(req->m_data_to_write);
+
+        uint32_t offset = get_offset(req->m_maddr) / 4;
+        for (uint32_t i = 0; i < req->m_word_count; ++i) {
+            line.data[offset + i] = req->m_data_to_write[i];
+        }
+        if (req->m_coherence_info_to_write) {
+            line.coherence_info = req->m_coherence_info_to_write;
+        }
+        if (!req->m_do_clean_write) {
+            line.dirty = true;
+        }
+        req->m_line_copy = copy_cache_line(line);
+    }
+    m_lines_to_evict_and_feed.clear();
+
 
     /* advance hit testing */
     for (reqTable::iterator it_q = m_req_table.begin(); it_q != m_req_table.end(); ++it_q) {

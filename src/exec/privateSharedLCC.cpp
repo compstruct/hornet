@@ -306,8 +306,8 @@ void privateSharedLCC::tick_positive_edge() {
     m_l1->tick_positive_edge();
     m_l2->tick_positive_edge();
     m_cat->tick_positive_edge();
-    if(m_dram_controller) {
-        m_dram_controller->tick_positive_edge();
+    if(m_dramctrl) {
+        m_dramctrl->tick_positive_edge();
     }
 }
 
@@ -316,8 +316,8 @@ void privateSharedLCC::tick_negative_edge() {
     m_l1->tick_negative_edge();
     m_l2->tick_negative_edge();
     m_cat->tick_negative_edge();
-    if(m_dram_controller) {
-        m_dram_controller->tick_negative_edge();
+    if(m_dramctrl) {
+        m_dramctrl->tick_negative_edge();
     }
 
     /* accept messages and write into tables */
@@ -1000,7 +1000,7 @@ void privateSharedLCC::l2_work_table_update() {
 
                         dram_req = shared_ptr<dramMsg>(new dramMsg);
                         dram_req->sender = m_id;
-                        dram_req->receiver = m_dram_controller_location;
+                        dram_req->receiver = m_dramctrl_location;
                         uint32_t data_size = 0;
                         if (m_cfg.save_timestamp_in_dram) {
                             dram_req->req = shared_ptr<dramRequest>(new dramRequest(victim->start_maddr,
@@ -1019,12 +1019,12 @@ void privateSharedLCC::l2_work_table_update() {
                         }
                         dram_req->did_win_last_arbitration = false;
                         entry->dram_req = dram_req;
-                        if (m_dram_controller_location == m_id) {
+                        if (m_dramctrl_location == m_id) {
                             m_to_dram_req_schedule_q.push_back(dram_req);
                         } else {
                             msg_to_send = shared_ptr<message_t>(new message_t);
                             msg_to_send->src = m_id;
-                            msg_to_send->dst = m_dram_controller_location;
+                            msg_to_send->dst = m_dramctrl_location;
                             msg_to_send->type = MSG_DRAM_REQ;
                             msg_to_send->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + data_size);
                             msg_to_send->content = dram_req;
@@ -1043,19 +1043,19 @@ void privateSharedLCC::l2_work_table_update() {
 
                         dram_req = shared_ptr<dramMsg>(new dramMsg);
                         dram_req->sender = m_id;
-                        dram_req->receiver = m_dram_controller_location;
+                        dram_req->receiver = m_dramctrl_location;
                         dram_req->req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
                                                                                 DRAM_REQ_READ, 
                                                                                 m_cfg.words_per_cache_line)); 
                         dram_req->did_win_last_arbitration = false;
                         entry->dram_req = dram_req;
                         dram_req->milestone_time = system_time;
-                        if (m_dram_controller_location == m_id) {
+                        if (m_dramctrl_location == m_id) {
                             m_to_dram_req_schedule_q.push_back(dram_req);
                         } else {
                             msg_to_send = shared_ptr<message_t>(new message_t);
                             msg_to_send->src = m_id;
-                            msg_to_send->dst = m_dram_controller_location;
+                            msg_to_send->dst = m_dramctrl_location;
                             msg_to_send->type = MSG_DRAM_REQ;
                             msg_to_send->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
                             msg_to_send->content = dram_req;
@@ -1070,18 +1070,18 @@ void privateSharedLCC::l2_work_table_update() {
 
                     dram_req = shared_ptr<dramMsg>(new dramMsg);
                     dram_req->sender = m_id;
-                    dram_req->receiver = m_dram_controller_location;
+                    dram_req->receiver = m_dramctrl_location;
                     dram_req->req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
                                                                             DRAM_REQ_READ, 
                                                                             m_cfg.words_per_cache_line)); 
                     dram_req->did_win_last_arbitration = false;
                     entry->dram_req = dram_req;
-                    if (m_dram_controller_location == m_id) {
+                    if (m_dramctrl_location == m_id) {
                         m_to_dram_req_schedule_q.push_back(dram_req);
                     } else {
                         msg_to_send = shared_ptr<message_t>(new message_t);
                         msg_to_send->src = m_id;
-                        msg_to_send->dst = m_dram_controller_location;
+                        msg_to_send->dst = m_dramctrl_location;
                         msg_to_send->type = MSG_DRAM_REQ;
                         msg_to_send->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
                         msg_to_send->content = dram_req;
@@ -1133,7 +1133,7 @@ void privateSharedLCC::l2_work_table_update() {
                 } else if (victim && (victim->dirty || m_cfg.save_timestamp_in_dram)) {
                     dram_req = shared_ptr<dramMsg>(new dramMsg);
                     dram_req->sender = m_id;
-                    dram_req->receiver = m_dram_controller_location;
+                    dram_req->receiver = m_dramctrl_location;
                     uint32_t data_size = 0;
                     if (m_cfg.save_timestamp_in_dram) {
                         dram_req->req = shared_ptr<dramRequest>(new dramRequest(victim->start_maddr,
@@ -1152,12 +1152,12 @@ void privateSharedLCC::l2_work_table_update() {
                     }
                     dram_req->did_win_last_arbitration = false;
                     entry->dram_req = dram_req;
-                    if (m_dram_controller_location == m_id) {
+                    if (m_dramctrl_location == m_id) {
                         m_to_dram_req_schedule_q.push_back(dram_req);
                     } else {
                         msg_to_send = shared_ptr<message_t>(new message_t);
                         msg_to_send->src = m_id;
-                        msg_to_send->dst = m_dram_controller_location;
+                        msg_to_send->dst = m_dramctrl_location;
                         msg_to_send->type = MSG_DRAM_REQ;
                         msg_to_send->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + data_size);
                         msg_to_send->content = dram_req;
@@ -1277,7 +1277,7 @@ void privateSharedLCC::l2_work_table_update() {
                 }
                 dram_req = shared_ptr<dramMsg>(new dramMsg);
                 dram_req->sender = m_id;
-                dram_req->receiver = m_dram_controller_location;
+                dram_req->receiver = m_dramctrl_location;
                 dram_req->req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
                                                                         DRAM_REQ_READ, 
                                                                         m_cfg.words_per_cache_line)); 
@@ -1287,12 +1287,12 @@ void privateSharedLCC::l2_work_table_update() {
                 dram_req->milestone_time = system_time;
                 entry->milestone_time = system_time;
 
-                if (m_dram_controller_location == m_id) {
+                if (m_dramctrl_location == m_id) {
                     m_to_dram_req_schedule_q.push_back(dram_req);
                 } else {
                     msg_to_send = shared_ptr<message_t>(new message_t);
                     msg_to_send->src = m_id;
-                    msg_to_send->dst = m_dram_controller_location;
+                    msg_to_send->dst = m_dramctrl_location;
                     msg_to_send->type = MSG_DRAM_REQ;
                     msg_to_send->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
                     msg_to_send->content = dram_req;
@@ -1996,7 +1996,7 @@ void privateSharedLCC::schedule_requests() {
 
         /* cost breakdown study */
         if (stats_enabled()) {
-            stats()->add_memory_subsystem_serialization_cost(system_time - req->milestone_time());
+            stats()->add_memory_subsystem_serialization_cost(system_time - req->serialization_begin_time());
         }
         new_entry->milestone_time = system_time;
         if (req->is_read()) {
@@ -2124,9 +2124,9 @@ void privateSharedLCC::schedule_requests() {
     /* 4 : arbitrate inputs to dram work table */
     random_shuffle(m_to_dram_req_schedule_q.begin(), m_to_dram_req_schedule_q.end(), rr_fn);
     while (m_to_dram_req_schedule_q.size()) {
-        mh_assert(m_dram_controller);
+        mh_assert(m_dramctrl);
         shared_ptr<dramMsg> msg = m_to_dram_req_schedule_q.front();
-        if (m_dram_controller->available()) {
+        if (m_dramctrl->available()) {
             if (msg->req->is_read()) {
 
                 /* cost breakdown study */
@@ -2146,7 +2146,7 @@ void privateSharedLCC::schedule_requests() {
                 m_dram_work_table[msg->req->maddr()] = new_entry;
             }
                 /* if write, make a request and done */
-            m_dram_controller->request(msg->req);
+            m_dramctrl->request(msg->req);
             msg->did_win_last_arbitration = true;
         }
         m_to_dram_req_schedule_q.erase(m_to_dram_req_schedule_q.begin());

@@ -4,7 +4,7 @@
 #include "memStats.hpp"
 
 memStatsPerTile::memStatsPerTile(uint32_t id, const uint64_t &t) :
-    m_id(id), system_time(t) { } 
+    m_id(id), system_time(t), m_reads(0), m_writes(0) { } 
 
 memStatsPerTile::~memStatsPerTile() {}
 
@@ -19,6 +19,7 @@ void memStats::add_per_tile_stats(shared_ptr<memStatsPerTile> stats) {
 
 void memStats::print_stats(ostream &out) {
 
+    char str[1024];
     out << endl;
 
     out << "Memory Statistics" << endl;
@@ -27,40 +28,25 @@ void memStats::print_stats(ostream &out) {
 
     uint64_t total_reads = 0;
     uint64_t total_writes = 0;
-    uint64_t total_mem = 0;
-    double total_read_latency = 0.0;
-    double total_write_latency = 0.0;
 
     perTileStats_t::iterator it;
     for (it = m_per_tile_stats.begin(); it != m_per_tile_stats.end(); ++it) {
         uint32_t id = it->first;
         shared_ptr<memStatsPerTile> st = it->second;
-        uint64_t reads = st->m_read_latencies.sample_count();
-        uint64_t writes = st->m_write_latencies.sample_count();
-        uint64_t mem = reads + writes;
-        total_reads += reads;
-        total_writes += writes;
-        total_mem += mem;
-        double amrl = st->m_read_latencies.get_mean();
-        double amwl = st->m_write_latencies.get_mean();
-        double aml = (amrl*reads + amwl*writes) / mem;
-        total_read_latency += amrl * reads;
-        total_write_latency += amwl * writes;
+        total_reads += st->m_reads;
+        total_writes += st->m_writes;
 
-        char str[1024];
-        sprintf(str, "[Memory %4d ] accesses: %ld reads: %ld writes: %ld AML: %.4f AMRL: %.4f AMWL: %.4f",
-                id, mem, reads, writes, aml, amrl, amwl);
+        sprintf(str, "[Memory %d ] %ld %ld %ld",
+                id, st->m_reads + st->m_writes, st->m_reads, st->m_writes);
 
         out << str << endl;
 
     }
+
     out << endl;
-    char str[1024];
-    sprintf(str, "[Summary: Memory ] accesses: %ld reads: %ld writes: %ld AML: %.4f AMRL: %.4f AMWL: %.4f",
-            total_mem, total_reads, total_writes,
-            (total_read_latency + total_write_latency)/total_mem, 
-            total_read_latency/total_reads, 
-            total_write_latency/total_writes);
+
+    sprintf(str, "[Summary: Memory ] accesses: %ld reads: %ld writes: %ld",
+            total_reads + total_writes, total_reads, total_writes);
     out << str << endl;
 
     out << endl;
