@@ -13,7 +13,7 @@
 #undef DEADLOCK_CHECK
 
 #define DEBUG
-//#undef DEBUG
+#undef DEBUG
 
 #ifdef DEBUG
 #define mh_log(X) if(true) cout
@@ -294,7 +294,6 @@ void sharedSharedEMRA::update_work_table() {
                         ra_req->word_count = core_req->word_count();
                         ra_req->maddr = core_req->maddr();
                         ra_req->sent = false;
-                        ra_req->waited = 0;
                         ra_req->birthtime = system_time;
                         ra_req->per_mem_instr_stats = per_mem_instr_stats;
 
@@ -474,7 +473,6 @@ void sharedSharedEMRA::update_work_table() {
                 ra_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
                 ra_rep->sender = m_id;
                 ra_rep->sent = false;
-                ra_rep->waited = 0;
                 ra_rep->type = RA_REP;
                 ra_rep->receiver = ra_req->sender;
                 if (ra_req->type == RA_READ_REQ) {
@@ -495,7 +493,7 @@ void sharedSharedEMRA::update_work_table() {
 
             } else {
                 /* miss */
-                mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] gets an L1 MISS for a remote request on "
+                mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets an L1 MISS for a remote request on "
                           << ra_req->maddr << endl;
 
                 if (stats_enabled()) {
@@ -671,7 +669,6 @@ void sharedSharedEMRA::update_work_table() {
                     ra_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
                     ra_rep->sender = m_id;
                     ra_rep->sent = false;
-                    ra_rep->waited = 0;
                     ra_rep->type = RA_REP;
                     ra_rep->receiver = ra_req->sender;
                     if (ra_req->type == RA_READ_REQ) {
@@ -892,6 +889,9 @@ void sharedSharedEMRA::update_work_table() {
         } else if (entry->status == _SEND_RA_REP) {
             if (!ra_rep->sent) {
                 m_ra_rep_schedule_q.push_back(entry);
+                ++it_addr;
+                continue;
+                /* SPIN */
             }
 
             mh_log(4) << "[Mem " << m_id << " @ " << system_time << " ] sent an RA rep for " << ra_rep->maddr
@@ -1009,7 +1009,7 @@ void sharedSharedEMRA::update_work_table() {
                     entry->status = _WRITEBACK_DRAMCTRL_FOR_L2_FILL;
 
                     m_dramctrl_req_schedule_q.push_back(make_tuple(false, entry)); /* mark as from local */
-                    m_dramctrl_writeback_status[l1_victim->start_maddr] = entry;
+                    m_dramctrl_writeback_status[l2_victim->start_maddr] = entry;
 
                     ++it_addr;
                     continue;
@@ -1603,7 +1603,7 @@ void sharedSharedEMRA::schedule_requests() {
         shared_ptr<tableEntry>& entry = m_ra_rep_schedule_q.front();
         shared_ptr<coherenceMsg>& ra_rep = entry->ra_rep;
 
-        if (m_core_send_queues[MSG_RA_REQ]->available()) {
+        if (m_core_send_queues[MSG_RA_REP]->available()) {
 
             shared_ptr<message_t> msg(new message_t);
             msg->src = m_id;
@@ -1643,7 +1643,7 @@ void sharedSharedEMRA::schedule_requests() {
                       << dramctrl_rep->maddr << " to core " << m_id << endl;
             dramctrl_rep->sent = true;
 
-        } else if (m_core_send_queues[MSG_RA_REQ]->available()) {
+        } else if (m_core_send_queues[MSG_DRAMCTRL_REP]->available()) {
 
             shared_ptr<message_t> msg(new message_t);
             msg->src = m_id;

@@ -95,8 +95,6 @@ public:
         shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
         uint64_t birthtime;
 
-        /* debug purpose - erase later */
-        uint64_t waited;
     } coherenceMsg;
 
     typedef struct {
@@ -111,6 +109,7 @@ public:
         /* for stats */
         uint64_t birthtime;
         shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
+
     } dramctrlMsg;
 
 private:
