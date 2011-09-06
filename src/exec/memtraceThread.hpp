@@ -93,9 +93,9 @@ public:
     memtraceThreadPool();
     ~memtraceThreadPool();
 
-    void add_thread(memtraceThread* p);
-    memtraceThread* find(uint32_t id);
-    memtraceThread* thread_at(uint32_t n);
+    void add_thread(shared_ptr<memtraceThread> p);
+    shared_ptr<memtraceThread> find(uint32_t id);
+    shared_ptr<memtraceThread> thread_at(uint32_t n);
     unsigned int size();
 
     bool empty();
@@ -104,7 +104,7 @@ private:
     /* memtraceThreadPool class has the following restrictions for the performance reason */
     /* 1. no thread is added to the pool during simulation */
     /* 2. no thread is removed from the pool during simulation */
-    map<uint32_t, memtraceThread*> m_threads;
+    map<uint32_t, shared_ptr<memtraceThread> >m_threads;
     mutable recursive_mutex memtraceThreadPool_mutex;
 };
 

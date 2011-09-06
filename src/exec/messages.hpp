@@ -7,16 +7,21 @@
 #include <stdint.h>
 #include <boost/shared_ptr.hpp>
 #include <vector>
+#include <iostream>
 
 using namespace std;
 using namespace boost;
 
-typedef struct {
+typedef struct structMessage {
     uint32_t type;
     uint32_t src;
     uint32_t dst;
     uint32_t flit_count;
     shared_ptr<void> content;
+
+    structMessage();
+    ~structMessage();
+
 } message_t;
 
 class messageQueue {

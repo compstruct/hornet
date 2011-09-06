@@ -84,7 +84,6 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
         ifstream input(fi->c_str());
         if (input.fail()) throw err_parse(*fi, "cannot open file");
         while (input.good()) {
-            memtraceThread *thread;
             string line, word; 
             getline(input, line);
             istringstream l(line);
@@ -117,9 +116,9 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
                     cat_model->set(start_maddr, 0, home);
                 }
 
-                thread = pool->find(th_id);
-                if (thread == NULL) {
-                    thread = new memtraceThread(th_id, system_time, log);
+                shared_ptr<memtraceThread> thread = pool->find(th_id);
+                if (!thread) {
+                    thread = shared_ptr<memtraceThread>(new memtraceThread(th_id, system_time, log));
                     shared_ptr<memtraceThreadStatsPerThread> per_thread_stats=
                         shared_ptr<memtraceThreadStatsPerThread>(new memtraceThreadStatsPerThread(th_id, system_time));
                     thread->set_per_thread_stats(per_thread_stats);
@@ -921,6 +920,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                             cat_model, cat_allocation_unit_in_bytes);
 
     /* spawn threads */
+
     for (unsigned int i = 0; i < memtrace_thread_pool->size() && memtrace_cores.size() > 0; ++i) {
         uint32_t mth_id = memtrace_thread_pool->thread_at(i)->get_id();
         unsigned int idx = mth_id % memtrace_cores.size();

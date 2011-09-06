@@ -3,6 +3,10 @@
 
 #include "messages.hpp"
 
+structMessage::structMessage() {}
+
+structMessage::~structMessage() {}
+
 messageQueue::messageQueue(uint32_t type, uint32_t capacity) : m_type(type), m_capacity(capacity) {}
 
 messageQueue::~messageQueue() {}

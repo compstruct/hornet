@@ -104,35 +104,29 @@ bool memtraceThread::finished() {
 
 memtraceThreadPool::memtraceThreadPool() {}
 
-memtraceThreadPool::~memtraceThreadPool() {
-    map<uint32_t, memtraceThread*>::iterator i;
-    for (i = m_threads.begin(); i != m_threads.end(); ++i) {
-        delete i->second;
-    }
-    m_threads.clear();
-}
+memtraceThreadPool::~memtraceThreadPool() {}
 
-void memtraceThreadPool::add_thread(memtraceThread* p) {
+void memtraceThreadPool::add_thread(shared_ptr<memtraceThread> p) {
     unique_lock<recursive_mutex> lock(memtraceThreadPool_mutex);
     assert(m_threads.count(p->get_id()) == 0);
     m_threads[p->get_id()] = p;
 }
 
-memtraceThread* memtraceThreadPool::find(uint32_t id) {
+shared_ptr<memtraceThread> memtraceThreadPool::find(uint32_t id) {
     /* if a thread may be added or removed during simulation, */
     /* it must be protected by a lock (which means slow) */
     if (m_threads.count(id) > 0) {
         return m_threads[id];
     } else {
-        return NULL;
+        return shared_ptr<memtraceThread>();
     }
 }
 
-memtraceThread* memtraceThreadPool::thread_at(uint32_t n) {
+shared_ptr<memtraceThread> memtraceThreadPool::thread_at(uint32_t n) {
     /* if a thread may be added or removed during simulation, */
     /* it must be protected by a lock (which means slow) */
     assert(m_threads.size() > n);
-    map<uint32_t, memtraceThread*>::iterator i = m_threads.begin();
+    map<uint32_t, shared_ptr<memtraceThread> >::iterator i = m_threads.begin();
     for (; n > 0; ++i, --n) ;
     return i->second;
 }
@@ -144,7 +138,7 @@ unsigned int memtraceThreadPool::size() {
 
 bool memtraceThreadPool::empty() {
     unique_lock<recursive_mutex> lock(memtraceThreadPool_mutex);
-    map<uint32_t, memtraceThread*>::iterator i;
+    map<uint32_t, shared_ptr<memtraceThread> >::iterator i;
     for (i = m_threads.begin(); i != m_threads.end(); ++i) {
         if (!(i->second)->finished()) {
             return false;

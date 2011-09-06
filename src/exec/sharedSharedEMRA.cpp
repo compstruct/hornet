@@ -167,8 +167,10 @@ void sharedSharedEMRA::update_work_table() {
         shared_ptr<tableEntry>& entry = it_addr->second;
 
 #if 0
-        mh_log(4) << "[Mem " << m_id << " @ " << system_time << " ] in state " << entry->status 
-                  << " for " << start_maddr << endl;
+        if (system_time > 110000) {
+            mh_log(4) << "[Mem " << m_id << " @ " << system_time << " ] in state " << entry->status 
+                << " for " << start_maddr << endl;
+        }
 #endif
 
         shared_ptr<memoryRequest>& core_req = entry->core_req;
@@ -681,6 +683,10 @@ void sharedSharedEMRA::update_work_table() {
                     ra_rep->birthtime = system_time;
                 }
 
+                if (l1_victim && stats_enabled()) {
+                    stats()->evict_at_l1();
+                }
+
                 if (l1_victim && l1_victim->dirty) {
                     l2_req = shared_ptr<cacheRequest>(new cacheRequest(l1_victim->start_maddr,
                                                                                  CACHE_REQ_FILL,
@@ -931,6 +937,12 @@ void sharedSharedEMRA::update_work_table() {
             l2_req->set_reserve(true);
             l2_req->set_evict(true);
 
+            if (l2_req->use_read_ports()) {
+                m_l2_read_req_schedule_q.push_back(entry);
+            } else {
+                m_l2_write_req_schedule_q.push_back(entry);
+            }
+
             entry->status = _FILL_L2;
 
             ++it_addr;
@@ -992,6 +1004,10 @@ void sharedSharedEMRA::update_work_table() {
                 l1_req->set_clean_write(true);
                 l1_req->set_reserve(true);
                 l1_req->set_evict(true);
+
+                if (l2_victim && stats_enabled()) {
+                    stats()->evict_at_l2();
+                }
 
                 if (l2_victim && l2_victim->dirty) {
                     dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
@@ -1375,6 +1391,8 @@ void sharedSharedEMRA::schedule_requests() {
                 if (is_remote) {
                     m_core_receive_queues[MSG_DRAMCTRL_REQ]->pop();
                 }
+
+                m_dramctrl_req_schedule_q.erase(m_dramctrl_req_schedule_q.begin());
 
             } else {
                 break;

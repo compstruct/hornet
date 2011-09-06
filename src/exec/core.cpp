@@ -87,6 +87,7 @@ void core::tick_positive_edge() throw(err) {
                 << " ] couldn't send a message type " << (uint32_t) type << " to " << msg->dst << endl;
             /* retry later */
             delete[] flits;
+            delete msg;
         }
     }
     if (++m_send_queue_round_robin_pointer == m_number_of_msg_types) {

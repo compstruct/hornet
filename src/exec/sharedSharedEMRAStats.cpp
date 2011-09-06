@@ -136,6 +136,8 @@ sharedSharedEMRAStatsPerTile::sharedSharedEMRAStatsPerTile(uint32_t id, const ui
     m_num_true_misses_for_l2_write_instr(0), 
     m_num_core_hit_instr(0),
     m_num_core_miss_instr(0),
+    m_num_evict_at_l1(0),
+    m_num_evict_at_l2(0),
     m_num_cat_action(0),
     m_num_l1_action(0),
     m_num_l2_action(0),
@@ -161,6 +163,8 @@ void sharedSharedEMRAStatsPerTile::add(const sharedSharedEMRAStatsPerTile& other
     m_num_true_misses_for_l2_write_instr += other.m_num_true_misses_for_l2_write_instr; 
     m_num_core_hit_instr += other.m_num_core_hit_instr;
     m_num_core_miss_instr += other.m_num_core_miss_instr;
+    m_num_evict_at_l1 += other.m_num_evict_at_l1;
+    m_num_evict_at_l2 += other.m_num_evict_at_l2;
     m_num_cat_action += other.m_num_cat_action;
     m_num_l1_action += other.m_num_l1_action;
     m_num_l2_action += other.m_num_l2_action;
@@ -207,7 +211,7 @@ void sharedSharedEMRAStats::print_stats(ostream &out) {
         uint32_t id = it->first;
         shared_ptr<sharedSharedEMRAStatsPerTile> st = static_pointer_cast<sharedSharedEMRAStatsPerTile>(it->second);
 
-        sprintf(str, "[S1S2EMRA:Core %d ] %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld",
+        sprintf(str, "[S1S2EMRA:Core %d ] %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld",
                 id,
                 st->m_num_l1_read_instr, 
                 st->m_num_l1_write_instr, 
@@ -225,6 +229,8 @@ void sharedSharedEMRAStats::print_stats(ostream &out) {
                 st->m_num_true_misses_for_l2_write_instr, 
                 st->m_num_core_hit_instr,
                 st->m_num_core_miss_instr,
+                st->m_num_evict_at_l1,
+                st->m_num_evict_at_l2,
                 st->m_num_cat_action,
                 st->m_num_l1_action,
                 st->m_num_l2_action,
@@ -256,6 +262,8 @@ void sharedSharedEMRAStats::print_stats(ostream &out) {
                  "[S1S2EMRA:Summary B ] for each instruction\n"
                  "    total-core-hits-instr %ld\n"
                  "    total-core-missed-instr %ld\n"
+                 "    total-core-eviction-L1 %ld\n"
+                 "    total-core-eviction-L2 %ld\n"
                  "[S1S2EMRA:Summary C ] at each core\n"
                  "    total-CAT-actions-at-each-core %ld\n"
                  "    total-L1-actions-at-each-core %ld\n"
@@ -277,6 +285,8 @@ void sharedSharedEMRAStats::print_stats(ostream &out) {
             total_tile_info.m_num_true_misses_for_l2_write_instr, 
             total_tile_info.m_num_core_hit_instr,
             total_tile_info.m_num_core_miss_instr,
+            total_tile_info.m_num_evict_at_l1,
+            total_tile_info.m_num_evict_at_l2,
             total_tile_info.m_num_cat_action,
             total_tile_info.m_num_l1_action,
             total_tile_info.m_num_l2_action,

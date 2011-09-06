@@ -28,7 +28,7 @@ public:
     virtual uint64_t next_pkt_time() throw(err);
     virtual bool is_drained() const throw();
 
-    void spawn(memtraceThread* thread);
+    void spawn(shared_ptr<memtraceThread> thread);
 
 private:
     map<uint32_t, flow_id> flow_ids;
@@ -50,7 +50,7 @@ private:
     typedef struct {
         lane_status_t status;
         bool evictable;
-        memtraceThread* thread;
+        shared_ptr<memtraceThread> thread;
         shared_ptr<memoryRequest> req;
         uint64_t last_memory_issued;
     } lane_entry_t;
@@ -66,7 +66,7 @@ private:
 
 private:
     /* Local methods */
-    void load_thread(memtraceThread* thread);
+    void load_thread(shared_ptr<memtraceThread> thread);
     void unload_thread(lane_idx_t idx);
 
 private:

@@ -4,6 +4,9 @@
 #include "dramController.hpp"
 #include "stdio.h"
 
+#define DUMMY_DRAM
+#undef DUMMY_DRAM
+
 dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count) :
     m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_aux_word_size(0), m_status(DRAM_REQ_NEW), 
     m_data(shared_array<uint32_t>()), m_aux_data(shared_ptr<void>())
@@ -115,10 +118,17 @@ void dramController::dram_access(shared_ptr<dramRequest> req) {
     } else if (!req->is_read() && req->m_aux_data) {
         m_dram->m_aux_memory[req->m_maddr] = req->m_aux_data;
     }
+#ifdef DUMMY_DRAM
+    /* debugging - do not allocate memory */
+    if (req->is_read()) {
+        req->m_data = shared_array<uint32_t>(new uint32_t[req->m_word_count]);
+    }
+#else
     uint32_t space = req->m_maddr.space;
     uint32_t word_address = req->m_maddr.address >> 2;
     //if (req->is_read()) printf("Starting DRAM read (addr: %d:%x) of %d words.\n", space, (uint32_t) req->m_maddr.address, req->m_word_count);
     //else if (req->is_read()) printf("Starting DRAM write (addr: %d:%x) of %d words.\n", space, (uint32_t) req->m_maddr.address, req->m_word_count);    
+
     for (uint32_t it_word = 0; it_word != req->m_word_count; ++it_word) {        
         uint64_t address = word_address + it_word;
         uint64_t offset = address & DRAM_INDEX_MASK;
@@ -148,6 +158,7 @@ void dramController::dram_access(shared_ptr<dramRequest> req) {
             //        req->m_data[it_word]);
         }
     }
+#endif
 }
 
 // -----------------------------------------------------------------------------

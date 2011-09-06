@@ -92,6 +92,9 @@ public:
     inline void true_miss_for_read_instr_at_L2() { ++m_num_true_misses_for_l2_read_instr; }
     inline void true_miss_for_write_instr_at_L2() { ++m_num_true_misses_for_l2_write_instr; }
 
+    inline void evict_at_l1() { ++m_num_evict_at_l1; }
+    inline void evict_at_l2() { ++m_num_evict_at_l2; }
+
     inline void add_cat_action() { ++m_num_cat_action; }
     inline void add_l1_action() { ++m_num_l1_action; }
     inline void add_l2_action() { ++m_num_l2_action; }
@@ -121,6 +124,9 @@ private:
 
     uint64_t m_num_core_hit_instr;
     uint64_t m_num_core_miss_instr;
+
+    uint64_t m_num_evict_at_l1;
+    uint64_t m_num_evict_at_l2;
 
     uint64_t m_num_cat_action;
     uint64_t m_num_l1_action;
