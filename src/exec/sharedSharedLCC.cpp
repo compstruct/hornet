@@ -13,7 +13,7 @@
 #undef DEADLOCK_CHECK
 
 #define DEBUG
-//#undef DEBUG
+#undef DEBUG
 
 #ifdef DEBUG
 #define mh_log(X) if(true) cout
