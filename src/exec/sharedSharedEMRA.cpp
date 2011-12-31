@@ -112,6 +112,27 @@ void sharedSharedEMRA::request(shared_ptr<memoryRequest> req) {
     /* set status to wait */
     set_req_status(req, REQ_WAIT);
 
+    /* per memory instruction info */
+    if (req->per_mem_instr_runtime_info()) {
+        shared_ptr<shared_ptr<void> > p_runtime_info = req->per_mem_instr_runtime_info();
+        shared_ptr<void>& runtime_info = *p_runtime_info;
+        shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
+        if (!runtime_info) {
+            /* no per-instr stats: this is the first time this memory instruction is issued */
+            per_mem_instr_stats = shared_ptr<sharedSharedEMRAStatsPerMemInstr>(new sharedSharedEMRAStatsPerMemInstr(req->is_read()));
+            per_mem_instr_stats->set_serialization_begin_time_at_current_core(system_time);
+            runtime_info = per_mem_instr_stats;
+        } else {
+            per_mem_instr_stats = 
+                static_pointer_cast<sharedSharedEMRAStatsPerMemInstr>(*req->per_mem_instr_runtime_info());
+            if (per_mem_instr_stats->is_in_migration()) {
+                per_mem_instr_stats = static_pointer_cast<sharedSharedEMRAStatsPerMemInstr>(runtime_info);
+                per_mem_instr_stats->migration_finished(system_time, stats_enabled());
+                per_mem_instr_stats->set_serialization_begin_time_at_current_core(system_time);
+            }
+        }
+    }
+
     /* will schedule for a core port and a work table entry in schedule function */
     m_core_port_schedule_q.push_back(req);
 }
@@ -167,7 +188,7 @@ void sharedSharedEMRA::update_work_table() {
         shared_ptr<tableEntry>& entry = it_addr->second;
 
 #if 0
-        if (system_time > 110000) {
+        if (system_time > 120000) {
             mh_log(4) << "[Mem " << m_id << " @ " << system_time << " ] in state " << entry->status 
                 << " for " << start_maddr << endl;
         }
@@ -184,8 +205,8 @@ void sharedSharedEMRA::update_work_table() {
 
         shared_ptr<cacheLine> l1_line = (l1_req)? l1_req->line_copy() : shared_ptr<cacheLine>();
         shared_ptr<cacheLine> l2_line = (l2_req)? l2_req->line_copy() : shared_ptr<cacheLine>();
-        shared_ptr<cacheLine> l1_victim = (l1_req)? l1_req->victim_line_copy() : shared_ptr<cacheLine>();
-        shared_ptr<cacheLine> l2_victim = (l2_req)? l2_req->victim_line_copy() : shared_ptr<cacheLine>();
+        shared_ptr<cacheLine> l1_victim = (l1_req)? l1_req->line_to_evict_copy() : shared_ptr<cacheLine>();
+        shared_ptr<cacheLine> l2_victim = (l2_req)? l2_req->line_to_evict_copy() : shared_ptr<cacheLine>();
 
         shared_ptr<sharedSharedEMRAStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
 
@@ -210,22 +231,29 @@ void sharedSharedEMRA::update_work_table() {
 
                 if (stats_enabled()) {
                     /* sharedSharedEMRAStatsPerMemInstr */
-                    per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_ops(system_time - l1_req->operation_begin_time());
-                    per_mem_instr_stats->commit_tentative_data(T_IDX_L1);
+                    if (per_mem_instr_stats) {
+                        per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_ops(system_time - l1_req->operation_begin_time());
+                        per_mem_instr_stats->add_local_l1_cost_for_hit(per_mem_instr_stats->get_tentative_data(T_IDX_L1)->total_cost());
+                        per_mem_instr_stats->commit_tentative_data(T_IDX_L1);
+                        /* sharedSharedEMRAStatsPerTile */
+                        stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
+                    }
 
-                    /* sharedSharedEMRAStatsPerTile */
-                    stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
                     if (core_req->is_read()) {
-                        stats()->new_read_instr_at_L1();
-                        stats()->hit_for_read_instr_at_L1();
+                        stats()->new_read_instr_at_l1();
+                        stats()->hit_for_read_instr_at_l1();
+                        stats()->hit_for_read_instr_at_local_l1();
                         stats()->did_finish_read();
                     } else {
-                        stats()->new_write_instr_at_L1();
-                        stats()->hit_for_write_instr_at_L1();
+                        stats()->new_write_instr_at_l1();
+                        stats()->hit_for_write_instr_at_l1();
+                        stats()->hit_for_write_instr_at_local_l1();
                         stats()->did_finish_write();
                     }
                 } else {
-                    per_mem_instr_stats->clear_tentative_data();
+                    if (per_mem_instr_stats) {
+                        per_mem_instr_stats->clear_tentative_data();
+                    }
                 }
 
                 ++m_work_table_vacancy;
@@ -237,14 +265,14 @@ void sharedSharedEMRA::update_work_table() {
 
                 /* record when CAT/L1 is finished */
                 if (cat_req->operation_begin_time() != UINT64_MAX && cat_req->status() == CAT_REQ_DONE) {
-                    if (stats_enabled()) {
+                    if (stats_enabled() && per_mem_instr_stats) {
                         per_mem_instr_stats->get_tentative_data(T_IDX_CAT)->add_cat_ops(system_time - cat_req->operation_begin_time());
                     }
                     cat_req->set_operation_begin_time(UINT64_MAX);
                 }
 
                 if (l1_req->operation_begin_time() != UINT64_MAX && l1_req->status() == CACHE_REQ_MISS) {
-                    if (stats_enabled()) {
+                    if (stats_enabled() && per_mem_instr_stats) {
                         per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_ops(system_time - l1_req->operation_begin_time());
                     }
                     l1_req->set_operation_begin_time(UINT64_MAX);
@@ -260,20 +288,28 @@ void sharedSharedEMRA::update_work_table() {
                         mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a core miss for "
                                   << core_req->maddr() << endl;
 
-                        per_mem_instr_stats->did_core_miss();
+                        if (per_mem_instr_stats) {
+                            per_mem_instr_stats->core_missed();
+                        }
                         if (stats_enabled()) {
-                            per_mem_instr_stats->commit_tentative_data(T_IDX_CAT);
-                            if (core_req->is_read()) {
-                                stats()->core_miss_for_read_instr_at_L1();
-                            } else {
-                                stats()->core_miss_for_write_instr_at_L1();
+                            if (per_mem_instr_stats) {
+                                per_mem_instr_stats->commit_tentative_data(T_IDX_CAT);
                             }
-                        } else {
+                            if (core_req->is_read()) {
+                                stats()->new_read_instr_at_l1();
+                                stats()->core_miss_for_read_instr_at_l1();
+                            } else {
+                                stats()->new_write_instr_at_l1();
+                                stats()->core_miss_for_write_instr_at_l1();
+                            }
+                        } else if (per_mem_instr_stats) {
                             per_mem_instr_stats->clear_tentative_data();
                         }
 
                         if (m_cfg.logic == MIGRATION_ALWAYS) {
-                            per_mem_instr_stats->did_migrate(system_time);
+                            if (per_mem_instr_stats) {
+                                per_mem_instr_stats->migration_started(system_time);
+                            }
                             set_req_status(core_req, REQ_MIGRATE);
                             set_req_home(core_req, home);
                             ++m_available_core_ports;
@@ -312,16 +348,24 @@ void sharedSharedEMRA::update_work_table() {
 
                         /* stats */
                         if (stats_enabled()) {
-                            /* apply the outstanding latency */
-                            per_mem_instr_stats->commit_max_tentative_data();
-                            if (core_req->is_read()) {
-                                stats()->new_read_instr_at_L1();
-                                stats()->true_miss_for_read_instr_at_L1();
-                            } else {
-                                stats()->new_write_instr_at_L1();
-                                stats()->true_miss_for_write_instr_at_L1();
+                            if (per_mem_instr_stats) {
+                                /* apply the outstanding latency */
+                                if (per_mem_instr_stats->get_max_tentative_data_index() == T_IDX_L1) {
+                                    per_mem_instr_stats->add_local_l1_cost_for_miss
+                                        (per_mem_instr_stats->get_tentative_data(T_IDX_L1)->total_cost());
+                                }
+                                per_mem_instr_stats->commit_max_tentative_data();
                             }
-                        } else {
+                            if (core_req->is_read()) {
+                                stats()->new_read_instr_at_l1();
+                                stats()->true_miss_for_read_instr_at_l1();
+                                stats()->true_miss_for_read_instr_at_local_l1();
+                            } else {
+                                stats()->new_write_instr_at_l1();
+                                stats()->true_miss_for_write_instr_at_l1();
+                                stats()->true_miss_for_write_instr_at_local_l1();
+                            }
+                        } else if (per_mem_instr_stats) {
                             per_mem_instr_stats->clear_tentative_data();
                         }
 
@@ -336,8 +380,8 @@ void sharedSharedEMRA::update_work_table() {
                                                                                core_req->word_count(), core_req->data()));
                         }
                         l2_req->set_serialization_begin_time(system_time);
-                        l2_req->set_clean_write(false);
-                        l2_req->set_reserve(false);
+                        l2_req->set_unset_dirty_on_write(false);
+                        l2_req->set_claim(false);
                         l2_req->set_evict(false);
 
                         if (l2_req->use_read_ports()) {
@@ -399,9 +443,10 @@ void sharedSharedEMRA::update_work_table() {
                           << ") from " << ra_rep->sender << " for " << ra_rep->maddr << endl;
 
                 if (stats_enabled()) {
-                    per_mem_instr_stats->add_ra_rep_nas(system_time - ra_rep->birthtime);
-
-                    stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
+                    if (per_mem_instr_stats) {
+                        per_mem_instr_stats->add_ra_rep_nas(system_time - ra_rep->birthtime);
+                        stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
+                    }
                     if (core_req->is_read()) {
                         stats()->did_finish_read();
                     } else {
@@ -451,11 +496,18 @@ void sharedSharedEMRA::update_work_table() {
                 /* SPIN */
             }
 
-            if (stats_enabled()) {
-                per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_ops(system_time - l1_req->serialization_begin_time());
-                per_mem_instr_stats->commit_tentative_data(T_IDX_L1);
-            } else {
-                per_mem_instr_stats->clear_tentative_data();
+            if (per_mem_instr_stats) {
+                if (stats_enabled()) {
+                    per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_ops(system_time - l1_req->serialization_begin_time());
+                    if (l1_req->status() == CACHE_REQ_HIT) {
+                        per_mem_instr_stats->add_remote_l1_cost_for_hit(per_mem_instr_stats->get_tentative_data(T_IDX_L1)->total_cost());
+                    } else {
+                        per_mem_instr_stats->add_remote_l1_cost_for_miss(per_mem_instr_stats->get_tentative_data(T_IDX_L1)->total_cost());
+                    }
+                    per_mem_instr_stats->commit_tentative_data(T_IDX_L1);
+                } else {
+                    per_mem_instr_stats->clear_tentative_data();
+                }
             }
 
             if (l1_req->status() == CACHE_REQ_HIT) {
@@ -464,11 +516,13 @@ void sharedSharedEMRA::update_work_table() {
 
                 if (stats_enabled()) {
                     if (ra_req->type == RA_READ_REQ) {
-                        stats()->new_read_instr_at_L1();
-                        stats()->hit_for_read_instr_at_L1();
+                        stats()->new_read_instr_at_l1();
+                        stats()->hit_for_read_instr_at_l1();
+                        stats()->hit_for_read_instr_at_remote_l1();
                     } else {
-                        stats()->new_write_instr_at_L1();
-                        stats()->hit_for_write_instr_at_L1();
+                        stats()->new_write_instr_at_l1();
+                        stats()->hit_for_write_instr_at_l1();
+                        stats()->hit_for_write_instr_at_remote_l1();
                     }
                 }
 
@@ -500,11 +554,13 @@ void sharedSharedEMRA::update_work_table() {
 
                 if (stats_enabled()) {
                     if (ra_req->type == RA_READ_REQ) {
-                        stats()->new_read_instr_at_L1();
-                        stats()->true_miss_for_read_instr_at_L1();
+                        stats()->new_read_instr_at_l1();
+                        stats()->true_miss_for_read_instr_at_l1();
+                        stats()->true_miss_for_read_instr_at_remote_l1();
                     } else {
-                        stats()->new_write_instr_at_L1();
-                        stats()->true_miss_for_write_instr_at_L1();
+                        stats()->new_write_instr_at_l1();
+                        stats()->true_miss_for_write_instr_at_l1();
+                        stats()->true_miss_for_write_instr_at_remote_l1();
                     }
                 }
 
@@ -516,8 +572,8 @@ void sharedSharedEMRA::update_work_table() {
                                                                        ra_req->word_count, ra_req->data));
                 }
                 l2_req->set_serialization_begin_time(system_time);
-                l2_req->set_clean_write(false);
-                l2_req->set_reserve(false);
+                l2_req->set_unset_dirty_on_write(false);
+                l2_req->set_claim(false);
                 l2_req->set_evict(false);
 
                 if (l2_req->use_read_ports()) {
@@ -552,33 +608,58 @@ void sharedSharedEMRA::update_work_table() {
                 /* SPIN */
             }
 
-            if (stats_enabled()) {
-                per_mem_instr_stats->get_tentative_data(T_IDX_L2)->add_l2_ops(system_time - l2_req->serialization_begin_time());
-                per_mem_instr_stats->commit_tentative_data(T_IDX_L2);
-            } else {
-                per_mem_instr_stats->clear_tentative_data();
+            if (per_mem_instr_stats) {
+                if (stats_enabled()) {
+                    per_mem_instr_stats->get_tentative_data(T_IDX_L2)->add_l2_ops(system_time - l2_req->serialization_begin_time());
+                    if (l2_req->status() == CACHE_REQ_HIT) {
+                        if (core_req) {
+                            per_mem_instr_stats->add_local_l2_cost_for_hit(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                        } else {
+                            per_mem_instr_stats->add_remote_l2_cost_for_hit(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                        }
+                    } else {
+                        if (core_req) {
+                            per_mem_instr_stats->add_local_l2_cost_for_miss(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                        } else {
+                            per_mem_instr_stats->add_remote_l2_cost_for_miss(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                        }
+                    }
+                    per_mem_instr_stats->commit_tentative_data(T_IDX_L2);
+                } else {
+                    per_mem_instr_stats->clear_tentative_data();
+                }
             }
 
             if (l2_req->status() == CACHE_REQ_HIT) {
                 if (stats_enabled()) {
                     if ((core_req && core_req->is_read()) || (ra_req && ra_req->type == RA_READ_REQ)) {
-                        stats()->new_read_instr_at_L2();
-                        stats()->hit_for_read_instr_at_L2();
+                        stats()->new_read_instr_at_l2();
+                        stats()->hit_for_read_instr_at_l2();
+                        if (core_req) {
+                            stats()->hit_for_read_instr_at_local_l2();
+                        } else {
+                            stats()->hit_for_read_instr_at_remote_l2();
+                        }
                     } else {
-                        stats()->new_write_instr_at_L2();
-                        stats()->hit_for_write_instr_at_L2();
+                        stats()->new_write_instr_at_l2();
+                        stats()->hit_for_write_instr_at_l2();
+                        if (core_req) {
+                            stats()->hit_for_write_instr_at_local_l2();
+                        } else {
+                            stats()->hit_for_write_instr_at_remote_l2();
+                        }
                     }
                 }
 
                 mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] gets an L2 HIT for a request on "
                           << l2_req->maddr() << endl;
 
-                l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_FILL,
+                l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                    m_cfg.words_per_cache_line,
                                                                    l2_line->data));
                 l1_req->set_serialization_begin_time(system_time);
-                l1_req->set_clean_write(true);
-                l1_req->set_reserve(true);
+                l1_req->set_unset_dirty_on_write(true);
+                l1_req->set_claim(true);
                 l1_req->set_evict(true);
 
                 if (l1_req->use_read_ports()) {
@@ -600,11 +681,21 @@ void sharedSharedEMRA::update_work_table() {
 
                 if (stats_enabled()) {
                     if ((core_req && core_req->is_read()) || (ra_req && ra_req->type == RA_READ_REQ)) {
-                        stats()->new_read_instr_at_L2();
-                        stats()->true_miss_for_read_instr_at_L2();
+                        stats()->new_read_instr_at_l2();
+                        stats()->true_miss_for_read_instr_at_l2();
+                        if (core_req) {
+                            stats()->true_miss_for_read_instr_at_local_l2();
+                        } else {
+                            stats()->true_miss_for_read_instr_at_remote_l2();
+                        }
                     } else {
-                        stats()->new_write_instr_at_L2();
-                        stats()->true_miss_for_write_instr_at_L2();
+                        stats()->new_write_instr_at_l2();
+                        stats()->true_miss_for_write_instr_at_l2();
+                        if (core_req) {
+                            stats()->true_miss_for_write_instr_at_local_l2();
+                        } else {
+                            stats()->true_miss_for_write_instr_at_remote_l2();
+                        }
                     }
                 }
 
@@ -647,11 +738,18 @@ void sharedSharedEMRA::update_work_table() {
                 /* SPIN */
             }
 
-            if (stats_enabled()) {
-                per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_ops(system_time - l1_req->serialization_begin_time());
-                per_mem_instr_stats->commit_tentative_data(T_IDX_L1);
-            } else {
-                per_mem_instr_stats->clear_tentative_data();
+            if (per_mem_instr_stats) {
+                if (stats_enabled()) {
+                    per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_ops(system_time - l1_req->serialization_begin_time());
+                    if (ra_rep) {
+                        per_mem_instr_stats->add_remote_l1_cost_for_update(per_mem_instr_stats->get_tentative_data(T_IDX_L1)->total_cost());
+                    } else {
+                        per_mem_instr_stats->add_local_l1_cost_for_update(per_mem_instr_stats->get_tentative_data(T_IDX_L1)->total_cost());
+                    }
+                    per_mem_instr_stats->commit_tentative_data(T_IDX_L1);
+                } else {
+                    per_mem_instr_stats->clear_tentative_data();
+                }
             }
 
             if (l1_req->status() == CACHE_REQ_HIT) {
@@ -687,14 +785,18 @@ void sharedSharedEMRA::update_work_table() {
                     stats()->evict_at_l1();
                 }
 
-                if (l1_victim && l1_victim->dirty) {
+                if (l1_victim && l1_victim->data_dirty) {
+                    if (stats_enabled()) {
+                        stats()->writeback_at_l1();
+                    }
+
                     l2_req = shared_ptr<cacheRequest>(new cacheRequest(l1_victim->start_maddr,
-                                                                                 CACHE_REQ_FILL,
-                                                                                 m_cfg.words_per_cache_line,
-                                                                                 l1_victim->data));
+                                                                       CACHE_REQ_UPDATE,
+                                                                       m_cfg.words_per_cache_line,
+                                                                       l1_victim->data));
                     l2_req->set_serialization_begin_time(system_time);
-                    l2_req->set_clean_write(false);
-                    l2_req->set_reserve(false);
+                    l2_req->set_unset_dirty_on_write(false);
+                    l2_req->set_claim(false);
                     l2_req->set_evict(false);
 
                     if (l2_req->use_read_ports()) {
@@ -714,7 +816,9 @@ void sharedSharedEMRA::update_work_table() {
                 } else if (core_req) {
 
                     if (stats_enabled()) {
-                        stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
+                        if (per_mem_instr_stats) {
+                            stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
+                        }
                         if (core_req->is_read()) {
                             stats()->did_finish_read();
                         } else {
@@ -782,18 +886,27 @@ void sharedSharedEMRA::update_work_table() {
                 /* SPIN */
             }
 
-            if (stats_enabled()) {
-                per_mem_instr_stats->get_tentative_data(T_IDX_L2)->add_l2_ops(system_time - l2_req->serialization_begin_time());
-                per_mem_instr_stats->commit_tentative_data(T_IDX_L2);
-            } else {
-                per_mem_instr_stats->clear_tentative_data();
+            if (per_mem_instr_stats) {
+                if (stats_enabled()) {
+                    per_mem_instr_stats->get_tentative_data(T_IDX_L2)->add_l2_ops(system_time - l2_req->serialization_begin_time());
+                    if (core_req) {
+                        per_mem_instr_stats->add_local_l2_cost_for_writeback(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                    } else {
+                        per_mem_instr_stats->add_remote_l2_cost_for_writeback(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                    }
+                    per_mem_instr_stats->commit_tentative_data(T_IDX_L2);
+                } else {
+                    per_mem_instr_stats->clear_tentative_data();
+                }
             }
 
             if (l2_req->status() == CACHE_REQ_HIT) {
                 /* a reply is already set in _FILL_L1 */
                 if (core_req) {
                     if (stats_enabled()) {
-                        stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
+                        if (per_mem_instr_stats) {
+                            stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
+                        }
                         if (core_req->is_read()) {
                             stats()->did_finish_read();
                         } else {
@@ -857,13 +970,15 @@ void sharedSharedEMRA::update_work_table() {
             }
 
             /* a reply is already set in _FILL_L1 */
-            if (stats_enabled()) {
+            if (stats_enabled() && per_mem_instr_stats) {
                 per_mem_instr_stats->add_dramctrl_req_nas(system_time - dramctrl_req->birthtime);
             }
 
             if (core_req) {
                 if (stats_enabled()) {
-                    stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
+                    if (per_mem_instr_stats) {
+                        stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
+                    }
                     if (core_req->is_read()) {
                         stats()->did_finish_read();
                     } else {
@@ -915,7 +1030,7 @@ void sharedSharedEMRA::update_work_table() {
                 /* SPIN */
             }
 
-            if (stats_enabled()) {
+            if (stats_enabled() && per_mem_instr_stats) {
                 per_mem_instr_stats->add_dramctrl_rep_nas(system_time - dramctrl_rep->birthtime);
             }
 
@@ -929,12 +1044,12 @@ void sharedSharedEMRA::update_work_table() {
                 }
             }
 
-            l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_FILL,
+            l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                m_cfg.words_per_cache_line, 
                                                                dramctrl_rep->dram_req->read()));
             l2_req->set_serialization_begin_time(system_time);
-            l2_req->set_clean_write(l2_req->request_type() == CACHE_REQ_READ);
-            l2_req->set_reserve(true);
+            l2_req->set_unset_dirty_on_write(l2_req->request_type() == CACHE_REQ_READ);
+            l2_req->set_claim(true);
             l2_req->set_evict(true);
 
             if (l2_req->use_read_ports()) {
@@ -983,11 +1098,18 @@ void sharedSharedEMRA::update_work_table() {
                 /* SPIN */
             }
 
-            if (stats_enabled()) {
-                per_mem_instr_stats->get_tentative_data(T_IDX_L2)->add_l2_ops(system_time - l2_req->serialization_begin_time());
-                per_mem_instr_stats->commit_tentative_data(T_IDX_L2);
-            } else {
-                per_mem_instr_stats->clear_tentative_data();
+            if (per_mem_instr_stats) {
+                if (stats_enabled()) {
+                    per_mem_instr_stats->get_tentative_data(T_IDX_L2)->add_l2_ops(system_time - l2_req->serialization_begin_time());
+                    if (core_req) {
+                        per_mem_instr_stats->add_local_l2_cost_for_update(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                    } else {
+                        per_mem_instr_stats->add_remote_l2_cost_for_update(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                    }
+                    per_mem_instr_stats->commit_tentative_data(T_IDX_L2);
+                } else {
+                    per_mem_instr_stats->clear_tentative_data();
+                }
             }
 
             if (l2_req->status() == CACHE_REQ_HIT) {
@@ -997,19 +1119,19 @@ void sharedSharedEMRA::update_work_table() {
 
                 /* ready to make l1 fill request first */
 
-                l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_FILL,
+                l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                    m_cfg.words_per_cache_line,
                                                                    l2_line->data));
                 l1_req->set_serialization_begin_time(system_time);
-                l1_req->set_clean_write(true);
-                l1_req->set_reserve(true);
+                l1_req->set_unset_dirty_on_write(true);
+                l1_req->set_claim(true);
                 l1_req->set_evict(true);
 
                 if (l2_victim && stats_enabled()) {
                     stats()->evict_at_l2();
                 }
 
-                if (l2_victim && l2_victim->dirty) {
+                if (l2_victim && l2_victim->data_dirty) {
                     dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
                     dramctrl_req->sender = m_id;
                     dramctrl_req->receiver = m_dramctrl_location;
@@ -1072,7 +1194,7 @@ void sharedSharedEMRA::update_work_table() {
             }
 
             /* a l1 fill request is already set in _FILL_L2 */
-            if (stats_enabled()) {
+            if (stats_enabled() && per_mem_instr_stats) {
                 per_mem_instr_stats->add_dramctrl_req_nas(system_time - dramctrl_req->birthtime);
             }
 
@@ -1105,7 +1227,7 @@ void sharedSharedEMRA::update_dramctrl_work_table() {
         if (dramctrl_req->dram_req->status() == DRAM_REQ_DONE) {
 
             if (!dramctrl_rep) {
-                if (stats_enabled()) {
+                if (stats_enabled() && per_mem_instr_stats) {
                     per_mem_instr_stats->add_dram_ops(system_time - entry->operation_begin_time);
                 }
                 dramctrl_rep = shared_ptr<dramctrlMsg>(new dramctrlMsg);
@@ -1184,15 +1306,6 @@ void sharedSharedEMRA::schedule_requests() {
     uint32_t requested = 0;
     while (m_core_port_schedule_q.size()) {
         shared_ptr<memoryRequest> req = m_core_port_schedule_q.front();
-        shared_ptr<shared_ptr<void> > p_runtime_info = req->per_mem_instr_runtime_info();
-        shared_ptr<void>& runtime_info = *p_runtime_info;
-        if (!runtime_info) {
-            /* no per-instr stats: this is the first time this memory instruction is issued */
-            runtime_info = shared_ptr<sharedSharedEMRAStatsPerMemInstr>(new sharedSharedEMRAStatsPerMemInstr());
-        }
-        shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats = 
-            static_pointer_cast<sharedSharedEMRAStatsPerMemInstr>(runtime_info);
-
         if (requested < m_available_core_ports) {
             m_new_work_table_entry_schedule_q.push_back(make_tuple(false, req));
             ++requested;
@@ -1226,8 +1339,8 @@ void sharedSharedEMRA::schedule_requests() {
                                                               ra_req->word_count,
                                                               (is_read)? shared_array<uint32_t>() : ra_req->data));
             l1_req->set_serialization_begin_time(system_time);
-            l1_req->set_clean_write(false);
-            l1_req->set_reserve(false);
+            l1_req->set_unset_dirty_on_write(false);
+            l1_req->set_claim(false);
             l1_req->set_evict(false);
 
             shared_ptr<tableEntry> new_entry(new tableEntry);
@@ -1253,7 +1366,7 @@ void sharedSharedEMRA::schedule_requests() {
             --m_work_table_vacancy;
 
             /* pop from the network receive queue */
-            if (stats_enabled()) {
+            if (stats_enabled() && per_mem_instr_stats) {
                 new_entry->per_mem_instr_stats->add_ra_req_nas(system_time - ra_req->birthtime);
             }
             m_core_receive_queues[MSG_RA_REQ]->pop();
@@ -1266,10 +1379,11 @@ void sharedSharedEMRA::schedule_requests() {
         } else {
             shared_ptr<memoryRequest> core_req = static_pointer_cast<memoryRequest>(m_new_work_table_entry_schedule_q.front().get<1>());
             maddr_t start_maddr = get_start_maddr_in_line(core_req->maddr());
-            shared_ptr<shared_ptr<void> > p_runtime_info = core_req->per_mem_instr_runtime_info();
-            shared_ptr<void>& runtime_info = *p_runtime_info;
             shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats = 
-                static_pointer_cast<sharedSharedEMRAStatsPerMemInstr>(runtime_info);
+                (core_req->per_mem_instr_runtime_info()) ? 
+                    static_pointer_cast<sharedSharedEMRAStatsPerMemInstr>(*(core_req->per_mem_instr_runtime_info()))
+                :
+                    shared_ptr<sharedSharedEMRAStatsPerMemInstr>();
 
             if (m_work_table.count(start_maddr) || m_work_table_vacancy == 0) {
                 set_req_status(core_req, REQ_RETRY);
@@ -1277,12 +1391,8 @@ void sharedSharedEMRA::schedule_requests() {
                 continue;
             }
 
-            if (stats_enabled()) {
-                /* could have migrated*/
-                per_mem_instr_stats->apply_mig_latency(core_req->serialization_begin_time());
-                per_mem_instr_stats->add_mem_srz(system_time - core_req->serialization_begin_time());
-            } else {
-                per_mem_instr_stats->discard_mig_latency();
+            if (stats_enabled() && per_mem_instr_stats) {
+                per_mem_instr_stats->add_mem_srz(system_time - per_mem_instr_stats->serialization_begin_time_at_current_core());
             }
 
             shared_ptr<catRequest> cat_req(new catRequest(core_req->maddr(), m_id));
@@ -1293,8 +1403,8 @@ void sharedSharedEMRA::schedule_requests() {
                                                              core_req->word_count(),
                                                              core_req->is_read()? shared_array<uint32_t>() : core_req->data()));
             l1_req->set_serialization_begin_time(system_time);
-            l1_req->set_clean_write(false);
-            l1_req->set_reserve(false);
+            l1_req->set_unset_dirty_on_write(false);
+            l1_req->set_claim(false);
             l1_req->set_evict(false);
 
             shared_ptr<tableEntry> new_entry(new tableEntry);
@@ -1369,7 +1479,7 @@ void sharedSharedEMRA::schedule_requests() {
 
                     m_dramctrl_work_table[dramctrl_msg->maddr] = new_entry;
 
-                    if (is_remote && stats_enabled()) {
+                    if (is_remote && stats_enabled() && new_entry->per_mem_instr_stats) {
                         new_entry->per_mem_instr_stats->add_dramctrl_req_nas(system_time - dramctrl_msg->birthtime);
                     }
                     mh_log(4) << "[DRAMCTRL " << m_id << " @ " << system_time 
@@ -1436,7 +1546,7 @@ void sharedSharedEMRA::schedule_requests() {
             cat_req->set_operation_begin_time(UINT64_MAX);
         } else {
             cat_req->set_operation_begin_time(system_time);
-            if (stats_enabled()) {
+            if (stats_enabled() && entry->per_mem_instr_stats) {
                 entry->per_mem_instr_stats->get_tentative_data(T_IDX_CAT)->add_cat_srz(system_time - cat_req->serialization_begin_time());
             }
         }
@@ -1463,7 +1573,7 @@ void sharedSharedEMRA::schedule_requests() {
             l1_req->set_operation_begin_time(UINT64_MAX);
         } else {
             l1_req->set_operation_begin_time(system_time);
-            if (stats_enabled()) {
+            if (stats_enabled() && entry->per_mem_instr_stats) {
                 entry->per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_srz(system_time - l1_req->serialization_begin_time());
             }
         }
@@ -1489,7 +1599,7 @@ void sharedSharedEMRA::schedule_requests() {
             l1_req->set_operation_begin_time(UINT64_MAX);
         } else {
             l1_req->set_operation_begin_time(system_time);
-            if (stats_enabled()) {
+            if (stats_enabled() && entry->per_mem_instr_stats) {
                 entry->per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_srz(system_time - l1_req->serialization_begin_time());
             }
         }
@@ -1524,8 +1634,8 @@ void sharedSharedEMRA::schedule_requests() {
             l2_req->set_operation_begin_time(UINT64_MAX);
         } else {
             l2_req->set_operation_begin_time(system_time);
-            if (stats_enabled()) {
-                entry->per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l2_srz(system_time - l2_req->serialization_begin_time());
+            if (stats_enabled() && entry->per_mem_instr_stats) {
+                entry->per_mem_instr_stats->get_tentative_data(T_IDX_L2)->add_l2_srz(system_time - l2_req->serialization_begin_time());
             }
         }
         if (stats_enabled()) {
@@ -1557,8 +1667,8 @@ void sharedSharedEMRA::schedule_requests() {
             l2_req->set_operation_begin_time(UINT64_MAX);
         } else {
             l2_req->set_operation_begin_time(system_time);
-            if (stats_enabled()) {
-                entry->per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l2_srz(system_time - l2_req->serialization_begin_time());
+            if (stats_enabled() && entry->per_mem_instr_stats) {
+                entry->per_mem_instr_stats->get_tentative_data(T_IDX_L2)->add_l2_srz(system_time - l2_req->serialization_begin_time());
             }
         }
         if (stats_enabled()) {
@@ -1574,6 +1684,7 @@ void sharedSharedEMRA::schedule_requests() {
     }
     m_l2_write_req_schedule_q.clear();
 
+    /* a writeback is a must-hit. once requested don't worry about other reads/writes are requested after it */
     m_l2_writeback_status.clear();
 
     /**************************************/

@@ -11,8 +11,6 @@
 #include "random.hpp"
 #include "memory_types.hpp"
 
-/* TODO : cache.hpp / cache.cpp will be cleaned up in 2011 September */
-
 using namespace std;
 using namespace boost;
 
@@ -20,13 +18,14 @@ using namespace boost;
 typedef enum {
     REPLACE_LRU = 0,
     REPLACE_RANDOM = 1,
-    REPLACE_CUSTOM /* using memory-specific information */
+    REPLACE_CUSTOM 
 } replacementPolicy_t;
 
 typedef struct {
-    bool empty; /* !claimed */
-    bool valid; /* ready */
-    bool dirty;
+    bool claimed; 
+    bool ready; 
+    bool data_dirty;
+    bool coherence_info_dirty;
     maddr_t start_maddr;;
     shared_array<uint32_t> data;
     shared_ptr<void> coherence_info;
@@ -36,10 +35,8 @@ typedef struct {
 typedef enum {
     CACHE_REQ_READ = 0,
     CACHE_REQ_WRITE,      
-    CACHE_REQ_UPDATE, /* To write the entire line ONLY if it his (may miss). set dirty if clean write is not set */
-    CACHE_REQ_FILL,   /* To write the entire line whenever possible. If evict NEW - provide the whole information for a cache line */
-    CACHE_REQ_INVALIDATE
-
+    CACHE_REQ_UPDATE, 
+    CACHE_REQ_INVALIDATE 
 } cacheReqType_t;
 
 typedef enum {
@@ -53,85 +50,77 @@ class cacheRequest {
 public:
 
     explicit cacheRequest(maddr_t maddr, cacheReqType_t request_type, 
-                 uint32_t word_count = 0,
-                 shared_array<uint32_t> data_to_write = shared_array<uint32_t>(), 
-                 shared_ptr<void> coherence_info_to_write = shared_ptr<void>());
+                          uint32_t word_count = 0,
+                          shared_array<uint32_t> data_to_write = shared_array<uint32_t>(), 
+                          shared_ptr<void> coherence_info_to_write = shared_ptr<void>());
 
     ~cacheRequest();
 
     inline cacheReqStatus_t status() { return m_status; }
-
-    inline shared_ptr<cacheLine> line_copy() { return m_line_copy; }
-    inline shared_ptr<cacheLine> victim_line_copy() { return m_victim_line_copy; }
-
-    inline bool use_read_ports() { return m_request_type == CACHE_REQ_READ; }
-
+    
+    /* request information */
     inline cacheReqType_t request_type() { return m_request_type; }
+    inline bool use_read_ports() { return m_request_type == CACHE_REQ_READ; }
     inline maddr_t maddr() { return m_maddr; }
     inline uint32_t word_count() { return m_word_count; }
     inline shared_array<uint32_t> data_to_write() { return m_data_to_write; }
 
+    /* lines to return */
+    inline shared_ptr<cacheLine> line_copy() { return m_line_copy; }
+    inline shared_ptr<cacheLine> line_to_evict_copy() { return m_line_to_evict_copy; }
+
+    /* convenient function - to reuse the cache request without making a new request */
     inline void reset() { assert(m_status != CACHE_REQ_WAIT); 
                           m_status = CACHE_REQ_NEW; 
                           m_line_copy = shared_ptr<cacheLine>();
-                          m_victim_line_copy = shared_ptr<cacheLine>(); }
+                          m_line_to_evict_copy = shared_ptr<cacheLine>(); }
 
-    /* to support architecture-specific functionalities */
-    inline void set_clean_write(bool enable = true) { m_do_clean_write = enable; }
-    inline void set_reserve(bool enable) { m_do_reserve = enable; }
+    /* Options */
+    inline void set_unset_dirty_on_write(bool enable) { m_do_unset_dirty_on_write = enable; }
+    inline void set_claim(bool enable) { m_do_claim = enable; }
     inline void set_evict(bool enable) { m_do_evict = enable; }
 
-    /* TRANSITION - remove */
-    inline void set_milestone_time(uint64_t time) { m_operation_begin_time = time; }
-    inline uint64_t milestone_time(){ return m_operation_begin_time; }
+    inline void set_aux_info_for_coherence(shared_ptr<void> states) { m_aux_info_for_coherence = states; }
+    inline shared_ptr<void> aux_info_for_coherence() { return m_aux_info_for_coherence; }
 
+    /* for stats */
     inline void set_serialization_begin_time(uint64_t time) { m_serialization_begin_time = time; }
     inline uint64_t serialization_begin_time(){ return m_serialization_begin_time; }
     inline void set_operation_begin_time(uint64_t time) { m_operation_begin_time = time; }
     inline uint64_t operation_begin_time(){ return m_operation_begin_time; }
-    inline void set_stats_info(shared_ptr<void> info) { m_stats_info = info; }
-    inline shared_ptr<void> stats_info() { return m_stats_info; }
 
     friend class cache;
-
-    /* aux info for sophisticated schemes */
-    inline void set_requesting_core(uint32_t core) { m_core = core; }
-    inline uint32_t requesting_core() { return m_core; }
 
 private:
 
     cacheReqType_t m_request_type;
     maddr_t m_maddr;
     uint32_t m_word_count;
-
     cacheReqStatus_t m_status;
     shared_ptr<cacheLine> m_line_copy;
-    shared_ptr<cacheLine> m_victim_line_copy;
+    shared_ptr<cacheLine> m_line_to_evict_copy;
     shared_ptr<void> m_coherence_info_to_write;
     shared_array<uint32_t> m_data_to_write;
 
-    bool m_do_clean_write;
-    bool m_do_reserve;
+    shared_ptr<void> m_aux_info_for_coherence;
+
+    bool m_do_unset_dirty_on_write;;
+    bool m_do_claim;
     bool m_do_evict;
 
     /* cost breakdown study */
     uint64_t m_serialization_begin_time;
     uint64_t m_operation_begin_time;
-    shared_ptr<void> m_stats_info;
-
-    /* aux info */
-    uint32_t m_core;
 
 };
 
 class cache {
 public:
     typedef shared_ptr<void> (*helperCopyCoherenceInfo) (shared_ptr<void>);
-    typedef bool (*helperIsHit) (shared_ptr<cacheRequest>, cacheLine&, const uint64_t&);
-    typedef void (*helperReserveLine) (cacheLine&);
-    typedef bool (*helperCanEvictLine) (cacheLine&, const uint64_t&);
+    typedef bool (*helperIsCoherenceHit) (shared_ptr<cacheRequest>, cacheLine&, const uint64_t& /* system_time */);
+    typedef bool (*helperTestLineToEvict) (cacheLine&, const uint64_t& /* system_time */);
     typedef uint32_t (*helperReplacementPolicy) (vector<uint32_t>&, cacheLine const*, const uint64_t&, shared_ptr<random_gen> ran);
-    typedef void (*helperInvalidateHook) (cacheLine&);
+    typedef void (*helperHook) (cacheLine&, const uint64_t& /* system_time */);
 
     cache(uint32_t cache_level, uint32_t numeric_id, const uint64_t &system_time, 
           shared_ptr<tile_statistics> stats, logger &log, shared_ptr<random_gen> ran, 
@@ -143,78 +132,96 @@ public:
     void tick_positive_edge();
     void tick_negative_edge();
 
-    void print_contents();
     void request(shared_ptr<cacheRequest> req);
 
     inline bool read_port_available() { return m_available_read_ports > 0; }
     inline bool write_port_available() { return m_available_write_ports > 0; }
 
     inline void set_helper_copy_coherence_info (helperCopyCoherenceInfo fptr) { m_helper_copy_coherence_info = fptr; }
-    inline void set_helper_is_hit (helperIsHit fptr) { m_helper_is_hit = fptr; }
-    inline void set_helper_reserve_line (helperReserveLine fptr) { m_helper_reserve_line = fptr; }
-    inline void set_helper_can_evict_line (helperCanEvictLine fptr) { m_helper_can_evict_line = fptr; }
+    inline void set_helper_is_coherence_hit (helperIsCoherenceHit fptr) { m_helper_is_coherence_hit = fptr; }
+    inline void set_helper_can_evict_line (helperTestLineToEvict fptr) { m_helper_can_evict_line = fptr; }
+    inline void set_helper_evict_need_action (helperTestLineToEvict fptr) { m_helper_evict_need_action = fptr; }
     inline void set_helper_replacement_policy (helperReplacementPolicy fptr) { 
         m_replacement_policy = REPLACE_CUSTOM;
         m_helper_replacement_policy = fptr; }
-    inline void set_helper_invalidate (helperInvalidateHook fptr) { m_helper_invalidate_hook = fptr; }
+
+    inline void set_claim_hook (helperHook fptr) { m_claim_hook = fptr; }
+    inline void set_read_hook (helperHook fptr) { m_read_hook= fptr; }
+    inline void set_write_hook (helperHook fptr) { m_write_hook= fptr; }
+    inline void set_update_hook (helperHook fptr) { m_update_hook= fptr; }
+    inline void set_invalidate_hook (helperHook fptr) { m_invalidate_hook= fptr; }
+
+    /* debug */
+    void print_contents();
 
 private:
-    typedef map<uint32_t/*index*/, cacheLine*> cacheTable;
 
+    /**********************************************/
+    /* Private types and private member functions */
+    /**********************************************/
+    typedef map<uint32_t/*index*/, cacheLine*> cacheTable;
     typedef enum {
         ENTRY_HIT_TEST,
         ENTRY_DONE
     } reqEntryStatus_t;
-
     typedef struct {
         reqEntryStatus_t status;
         shared_ptr<cacheRequest> request;
+        maddr_t start_maddr;
+        uint32_t idx;
         uint32_t remaining_hit_test_cycles;
-        bool need_to_evict_and_reserve;
     } reqEntry;
-
-    typedef vector<reqEntry> reqQueue;
+    typedef vector<shared_ptr<reqEntry> > reqQueue;
     typedef map<maddr_t, reqQueue> reqTable;
 
+    /* convenient functions */
     inline uint32_t get_index(maddr_t maddr) { return (uint32_t)((maddr.address&m_index_mask)>>m_index_pos); }
     inline uint32_t get_offset(maddr_t maddr) { return (uint32_t)(maddr.address&m_offset_mask); }
     inline maddr_t get_start_maddr_in_line(maddr_t maddr) { maddr.address -= get_offset(maddr); return maddr; }
-
     shared_ptr<cacheLine> copy_cache_line(const cacheLine &line);
 
+    /********************/
+    /* member variables */
+    /********************/
+
+    /* configurations */
     uint32_t m_level;
     uint32_t m_id;
     const uint64_t &system_time;
     shared_ptr<tile_statistics> stats;
     logger &log;
     shared_ptr<random_gen> ran;
-
     uint32_t m_words_per_line;
     uint32_t m_total_lines;
     uint32_t m_associativity;
     replacementPolicy_t m_replacement_policy;
     uint32_t m_hit_test_latency;
-
     uint64_t m_offset_mask;
     uint64_t m_index_mask;
     uint32_t m_index_pos;
-
     uint32_t m_available_read_ports;
     uint32_t m_available_write_ports;
 
+    /* helper functions to customize cache */
     helperCopyCoherenceInfo m_helper_copy_coherence_info;
-    helperIsHit m_helper_is_hit;
-    helperReserveLine m_helper_reserve_line;
-    helperCanEvictLine m_helper_can_evict_line;
+    helperIsCoherenceHit m_helper_is_coherence_hit;
+    helperTestLineToEvict m_helper_can_evict_line;
+    helperTestLineToEvict m_helper_evict_need_action;
     helperReplacementPolicy m_helper_replacement_policy;
-    helperInvalidateHook m_helper_invalidate_hook;
+    helperHook m_claim_hook;
+    helperHook m_invalidate_hook;
+    helperHook m_read_hook;
+    helperHook m_write_hook;
+    helperHook m_update_hook;
 
+    /* states */
     reqTable m_req_table;
     cacheTable m_cache;
+    vector<shared_ptr<reqEntry> > m_ready_requests; /* separated for scheduling */
 
-    set<tuple<uint32_t/*idx*/, uint32_t/*ways*/> > m_lines_to_evict; /* and leave it empty */
-    set<tuple<uint32_t/*idx*/, uint32_t/*way*/, maddr_t> > m_lines_to_evict_and_reserve; /* evict and reserve it for another line */
-    set<tuple<uint32_t/*idx*/, uint32_t/*way*/, shared_ptr<cacheRequest> > > m_lines_to_evict_and_feed; 
+    /* the follwoing volatile states conveys the positive edge information to the negative edge */
+    vector<tuple<uint32_t/*idx*/, uint32_t/*ways*/, shared_ptr<reqEntry> > > m_lines_to_invalidate; 
+    vector<tuple<uint32_t/*idx*/, uint32_t/*ways*/, shared_ptr<reqEntry> > > m_lines_to_evict; 
 
 };
 

@@ -12,15 +12,13 @@
 #include "memory_types.hpp"
 #include "memStats.hpp"
 #include "messages.hpp"
-#include "privateSharedEMRA.hpp"
-#include "privateSharedEMRAStats.hpp"
-#include "privateSharedLCC.hpp"
-#include "privateSharedLCCStats.hpp"
 #include "privateSharedMSI.hpp"
 #include "privateSharedMSIStats.hpp"
 #include "sharedMemory.hpp"
 #include "sharedSharedEMRA.hpp"
 #include "sharedSharedEMRAStats.hpp"
+#include "sharedSharedLCC.hpp"
+#include "sharedSharedLCCStats.hpp"
 #include "threadStats.hpp"
 
 #endif

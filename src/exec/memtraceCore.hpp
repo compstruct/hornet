@@ -7,6 +7,13 @@
 #include "core.hpp"
 #include "memtraceThread.hpp"
 
+#define LIVELOCK_PERFORMANCE_STUDY
+//#undef LIVELOCK_PERFORMANCE_STUDY
+
+#ifdef LIVELOCK_PERFORMANCE_STUDY
+#define APPROVED_VISIT_PERIOD 100
+#endif
+
 class memtraceCore : public core {
 public:
     memtraceCore(const pe_id &id, const uint64_t &system_time,
@@ -50,6 +57,9 @@ private:
     typedef struct {
         lane_status_t status;
         bool evictable;
+#ifdef LIVELOCK_PERFORMANCE_STUDY 
+        uint64_t evictable_time;
+#endif
         shared_ptr<memtraceThread> thread;
         shared_ptr<memoryRequest> req;
         uint64_t last_memory_issued;

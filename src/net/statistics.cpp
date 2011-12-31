@@ -890,3 +890,16 @@ ostream &operator<<(ostream &out, const system_statistics &s) {
 
     return out;
 }
+
+#ifdef PROGRESSIVE_STATISTICS_REPORT
+void system_statistics::print_exec_statistics(ostream & out) {
+
+    system_statistics::aux_stats_t::const_iterator it_aux_stats;
+    for (it_aux_stats = aux_stats.begin(); it_aux_stats != aux_stats.end(); ++it_aux_stats) {
+        (*it_aux_stats)->print_stats(out);
+    }
+
+}
+#endif
+
+

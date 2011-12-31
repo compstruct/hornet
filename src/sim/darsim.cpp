@@ -365,7 +365,13 @@ int main(int argc, char **argv) {
             shared_ptr<random_gen> rng(new random_gen(-2, random_seed));
             sim the_sim(s, num_cycles, num_packets, sync_period, concurrency,
                         fast_forward, tile_mapping, cpu_affinities,
-                        vcd, syslog, rng);
+                        vcd, syslog, rng
+#ifdef PROGRESSIVE_STATISTICS_REPORT
+                        /* ad-hoc progressive statistic report for ISCA 2011 submission */
+                        , stats
+#endif
+                        
+                        );
         }
         ptime sim_end_time = microsec_clock::local_time();
         stats->end_sim();

@@ -6,134 +6,238 @@
 #include <boost/function.hpp>
 #include <boost/bind.hpp>
 
-/* 64-bit address */
+#define PRINT_PROGRESS
+//#undef PRINT_PROGRESS
 
 #define DEBUG
 #undef DEBUG
 
-#define PRINT_PROGRESS
-//#undef PRINT_PROGRESS
-
 #ifdef DEBUG
-#define mh_log(X) cerr
+#define mh_log(X) cout
 #define mh_assert(X) assert(X)
 #else
 #define mh_assert(X) 
 #define mh_log(X) LOG(log,X)
 #endif
 
-static shared_ptr<void> cache_copy_coherence_info(shared_ptr<void> source) { 
+/* Used for tentative stats per memory instruction (outstanding costs survive) */
+#define T_IDX_CAT 0
+#define T_IDX_L1 1
+#define T_IDX_L2 2
+
+/***********************************************************/
+/* Cache helper functions to customize the cache behaviors */
+/***********************************************************/
+
+/* coherence info copier */
+
+static shared_ptr<void> cache_copy_coherence_info(shared_ptr<void> source) {
     shared_ptr<privateSharedMSI::cacheCoherenceInfo> ret
         (new privateSharedMSI::cacheCoherenceInfo(*static_pointer_cast<privateSharedMSI::cacheCoherenceInfo>(source)));
     return ret;
 }
 
-static shared_ptr<void> directory_copy_coherence_info(shared_ptr<void> source) {
-    shared_ptr<privateSharedMSI::directoryCoherenceInfo> ret
-        (new privateSharedMSI::directoryCoherenceInfo(*static_pointer_cast<privateSharedMSI::directoryCoherenceInfo>(source)));
+static shared_ptr<void> dir_copy_coherence_info(shared_ptr<void> source) {
+    shared_ptr<privateSharedMSI::dirCoherenceInfo> ret
+        (new privateSharedMSI::dirCoherenceInfo(*static_pointer_cast<privateSharedMSI::dirCoherenceInfo>(source)));
     return ret;
 }
 
-static bool cache_is_hit(shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
-    shared_ptr<privateSharedMSI::cacheCoherenceInfo> info = 
+/* hit checkers */
+
+static bool cache_hit_checker(shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) {
+
+    shared_ptr<privateSharedMSI::cacheCoherenceInfo> cache_coherence_info = 
         static_pointer_cast<privateSharedMSI::cacheCoherenceInfo>(line.coherence_info);
-    switch (req->request_type()) {
-    case CACHE_REQ_READ:
-        return info->status == privateSharedMSI::SHARED || info->status == privateSharedMSI::MODIFIED;
-    case CACHE_REQ_WRITE:
-        return info->status == privateSharedMSI::MODIFIED;
-    case CACHE_REQ_INVALIDATE:
-        return info->status != privateSharedMSI::PENDING;
-    case CACHE_REQ_UPDATE:
+    shared_ptr<privateSharedMSI::cacheAuxInfoForCoherence> request_info = 
+        static_pointer_cast<privateSharedMSI::cacheAuxInfoForCoherence>(req->aux_info_for_coherence());
+
+    if (*request_info == privateSharedMSI::LOCAL_WRITE) {
+        if (cache_coherence_info->status == privateSharedMSI::SHARED) {
+            return false;
+        }
+    } else if (*request_info == privateSharedMSI::UPDATE_BY_SHREP) {
+        cache_coherence_info->status = privateSharedMSI::SHARED;
+    } else if (*request_info == privateSharedMSI::UPDATE_BY_EXREP) {
+        cache_coherence_info->status = privateSharedMSI::EXCLUSIVE;
+    }
+
+    return true;
+
+}
+
+static bool dir_hit_checker(shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) {
+
+    /* do both test checks and directory updates */
+
+    shared_ptr<privateSharedMSI::dirCoherenceInfo> dir_coherence_info = 
+        static_pointer_cast<privateSharedMSI::dirCoherenceInfo>(line.coherence_info);
+    shared_ptr<privateSharedMSI::dirAuxInfoForCoherence> request_info = 
+        static_pointer_cast<privateSharedMSI::dirAuxInfoForCoherence>(req->aux_info_for_coherence());
+
+    request_info->initial_dir_info = 
+        static_pointer_cast<privateSharedMSI::dirCoherenceInfo>(dir_copy_coherence_info(line.coherence_info));
+
+    if (request_info->req_type == privateSharedMSI::READ_FOR_SHREQ) {
+
+        bool is_hit = !(dir_coherence_info->status == privateSharedMSI::EXCLUSIVE && 
+                        dir_coherence_info->dir.count(request_info->core_id) == 0);
+
+        if (dir_coherence_info->status == privateSharedMSI::EXCLUSIVE) {
+            dir_coherence_info->status = privateSharedMSI::SHARED;
+        }
+        dir_coherence_info->dir.insert(request_info->core_id);
+
+        return is_hit;
+
+    } else if (request_info->req_type == privateSharedMSI::READ_FOR_EXREQ) {
+
+        bool is_hit = dir_coherence_info->dir.size() == 0 ||
+                      (dir_coherence_info->dir.size() == 1 && dir_coherence_info->dir.count(request_info->core_id));
+
+        dir_coherence_info->status = privateSharedMSI::EXCLUSIVE;
+        dir_coherence_info->dir.clear();
+        dir_coherence_info->dir.insert(request_info->core_id);
+
+        return is_hit;
+
+    } else if (request_info->req_type == privateSharedMSI::UPDATE_FOR_INVREP_OR_FLUSHREP) {
+
+        dir_coherence_info->dir.erase(request_info->core_id);
+        if (dir_coherence_info->dir.size() == 0) {
+            dir_coherence_info->status = privateSharedMSI::SHARED;
+        }
+
+    } else if (request_info->req_type == privateSharedMSI::UPDATE_FOR_WBREP) {
+
+        dir_coherence_info->status = privateSharedMSI::SHARED;
+
+    } else if (request_info->req_type == privateSharedMSI::UPDATE_FOR_EMPTYREQ) {
+
+        mh_assert(dir_coherence_info->locked);
+
+        if (line.data_dirty) {
+            request_info->is_replaced_line_dirty = true;
+            request_info->replaced_line = shared_array<uint32_t>(new uint32_t[req->word_count()]);
+            for (uint32_t i = 0; i < req->word_count(); ++i) {
+                request_info->replaced_line[i] = line.data[i];
+            }
+        }
+        /* immediately switch to the evicting line */
+        line.start_maddr = request_info->replacing_maddr;
+    }
+
+    return true;
+
+}
+
+/* evictable checker */
+
+static bool dir_can_evict_line(cacheLine &line, const uint64_t& system_time) {
+    shared_ptr<privateSharedMSI::dirCoherenceInfo> info = 
+        static_pointer_cast<privateSharedMSI::dirCoherenceInfo>(line.coherence_info);
+    if (info->locked) 
+        return false;
+    return true;
+}
+
+static bool dir_evict_need_action(cacheLine &line, const uint64_t& system_time) {
+
+    shared_ptr<privateSharedMSI::dirCoherenceInfo> dir_coherence_info = 
+        static_pointer_cast<privateSharedMSI::dirCoherenceInfo>(line.coherence_info);
+    if (dir_coherence_info->dir.size()) {
+        dir_coherence_info->locked = true;
         return true;
-    default:
-        mh_assert(false);
+    } else {
         return false;
     }
+
 }
 
-static void directory_reserve_line(cacheLine &line) { 
-    if (!line.coherence_info) {
-        line.coherence_info = 
-            shared_ptr<privateSharedMSI::directoryCoherenceInfo>(new privateSharedMSI::directoryCoherenceInfo);
-    }
-    return; 
-}
-
-static void cache_reserve_line(cacheLine &line) { 
-    if (!line.coherence_info) {
-        line.coherence_info = 
-            shared_ptr<privateSharedMSI::cacheCoherenceInfo>(new privateSharedMSI::cacheCoherenceInfo);
-    }
-    shared_ptr<privateSharedMSI::cacheCoherenceInfo> info = 
-        static_pointer_cast<privateSharedMSI::cacheCoherenceInfo>(line.coherence_info);
-    info->status = privateSharedMSI::PENDING;
-    return; 
-}
-
-static bool cache_can_evict_line(cacheLine &line, const uint64_t &system_time) {
-    shared_ptr<privateSharedMSI::cacheCoherenceInfo> info = 
-        static_pointer_cast<privateSharedMSI::cacheCoherenceInfo>(line.coherence_info);
-    return info->status != privateSharedMSI::PENDING;
-}
-
-static bool directory_can_evict_line(cacheLine &line, const uint64_t &syste_time) { 
-    shared_ptr<privateSharedMSI::directoryCoherenceInfo> info = 
-        static_pointer_cast<privateSharedMSI::directoryCoherenceInfo>(line.coherence_info);
-    return info->directory.empty();
-}
-
-privateSharedMSI::privateSharedMSI(uint32_t id, 
-                                   const uint64_t &t, 
-                                   shared_ptr<tile_statistics> st, 
-                                   logger &l, 
-                                   shared_ptr<random_gen> r, 
-                                   shared_ptr<cat> a_cat, 
+privateSharedMSI::privateSharedMSI(uint32_t id,
+                                   const uint64_t &t,
+                                   shared_ptr<tile_statistics> st,
+                                   logger &l,
+                                   shared_ptr<random_gen> r,
+                                   shared_ptr<cat> a_cat,
                                    privateSharedMSICfg_t cfg) :
-    memory(id, t, st, l, r), 
-    m_cfg(cfg), 
-    m_l1(NULL), 
-    m_l2(NULL), 
-    m_cat(a_cat), 
+    memory(id, t, st, l, r),
+    m_cfg(cfg),
+    m_l1(NULL),
+    m_l2(NULL),
+    m_cat(a_cat),
     m_stats(shared_ptr<privateSharedMSIStatsPerTile>()),
-    m_l1_work_table_vacancy(cfg.l1_work_table_size),
-    m_l2_work_table_vacancy_shared(cfg.l2_work_table_size_shared),
-    m_l2_work_table_vacancy_replies(cfg.l2_work_table_size_replies),
-    m_l2_work_table_vacancy_evict(cfg.l2_work_table_size_evict), 
+    m_cache_table_vacancy(cfg.cache_table_size),
+    m_dir_table_vacancy_shared(cfg.dir_table_size_shared),
+    m_dir_table_vacancy_cache_rep_exclusive(cfg.dir_table_size_cache_rep_exclusive),
+    m_dir_table_vacancy_empty_req_exclusive(cfg.dir_table_size_empty_req_exclusive),
     m_available_core_ports(cfg.num_local_core_ports)
 {
+    /* sanity checks */
     if (m_cfg.bytes_per_flit == 0) throw err_bad_shmem_cfg("flit size must be non-zero.");
     if (m_cfg.words_per_cache_line == 0) throw err_bad_shmem_cfg("cache line size must be non-zero.");
-    if (m_cfg.lines_in_l1 == 0) throw err_bad_shmem_cfg("privateSharedMSI/MESI : L1 size must be non-zero.");
-    if (m_cfg.lines_in_l2 == 0) throw err_bad_shmem_cfg("privateSharedMSI/MESI : L2 size must be non-zero.");
-    if (m_cfg.l1_work_table_size <= m_cfg.num_local_core_ports) 
-        throw err_bad_shmem_cfg("privateSharedMSI/MESI : L1 work table size must be greater than local core ports.");
-    if (m_cfg.l2_work_table_size_replies == 0) 
-        throw err_bad_shmem_cfg("privateSharedMSI/MESI : L2 work table must have non-zero space for cache replies.");
-    if (m_cfg.l2_work_table_size_evict == 0) 
-        throw err_bad_shmem_cfg("privateSharedMSI/MESI : L2 work table must have non-zero space for line eviction.");
-    if (m_cfg.l2_work_table_size_shared == 0) 
-        throw err_bad_shmem_cfg("privateSharedMSI/MESI : L2 work table must be non-zero.");
-    if (m_cfg.l1_work_table_size == 0) 
-        throw err_bad_shmem_cfg("privateSharedMSI/MESI : L1 work table must be non-zero.");
+    if (m_cfg.lines_in_l1 == 0) throw err_bad_shmem_cfg("privateSharedMSI : L1 size must be non-zero.");
+    if (m_cfg.lines_in_l2 == 0) throw err_bad_shmem_cfg("privateSharedMSI : L2 size must be non-zero.");
+    if (m_cfg.cache_table_size == 0) 
+        throw err_bad_shmem_cfg("privateSharedMSI : cache table size must be non-zero.");
+    if (m_cfg.dir_table_size_shared == 0) 
+        throw err_bad_shmem_cfg("privateSharedMSI : shared directory table size must be non-zero.");
+    if (m_cfg.dir_table_size_cache_rep_exclusive == 0) 
+        throw err_bad_shmem_cfg("privateSharedMSI : cache reply exclusive work table size must be non-zero.");
+    if (m_cfg.dir_table_size_empty_req_exclusive == 0) 
+        throw err_bad_shmem_cfg("privateSharedMSI : empty request exclusive work table size must be non-zero.");
+    
+    replacementPolicy_t l1_policy, l2_policy;
+
+    switch (cfg.l1_replacement_policy) {
+    case _REPLACE_LRU:
+        l1_policy = REPLACE_LRU;
+        break;
+    case _REPLACE_RANDOM:
+    default:
+        l1_policy = REPLACE_RANDOM;
+        break;
+    }
+
+    switch (cfg.l2_replacement_policy) {
+    case _REPLACE_LRU:
+        l2_policy = REPLACE_LRU;
+        break;
+    case _REPLACE_RANDOM:
+    default:
+        l2_policy = REPLACE_RANDOM;
+        break;
+    }
 
     m_l1 = new cache(1, id, t, st, l, r, 
-                     cfg.words_per_cache_line, cfg.lines_in_l1, cfg.l1_associativity, 
-                     cfg.l1_replacement_policy, 
+                     cfg.words_per_cache_line, cfg.lines_in_l1, cfg.l1_associativity, l1_policy,
                      cfg.l1_hit_test_latency, cfg.l1_num_read_ports, cfg.l1_num_write_ports);
     m_l2 = new cache(2, id, t, st, l, r, 
-                     cfg.words_per_cache_line, cfg.lines_in_l2, cfg.l2_associativity, 
-                     cfg.l2_replacement_policy,
+                     cfg.words_per_cache_line, cfg.lines_in_l2, cfg.l2_associativity, l2_policy,
                      cfg.l2_hit_test_latency, cfg.l2_num_read_ports, cfg.l2_num_write_ports);
 
     m_l1->set_helper_copy_coherence_info(&cache_copy_coherence_info);
-    m_l1->set_helper_is_hit(&cache_is_hit);
-    m_l1->set_helper_reserve_line(&cache_reserve_line);
-    m_l1->set_helper_can_evict_line(&cache_can_evict_line);
+    m_l1->set_helper_is_coherence_hit(&cache_hit_checker);
 
-    m_l2->set_helper_copy_coherence_info(&directory_copy_coherence_info);
-    m_l2->set_helper_reserve_line(&directory_reserve_line);
-    m_l2->set_helper_can_evict_line(&directory_can_evict_line);
+    m_l2->set_helper_copy_coherence_info(&dir_copy_coherence_info);
+    m_l2->set_helper_is_coherence_hit(&dir_hit_checker);
+    m_l2->set_helper_can_evict_line(&dir_can_evict_line);
+    m_l2->set_helper_evict_need_action(&dir_evict_need_action);
+    
+    m_cat_req_schedule_q.reserve(m_cfg.cache_table_size);
+    m_l1_read_req_schedule_q.reserve(m_cfg.cache_table_size);
+    m_l1_write_req_schedule_q.reserve(m_cfg.cache_table_size);
+    m_cache_req_schedule_q.reserve(m_cfg.cache_table_size);
+    m_cache_rep_schedule_q.reserve(m_cfg.cache_table_size);
+
+    uint32_t total_dir_table_size = m_cfg.dir_table_size_shared + m_cfg.dir_table_size_cache_rep_exclusive
+                                    + m_cfg.dir_table_size_empty_req_exclusive;
+    m_l2_read_req_schedule_q.reserve(total_dir_table_size);
+    m_l2_write_req_schedule_q.reserve(total_dir_table_size);
+    m_dir_req_schedule_q.reserve(total_dir_table_size);
+    m_dir_rep_schedule_q.reserve(total_dir_table_size);
+    m_dramctrl_req_schedule_q.reserve(total_dir_table_size);
+    m_dramctrl_rep_schedule_q.reserve(total_dir_table_size);
 
 }
 
@@ -153,6 +257,26 @@ void privateSharedMSI::request(shared_ptr<memoryRequest> req) {
     /* set status to wait */
     set_req_status(req, REQ_WAIT);
 
+    /* per memory instruction info */
+    shared_ptr<shared_ptr<void> > p_runtime_info = req->per_mem_instr_runtime_info();
+    shared_ptr<void>& runtime_info = *p_runtime_info;
+    shared_ptr<privateSharedMSIStatsPerMemInstr> per_mem_instr_stats;
+    if (!runtime_info) {
+        /* no per-instr stats: this is the first time this memory instruction is issued */
+        per_mem_instr_stats = shared_ptr<privateSharedMSIStatsPerMemInstr>(new privateSharedMSIStatsPerMemInstr(req->is_read()));
+        per_mem_instr_stats->set_serialization_begin_time_at_current_core(system_time);
+        runtime_info = per_mem_instr_stats;
+    } else {
+        per_mem_instr_stats = 
+            static_pointer_cast<privateSharedMSIStatsPerMemInstr>(*req->per_mem_instr_runtime_info());
+        if (per_mem_instr_stats->is_in_migration()) {
+            per_mem_instr_stats = static_pointer_cast<privateSharedMSIStatsPerMemInstr>(runtime_info);
+            per_mem_instr_stats->migration_finished(system_time, stats_enabled());
+            per_mem_instr_stats->set_serialization_begin_time_at_current_core(system_time);
+        }
+    }
+
+    /* will schedule for a core port and a work table entry in schedule function */
     m_core_port_schedule_q.push_back(req);
 
 }
@@ -161,14 +285,15 @@ void privateSharedMSI::tick_positive_edge() {
     /* schedule and make requests */
 #ifdef PRINT_PROGRESS
     static uint64_t last_served[64];
-    if (system_time % 100000 == 0) {
+    if (system_time % 10000 == 0) {
         cerr << "[MEM " << m_id << " @ " << system_time << " ]";
         if (stats_enabled()) {
             cerr << " total served : " << stats()->total_served();
             cerr << " since last : " << stats()->total_served() - last_served[m_id];
             last_served[m_id] = stats()->total_served();
         }
-        cerr << " in L1 work table : " << m_l1_work_table.size() << " in L2 work table : " << m_l2_work_table.size() << endl;
+        cerr << " in cache table : " << m_cache_table.size() 
+             << " in directory table : " << m_dir_table.size() << endl;
     }
 #endif
 
@@ -180,6 +305,7 @@ void privateSharedMSI::tick_positive_edge() {
     if(m_dramctrl) {
         m_dramctrl->tick_positive_edge();
     }
+
 }
 
 void privateSharedMSI::tick_negative_edge() {
@@ -194,2109 +320,2630 @@ void privateSharedMSI::tick_negative_edge() {
     /* accept messages and write into tables */
     accept_incoming_messages();
 
-    l1_work_table_update();
+    update_cache_table();
 
-    l2_work_table_update();
+    update_dir_table();
 
-    dram_work_table_update();
+    update_dramctrl_work_table();
 
 }
 
-void privateSharedMSI::l1_work_table_update() {
-    for (toL1Table::iterator it_addr = m_l1_work_table.begin(); it_addr != m_l1_work_table.end(); ) {
+void privateSharedMSI::update_cache_table() {
+
+    for (cacheTable::iterator it_addr = m_cache_table.begin(); it_addr != m_cache_table.end(); ) {
+
         maddr_t start_maddr = it_addr->first;
-        shared_ptr<toL1Entry> entry = it_addr->second;
-        shared_ptr<memoryRequest> core_req = entry->core_req;
-        shared_ptr<cacheRequest> l1_req = entry->l1_req;
-        shared_ptr<catRequest> cat_req = entry->cat_req;
-        shared_ptr<coherenceMsg> dir_req = entry->dir_req;
-        shared_ptr<coherenceMsg> dir_rep = entry->dir_rep;
-        shared_ptr<coherenceMsg> cache_req = entry->cache_req;
-        shared_ptr<coherenceMsg> cache_rep = entry->cache_rep;
+        shared_ptr<cacheTableEntry>& entry = it_addr->second;
 
-        shared_ptr<cacheLine> line = l1_req ? l1_req->line_copy() : shared_ptr<cacheLine>();
-        shared_ptr<cacheLine> victim = l1_req ? l1_req->victim_line_copy() : shared_ptr<cacheLine>();
-        shared_ptr<cacheCoherenceInfo> line_info = line ? 
-            static_pointer_cast<cacheCoherenceInfo>(line->coherence_info) : 
-            shared_ptr<cacheCoherenceInfo>();
-        shared_ptr<cacheCoherenceInfo> victim_info = victim ? 
-            static_pointer_cast<cacheCoherenceInfo>(victim->coherence_info) : 
-            shared_ptr<cacheCoherenceInfo>();
+        shared_ptr<memoryRequest>& core_req = entry->core_req;
+        shared_ptr<catRequest>& cat_req = entry->cat_req;
 
-        //mh_log(4) << "## L1 table " << m_id << " @ " << system_time << " on address " << start_maddr << " state " << entry->status << endl;
+        shared_ptr<cacheRequest>& l1_req = entry->l1_req;
+        shared_ptr<coherenceMsg>& dir_req = entry->dir_req;
+        shared_ptr<coherenceMsg>& dir_rep = entry->dir_rep;
+        shared_ptr<coherenceMsg>& cache_req = entry->cache_req;
+        shared_ptr<coherenceMsg>& cache_rep = entry->cache_rep;
 
-        if (entry->status == _L1_WORK_READ_L1) {
-            if (l1_req->status() == CACHE_REQ_NEW || l1_req->status() == CACHE_REQ_WAIT) {
-                ++it_addr;
-                continue;
-            }
+        shared_ptr<cacheLine> l1_line = (l1_req)? l1_req->line_copy() : shared_ptr<cacheLine>();
+        shared_ptr<cacheLine> l1_victim = (l1_req)? l1_req->line_to_evict_copy() : shared_ptr<cacheLine>();
+        shared_ptr<cacheCoherenceInfo> l1_line_info = 
+            (l1_line)? static_pointer_cast<cacheCoherenceInfo>(l1_line->coherence_info) : shared_ptr<cacheCoherenceInfo>();
+        shared_ptr<cacheCoherenceInfo> l1_victim_info = 
+            (l1_victim)? static_pointer_cast<cacheCoherenceInfo>(l1_victim->coherence_info) : shared_ptr<cacheCoherenceInfo>();
 
-            /* cost breakdown study */
-            if (l1_req->milestone_time() != UINT64_MAX) {
+        shared_ptr<privateSharedMSIStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
+
+        if (entry->status == _CACHE_CAT_AND_L1_FOR_LOCAL) {
+
+            uint32_t home;
+
+            if (l1_req->status() == CACHE_REQ_HIT) {
+
+                mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a local L1 HIT and finish serving address "
+                          << core_req->maddr() << endl;
+
+                home = l1_line_info->home;
+                cat_req = shared_ptr<catRequest>();
+
+                shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
+                uint32_t word_offset = (core_req->maddr().address / 4) % m_cfg.words_per_cache_line;
+                for (uint32_t i = 0; i < core_req->word_count(); ++i) {
+                    ret[i] = l1_line->data[i + word_offset];
+                }
+                set_req_data(core_req, ret);
+                set_req_status(core_req, REQ_DONE);
+                ++m_available_core_ports;
+
                 if (stats_enabled()) {
-                    stats()->add_l1_action_cost(system_time - l1_req->milestone_time());
-                }
-            }
-
-            if (dir_req) {
-                /* entry for a directory request */
-                if (l1_req->status() == CACHE_REQ_MISS) {
-                    /* the line was already invalidated and a cache reply must have been sent. */
-                    mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] discarded a directory request for "
-                        << start_maddr << " as it was already invalidated." << endl;
-                    ++m_l1_work_table_vacancy;
-                    m_l1_work_table.erase(it_addr++);
-                    continue;
-                } else {
-                    /* a hit */
-                    uint32_t dir_home = line_info->directory_home;
-                    cache_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
-                    cache_rep->sender = m_id;
-                    cache_rep->receiver = dir_home;
-
-                    /* cost breakdown study */
-                    cache_rep->milestone_time = UINT64_MAX; /* will not count */
-
-                    uint32_t data_size = 0;
-                    switch (dir_req->type) {
-                    case INV_REQ:
-                        cache_rep->type = INV_REP;
-                        if (stats_enabled()) {
-                            stats()->add_invreq_replied();
-                            stats()->add_invrep();
-                        }
-                        break;
-                    case FLUSH_REQ:
-                        cache_rep->type = FLUSH_REP;
-                        if (!m_cfg.use_mesi || line->dirty) {
-                            data_size = m_cfg.words_per_cache_line * 4;
-                        }
-                        if (stats_enabled()) {
-                            stats()->add_flushreq_replied();
-                            stats()->add_flushrep();
-                        }
-                        break;
-                    case WB_REQ:
-                        cache_rep->type = WB_REP;
-                        if (!m_cfg.use_mesi || line->dirty) {
-                            data_size = m_cfg.words_per_cache_line * 4;
-                        }
-                        if (stats_enabled()) {
-                            stats()->add_wbreq_replied();
-                            stats()->add_wbrep();
-                        }
-                        break;
-                    default:
-                        mh_assert(false);
-                        break;
+                    if (per_mem_instr_stats) {
+                        per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_ops(system_time - l1_req->operation_begin_time());
+                        per_mem_instr_stats->add_l1_cost_for_hit(per_mem_instr_stats->get_tentative_data(T_IDX_L1)->total_cost());
+                        per_mem_instr_stats->commit_tentative_data(T_IDX_L1);
+                        stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
                     }
-                    cache_rep->maddr = start_maddr;
-                    cache_rep->data = line->data;
-                    cache_rep->did_win_last_arbitration = false;
-                    cache_rep->waited = 0; /* for debugging only - erase later */
-                    entry->cache_rep = cache_rep;
-                    if (dir_home == m_id) {
-                        m_to_directory_rep_schedule_q.push_back(cache_rep);
+                    if (core_req->is_read()) {
+                        stats()->hit_for_read_instr_at_l1();
+                        stats()->did_finish_read();
                     } else {
-                        shared_ptr<message_t> new_msg(new message_t);
-                        new_msg->src = m_id;
-                        new_msg->dst = dir_home;
-                        new_msg->type = MSG_CACHE_REP;
-                        new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + data_size);
-                        new_msg->content = cache_rep;
-                        entry->net_msg_to_send = new_msg;
-                        m_to_network_schedule_q[MSG_CACHE_REP].push_back(new_msg);
+                        stats()->hit_for_write_instr_at_l1();
+                        stats()->did_finish_write();
                     }
-                    entry->status = _L1_WORK_SEND_CACHE_REP;
-                    ++it_addr;
-                    continue;
+                } else if (per_mem_instr_stats) {
+                    per_mem_instr_stats->clear_tentative_data();
                 }
-            } else {
-                /* entry for a core request */
-                if (l1_req->status() == CACHE_REQ_HIT) {
-                    if (stats_enabled()) {
-                        if (core_req->is_read()) {
-                            stats()->did_read_l1(true);
-                            stats()->did_finish_read(system_time - entry->requested_time);
-                        } else {
-                            stats()->did_write_l1(true);
-                            stats()->did_finish_write(system_time - entry->requested_time);
-                        }
-                    }
-                    shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
-                    uint32_t word_offset = (core_req->maddr().address / 4 )  % m_cfg.words_per_cache_line;
-                    for (uint32_t i = 0; i < core_req->word_count(); ++i) {
-                        ret[i] = line->data[i + word_offset];
-                    }
-                    set_req_data(core_req, ret);
-                    set_req_status(core_req, REQ_DONE);
-                    ++m_l1_work_table_vacancy;
-                    ++m_available_core_ports;
-                    mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a HIT and finish serving address " 
-                        << core_req->maddr() << endl;
-                    m_l1_work_table.erase(it_addr++);
-                    continue;
-                } else {
-                    /* miss */
-                    if (line && line->valid) {
-                        mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a coherence miss on " << start_maddr 
-                                  << endl;
-                        mh_assert(line_info->status == SHARED && !core_req->is_read());
-                        l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_INVALIDATE));
-                        l1_req->set_reserve(true); /* reserve the line after invalidation so it could get a exclusive copy */
 
-                        /* cost breakdown study */
-                        l1_req->set_milestone_time(system_time);
-
-                        entry->l1_req = l1_req;
-                        entry->status = _L1_WORK_INVALIDATE_SHARED_LINE;
-                    } else if (line) {
-                        if (victim) {
-                            mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] evicted a line for " << victim->start_maddr
-                                      << " to make a space for " << start_maddr << endl;
-                            uint32_t data_size = 0;
-                            uint32_t dir_home = victim_info->directory_home;
-                            cache_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
-                            cache_rep->sender = m_id;
-                            cache_rep->receiver = dir_home;
-                            cache_rep->waited = 0; /* for debugging only - erase later */
-
-                            /* cost breakdown study */
-                            cache_rep->milestone_time = system_time;
-
-                            if (victim_info->status == SHARED) {
-                                cache_rep->type = INV_REP;
-                                if (stats_enabled()) {
-                                    stats()->add_invrep();
-                                }
-                            } else {
-                                cache_rep->type = FLUSH_REP;
-                                if (stats_enabled()) {
-                                    stats()->add_flushrep();
-                                }
-                                if (!m_cfg.use_mesi || victim->dirty) {
-                                    data_size = m_cfg.words_per_cache_line * 4;
-                                }
-                            }
-                            cache_rep->maddr = victim->start_maddr;
-                            cache_rep->data = (data_size > 0) ? victim->data : shared_array<uint32_t>();
-                            cache_rep->did_win_last_arbitration = false;
-                            entry->cache_rep = cache_rep;
-                            if (dir_home == m_id) {
-                                m_to_directory_rep_schedule_q.push_back(cache_rep);
-                            } else {
-                                shared_ptr<message_t> new_msg(new message_t);
-                                new_msg->src = m_id;
-                                new_msg->dst = dir_home;
-                                new_msg->type = MSG_CACHE_REP;
-                                new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + data_size);
-                                new_msg->content = cache_rep;
-                                entry->net_msg_to_send = new_msg;
-                                m_to_network_schedule_q[MSG_CACHE_REP].push_back(new_msg);
-                            }
-                            entry->status = _L1_WORK_SEND_CACHE_REP;
-                        } else {
-                            if (cat_req->status() == CAT_REQ_DONE) {
-                                uint32_t dir_home = cat_req->home();
-                                if (stats_enabled()) {
-                                    stats()->did_read_cat(dir_home ==  m_id);
-                                }
-                                cache_req = shared_ptr<coherenceMsg>(new coherenceMsg);
-                                cache_req->sender = m_id;
-                                cache_req->receiver = dir_home;
-                                cache_req->type = core_req->is_read() ? SH_REQ : EX_REQ;
-                                if (stats_enabled()) {
-                                    if (core_req->is_read()) {
-                                        stats()->add_shreq();
-                                    } else {
-                                        stats()->add_exreq();
-                                    }
-                                }
-                                cache_req->maddr = start_maddr;
-                                cache_req->data = shared_array<uint32_t>();
-                                cache_req->did_win_last_arbitration = false;
-                                cache_req->waited = 0; /* for debugging only - erase later */
-                                /* only for debugging - erase later */
-                                cache_req->waited = 0;
-
-                                /* cost breakdown study */
-                                cache_req->milestone_time = system_time;
-
-                                entry->cache_req = cache_req;
-                                if (dir_home == m_id) {
-                                    m_to_directory_req_schedule_q.push_back(cache_req);
-                                } else {
-                                    shared_ptr<message_t> new_msg(new message_t);
-                                    new_msg->src = m_id;
-                                    new_msg->dst = dir_home;
-                                    new_msg->type = MSG_CACHE_REQ;
-                                    new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
-                                    new_msg->content = cache_req;
-                                    entry->net_msg_to_send = new_msg;
-                                    m_to_network_schedule_q[MSG_CACHE_REQ].push_back(new_msg);
-                                }
-                                entry->status = _L1_WORK_SEND_CACHE_REQ;
-                            } else {
-                                entry->status = _L1_WORK_READ_CAT;
-
-                                /* cost breakdown study */
-                                cat_req->set_milestone_time(system_time);
-
-                            }
-                        }
-                    } else {
-                        /* has to wait until some lines get directory replies and become evictable. just retry */
-                        l1_req->reset();
-
-                        /* cost breakdown study */
-                        if (l1_req->milestone_time() != UINT64_MAX) {
-                            l1_req->set_milestone_time(system_time);
-                        }
-
-                    }
-                    ++it_addr;
-                    continue;
-                }
-            }
-        } else if (entry->status == _L1_WORK_INVALIDATE_SHARED_LINE) {
-            if (l1_req->status() == CACHE_REQ_NEW || l1_req->status() == CACHE_REQ_WAIT) {
-                ++it_addr;
+                ++m_cache_table_vacancy;
+                m_cache_table.erase(it_addr++);
                 continue;
-            }
+                /* FINISHED */
 
-            /* cost breakdown study */
-            if (stats_enabled()) {
-                mh_assert(l1_req->milestone_time() != UINT64_MAX);
-                stats()->add_l1_action_cost(system_time - l1_req->milestone_time());
-            }
+            }  
             
-            mh_assert(l1_req->status() == CACHE_REQ_HIT);
-            uint32_t dir_home = line_info->directory_home;
-            cache_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
-            cache_rep->sender = m_id;
-            cache_rep->receiver = dir_home;
-            cache_rep->type = INV_REP;
-            cache_rep->maddr = start_maddr;
-            cache_rep->data = shared_array<uint32_t>();
-            cache_rep->did_win_last_arbitration = false;
-            cache_rep->waited = 0; /* for debugging only - erase later */
+            if (l1_req->status() == CACHE_REQ_MISS && l1_line) {
 
-            if (stats_enabled()) {
-                stats()->add_invrep();
-            }
+                mh_assert(!core_req->is_read());
+                mh_assert(l1_line_info->status == SHARED);
 
-            /* cost breakdown study */
-            cache_rep->milestone_time = system_time;
-            
-            entry->cache_rep = cache_rep;
-            if (dir_home == m_id) {
-                m_to_directory_rep_schedule_q.push_back(cache_rep);
-            } else {
-                shared_ptr<message_t> new_msg(new message_t);
-                new_msg->src = m_id;
-                new_msg->dst = dir_home;
-                new_msg->type = MSG_CACHE_REP;
-                new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
-                new_msg->content = cache_rep;
-                entry->net_msg_to_send = new_msg;
-                m_to_network_schedule_q[MSG_CACHE_REP].push_back(new_msg);
-            }
-            entry->status = _L1_WORK_SEND_CACHE_REP;
-            ++it_addr;
-            continue;
-        } else if (entry->status == _L1_WORK_SEND_CACHE_REP) {
-            if (cache_rep->did_win_last_arbitration) {
+                mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a write-on-shared miss on address "
+                          << core_req->maddr() << endl;
 
-                /* cost breakdown study */
-                if (cache_rep->milestone_time != UINT64_MAX) {
-                    if (stats_enabled()) {
-                        stats()->add_l1_eviction_cost(system_time - cache_rep->milestone_time);
-                    }
-                }
+                home = l1_line_info->home;
+                cat_req = shared_ptr<catRequest>();
 
-                if (entry->net_msg_to_send) {
-                    entry->net_msg_to_send = shared_ptr<message_t>();
-                }
-                cache_rep->did_win_last_arbitration = false;
-                if (dir_req) {
-                    /* this entry is due to a directory request. sending a reply finishes the job. */
-                    mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] has sent a cache reply to directory "
-                        << cache_rep->receiver << " for address " << cache_rep->maddr << " upon a request." << endl;
-                    ++m_l1_work_table_vacancy;
-                    m_l1_work_table.erase(it_addr++);
-                    continue;
-                } else {
-                    /* either a victim was evicted, or a current SHARED line is invalidated. */
-                    mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] has sent a cache reply to directory "
-                        << cache_rep->receiver << " for address " << cache_rep->maddr
-                        << " (evicted)." << endl;
-                    if (cat_req->status() == CAT_REQ_DONE || (line && line->valid)) {
-                        uint32_t dir_home;
-                        if (cat_req->status() == CAT_REQ_DONE) {
-                            dir_home = cat_req->home();
-                        } else {
-                            dir_home = line_info->directory_home;
-                        }
-                        if (!(line && line->valid) && stats_enabled()) {
-                            stats()->did_read_cat(dir_home == m_id);
-                        }
-                        cache_req = shared_ptr<coherenceMsg>(new coherenceMsg);
-                        cache_req->sender = m_id;
-                        cache_req->receiver = cat_req->home();
-                        cache_req->type = core_req->is_read() ? SH_REQ : EX_REQ;
-                        if (stats_enabled()) {
-                            if (core_req->is_read()) {
-                                stats()->add_shreq();
-                            } else {
-                                stats()->add_exreq();
-                            }
-                        }
-                        cache_req->maddr = start_maddr;
-                        cache_req->data = shared_array<uint32_t>();
-                        cache_req->did_win_last_arbitration = false;
-                        cache_req->waited = 0; /* for debugging only - erase later */
+                /* could migrate out here */
 
-                        /* cost breakdown study */
-                        cache_req->milestone_time = system_time;;
-
-                        entry->cache_req = cache_req;
-                        if (dir_home == m_id) {
-                            m_to_directory_req_schedule_q.push_back(cache_req);
-                        } else {
-                            shared_ptr<message_t> new_msg(new message_t);
-                            new_msg->src = m_id;
-                            new_msg->dst = dir_home;
-                            new_msg->type = MSG_CACHE_REQ;
-                            new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
-                            new_msg->content = cache_req;
-                            entry->net_msg_to_send = new_msg;
-                            m_to_network_schedule_q[MSG_CACHE_REQ].push_back(new_msg);
-                        }
-                        entry->status = _L1_WORK_SEND_CACHE_REQ;
-                    } else {
-                        entry->status = _L1_WORK_READ_CAT;
-
-                        /* cost breakdown study */
-                        cat_req->set_milestone_time(system_time);
-
-                    }
-                    ++it_addr;
-                    continue;
-                }
-            } else {
-                if (cache_rep->receiver == m_id) {
-                    m_to_directory_rep_schedule_q.push_back(cache_rep);
-                } else {
-                    m_to_network_schedule_q[MSG_CACHE_REP].push_back(entry->net_msg_to_send);
-                }
-                ++it_addr;
-                continue;
-            }
-        } else if (entry->status == _L1_WORK_READ_CAT) {
-            if (cat_req->status() == CAT_REQ_DONE) {
-
-                /* cost breakdown study */
-                if (cat_req->milestone_time() != UINT64_MAX) {
-                    if (stats_enabled()) {
-                        stats()->add_cat_action_cost(system_time - cat_req->milestone_time());
-                    }
-                }
-
-                uint32_t dir_home = cat_req->home();
-                if (stats_enabled()) {
-                    stats()->did_read_cat(dir_home == m_id);
-                }
                 cache_req = shared_ptr<coherenceMsg>(new coherenceMsg);
                 cache_req->sender = m_id;
-                cache_req->receiver = dir_home;
-                cache_req->type = core_req->is_read() ? SH_REQ : EX_REQ;
-                if (stats_enabled()) {
-                    if (core_req->is_read()) {
-                        stats()->add_shreq();
-                    } else {
-                        stats()->add_exreq();
-                    }
-                }
+                cache_req->receiver = home;
+                cache_req->type = core_req->is_read()? SH_REQ : EX_REQ;
                 cache_req->maddr = start_maddr;
+                cache_req->sent = false;
+                cache_req->per_mem_instr_stats = per_mem_instr_stats;
+                cache_req->word_count = m_cfg.words_per_cache_line;
                 cache_req->data = shared_array<uint32_t>();
-                cache_req->did_win_last_arbitration = false;
-                cache_req->waited = 0; /* for debugging only - erase later */
-                cache_req->milestone_time = system_time;
-                entry->cache_req = cache_req;
-                if (dir_home == m_id) {
-                    m_to_directory_req_schedule_q.push_back(cache_req);
-                } else {
-                    shared_ptr<message_t> new_msg(new message_t);
-                    new_msg->src = m_id;
-                    new_msg->dst = dir_home;
-                    new_msg->type = MSG_CACHE_REQ;
-                    new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
-                    new_msg->content = cache_req;
-                    entry->net_msg_to_send = new_msg;
-                    m_to_network_schedule_q[MSG_CACHE_REQ].push_back(new_msg);
-                }
-                entry->status = _L1_WORK_SEND_CACHE_REQ;
-            }
-            ++it_addr;
-            continue;
-        } else if (entry->status == _L1_WORK_SEND_CACHE_REQ) {
-            if (cache_req->did_win_last_arbitration) {
+                cache_req->birthtime = system_time;
 
-                /* cost breakdown study */
+                cache_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                cache_rep->sender = m_id;
+                cache_rep->receiver = home;
+                cache_rep->type = INV_REP;
+                cache_rep->maddr = start_maddr;
+                cache_rep->sent = false;
+                cache_rep->per_mem_instr_stats = per_mem_instr_stats;
+                cache_rep->birthtime = system_time;
+                cache_rep->word_count = 0;
+                cache_rep->data = shared_array<uint32_t>();
+
                 if (stats_enabled()) {
-                    stats()->add_l2_network_plus_serialization_cost(system_time - cache_req->milestone_time);
+                    stats()->evict_at_l1();
                 }
 
-                mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] sent a cache request (" << cache_req->type 
-                    << ") for " << cache_req->maddr << " to directory " << cache_req->receiver << endl;
-                if (entry->net_msg_to_send) {
-                    entry->net_msg_to_send = shared_ptr<message_t>();
+                m_cache_rep_schedule_q.push_back(entry);
+
+                entry->status = _CACHE_SEND_CACHE_REP;
+                entry->substatus = _CACHE_SEND_CACHE_REP__SWITCH;
+
+                if (stats_enabled()) {
+                    if (per_mem_instr_stats) {
+                        per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_ops(system_time - l1_req->operation_begin_time());
+                        per_mem_instr_stats->add_l1_cost_for_write_on_shared_miss
+                            (per_mem_instr_stats->get_tentative_data(T_IDX_L1)->total_cost());
+                        per_mem_instr_stats->commit_tentative_data(T_IDX_L1);
+                        stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
+                    }
+                    stats()->write_on_shared_miss_for_write_instr_at_l1();
+                } else if (per_mem_instr_stats) {
+                    per_mem_instr_stats->clear_tentative_data();
                 }
-                cache_req->did_win_last_arbitration = false;
-                entry->status = _L1_WORK_WAIT_DIRECTORY_REP;
+
+                ++it_addr;
+                continue;
+                /* TRANSITION */
+
             } else {
-                if (cache_req->receiver == m_id) {
-                    m_to_directory_req_schedule_q.push_back(cache_req);
-                } else {
-                    m_to_network_schedule_q[MSG_CACHE_REQ].push_back(entry->net_msg_to_send);
-                }
-            }
-            ++it_addr;
-            continue;
-        } else if (entry->status == _L1_WORK_WAIT_DIRECTORY_REP) {
-            if (dir_rep) {
-
-                /* cost breakdown study */
-                if (stats_enabled()) {
-                    stats()->add_l2_network_plus_serialization_cost(system_time - dir_rep->milestone_time);
-                }
-
-                mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] received a directory reply ("
-                    << dir_rep->type << ") for " << start_maddr << endl;
-                line_info = shared_ptr<cacheCoherenceInfo>(new cacheCoherenceInfo);
-                line_info->directory_home = dir_rep->sender;
-                line_info->status = dir_rep->type == SH_REP? SHARED : MODIFIED;
-                shared_array<uint32_t> data = dir_rep->data;
-                if (!core_req->is_read()) {
-                    mh_assert(dir_rep->type == EX_REP);
-                    uint32_t word_offset = (core_req->maddr().address / 4) % m_cfg.words_per_cache_line;
-                    for (uint32_t i = 0; i < core_req->word_count(); ++i) {
-                        data[i + word_offset] = core_req->data()[i];
+                /* record when CAT/L1 is finished */
+                if (cat_req->operation_begin_time() != UINT64_MAX && cat_req->status() == CAT_REQ_DONE) {
+                    if (stats_enabled() && per_mem_instr_stats) {
+                        per_mem_instr_stats->get_tentative_data(T_IDX_CAT)->add_cat_ops(system_time - cat_req->operation_begin_time());
                     }
+                    cat_req->set_operation_begin_time(UINT64_MAX);
                 }
-                l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
-                                                                   m_cfg.words_per_cache_line, dir_rep->data, line_info));
-                l1_req->set_clean_write(true);
 
-                /* cost breakdown study */
-                l1_req->set_milestone_time(system_time);
-
-                entry->l1_req = l1_req;
-                entry->status = _L1_WORK_FEED_L1_AND_FINISH;
-            } 
-            ++it_addr;
-            continue;
-        } else if (entry->status == _L1_WORK_FEED_L1_AND_FINISH) {
-            if (l1_req->status() == CACHE_REQ_NEW || l1_req->status() == CACHE_REQ_WAIT) {
-                ++it_addr;
-                continue;
-            }
-
-            /* cost breakdown study */
-            mh_assert(l1_req->milestone_time() != UINT64_MAX);
-            if (stats_enabled()) {
-                stats()->add_l1_action_cost(system_time - l1_req->milestone_time());
-            }
-
-            mh_assert(l1_req->status() == CACHE_REQ_HIT);
-            if (stats_enabled()) {
-                if (core_req->is_read()) {
-                    stats()->did_read_l1(false);
-                    stats()->did_finish_read(system_time - entry->requested_time);
-                } else {
-                    stats()->did_write_l1(false);
-                    stats()->did_finish_write(system_time - entry->requested_time);
-                }
-            }
-            shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
-            uint32_t word_offset = (core_req->maddr().address / 4 )  % m_cfg.words_per_cache_line;
-            for (uint32_t i = 0; i < core_req->word_count(); ++i) {
-                ret[i] = line->data[i + word_offset];
-            }
-
-            set_req_data(core_req, ret);
-            set_req_status(core_req, REQ_DONE);
-            ++m_l1_work_table_vacancy;
-            ++m_available_core_ports;
-            mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] resolved a miss and finish serving address " 
-                << core_req->maddr() << endl;
-            m_l1_work_table.erase(it_addr++);
-            continue;
-        }
-    }
-}
-
-void privateSharedMSI::process_cache_rep(shared_ptr<cacheLine> line, shared_ptr<coherenceMsg> rep) {
-
-    uint32_t sender = rep->sender;
-    shared_ptr<directoryCoherenceInfo> info = 
-        static_pointer_cast<directoryCoherenceInfo>(line->coherence_info);
-
-    mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] received a cache rep from sender : " << sender 
-        << " for " << rep->maddr << " (" << rep->type << ") current: " ;
-
-    if (info->directory.empty()) {
-        mh_log(4) << " (empty)";
-    }
-    for (set<uint32_t>::iterator it = info->directory.begin(); it != info->directory.end(); ++it) {
-        mh_log(4) << " " << *it << " ";
-    }
-    mh_log(4) << endl;
-
-    if (rep->type == WB_REP) {
-        mh_assert(info->directory.size() == 1);
-        info->status = READERS;
-    } else {
-        /* invRep or flushRep */
-        info->directory.erase(sender);
-        if (info->directory.empty()) {
-            info->status = READERS;
-        }
-    }
-    if (rep->data) {
-        /* wbRep or flushRep */
-        line->dirty = true;
-        line->data = rep->data;
-    }
-
-}
-
-void privateSharedMSI::l2_work_table_update() {
-    for (toL2Table::iterator it_addr = m_l2_work_table.begin(); it_addr != m_l2_work_table.end(); ) {
-        maddr_t start_maddr = it_addr->first;
-        shared_ptr<toL2Entry> entry = it_addr->second;
-        shared_ptr<cacheRequest> l2_req = entry->l2_req;
-        shared_ptr<coherenceMsg> cache_req = entry->cache_req;
-        shared_ptr<coherenceMsg> cache_rep = entry->cache_rep;
-        shared_ptr<coherenceMsg> dir_rep = entry->dir_rep;
-        shared_ptr<dramMsg> dram_req = entry->dram_req;
-        shared_ptr<dramMsg> dram_rep = entry->dram_rep;
-        shared_ptr<cacheLine> line = l2_req->line_copy();
-        shared_ptr<directoryCoherenceInfo> line_info = 
-            line ? static_pointer_cast<directoryCoherenceInfo>(line->coherence_info) : shared_ptr<directoryCoherenceInfo>();;
-        shared_ptr<cacheLine> victim = l2_req->victim_line_copy();
-        shared_ptr<directoryCoherenceInfo> victim_info = 
-            victim ? static_pointer_cast<directoryCoherenceInfo>(victim->coherence_info) : shared_ptr<directoryCoherenceInfo>();;
-
-        if (entry->status == _L2_WORK_READ_L2) {
-            if (l2_req->status() == CACHE_REQ_NEW || l2_req->status() == CACHE_REQ_WAIT) {
-                ++it_addr;
-                continue;
-            }
-
-            /* cost breakdown study */
-            if (l2_req->milestone_time() != UINT64_MAX) {
-                if (stats_enabled()) {
-                    stats()->add_l2_action_cost(system_time - l2_req->milestone_time());
-                }
-            }
-
-            if (!cache_req) {
-                mh_assert(cache_rep);
-                mh_assert(line_info->directory.count(cache_rep->sender));
-                mh_assert(l2_req->status() == CACHE_REQ_HIT); /* must have not evicted because the directory is not empty */
-                process_cache_rep(line, cache_rep);
-                l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE, 
-                                                                   line->dirty? m_cfg.words_per_cache_line : 0,
-                                                                   line->data,
-                                                                   line_info));
-
-                /* cost breakdown study */
-                l2_req->set_milestone_time(UINT64_MAX);
-
-                l2_req->set_clean_write(!line->dirty);
-                entry->l2_req = l2_req;
-                entry->status = _L2_WORK_UPDATE_L2_AND_FINISH;
-                ++it_addr;
-                continue;
-            } else if (cache_req->type == EMPTY_REQ) {
-                mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " received an empty request for " << start_maddr << endl;
-                if (l2_req->status() == CACHE_REQ_MISS) {
-                    /* before this request is fired, others already invalidated this line */
-                    mh_assert(!cache_rep); /* there must be no cache replies that has not been processed */
-                    if (entry->using_space_for_evict) {
-                        ++m_l2_work_table_vacancy_evict;
-                    } else if (entry->using_space_for_reply) {
-                        ++m_l2_work_table_vacancy_replies;
-                    } else {
-                        ++m_l2_work_table_vacancy_shared;
+                if (l1_req->operation_begin_time() != UINT64_MAX && l1_req->status() == CACHE_REQ_MISS) {
+                    if (stats_enabled() && per_mem_instr_stats) {
+                        per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_ops(system_time - l1_req->operation_begin_time());
                     }
-                    m_l2_work_table.erase(it_addr++);
-                    continue;
-                } else {
-                    /* hit */
-                    if (line_info->directory.empty()) {
-                        l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_INVALIDATE));
-                        l2_req->set_reserve(false);
-                        entry->l2_req = l2_req;
-                        entry->status = _L2_WORK_UPDATE_L2_AND_FINISH;
+                    l1_req->set_operation_begin_time(UINT64_MAX);
+                }
 
-                        /* cost breakdown study */
-                        l2_req->set_milestone_time(UINT64_MAX);
+                if (cat_req->status() == CAT_REQ_DONE) {
+                    /* cannot continue without CAT info */
+                    home = cat_req->home();
 
-                    } else {
-                        for (set<uint32_t>::iterator it = line_info->directory.begin(); it != line_info->directory.end(); ++it) {
-                            shared_ptr<coherenceMsg> dir_req(new coherenceMsg);
-                            dir_req->sender = m_id;
-                            dir_req->receiver = *it;
-                            dir_req->type = line_info->status == READERS ? INV_REQ : FLUSH_REQ;
-                            if (stats_enabled()) {
-                                if (line_info->status == READERS) {
-                                    stats()->add_invreq();
-                                } else {
-                                    stats()->add_flushreq();
+                    if (l1_req->status() == CACHE_REQ_MISS) {
+
+                        mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a true miss on address "
+                                  << core_req->maddr() << endl;
+
+                        /* could migrate out here */
+                        
+                        cache_req = shared_ptr<coherenceMsg>(new coherenceMsg);
+                        cache_req->sender = m_id;
+                        cache_req->receiver = home;
+                        cache_req->type = core_req->is_read()? SH_REQ : EX_REQ;
+                        cache_req->maddr = start_maddr;
+                        cache_req->sent = false;
+                        cache_req->per_mem_instr_stats = per_mem_instr_stats;
+                        cache_req->word_count = m_cfg.words_per_cache_line;
+                        cache_req->data = shared_array<uint32_t>();
+                        cache_req->birthtime = system_time;
+
+                        m_cache_req_schedule_q.push_back(entry);
+
+                        entry->status = _CACHE_SEND_CACHE_REQ;
+
+                        if (stats_enabled()) {
+                            if (per_mem_instr_stats) {
+                                if (per_mem_instr_stats->get_max_tentative_data_index() == T_IDX_L1) {
+                                    per_mem_instr_stats->add_l1_cost_for_true_miss
+                                        (per_mem_instr_stats->get_tentative_data(T_IDX_L1)->total_cost());
                                 }
+                                per_mem_instr_stats->commit_max_tentative_data();
                             }
-                            dir_req->maddr = start_maddr;
-                            dir_req->data = shared_array<uint32_t>();
-                            dir_req->did_win_last_arbitration = false;
-                            dir_req->waited = 0; /* for debugging only. erase later */
-                            entry->dir_reqs.push_back(dir_req);
-                            line_info->status = WAITING_FOR_REPLIES;
+                            if (core_req->is_read()) {
+                                stats()->true_miss_for_read_instr_at_l1();
+                            } else {
+                                stats()->true_miss_for_write_instr_at_l1();
+                            }
+                        } else if (per_mem_instr_stats) {
+                            per_mem_instr_stats->clear_tentative_data();
                         }
-                        entry->invalidate_begin_time = system_time;
-                        entry->invalidate_num_targets = entry->dir_reqs.size();
-                        entry->accept_cache_replies = true;
-                        entry->status = _L2_WORK_EMPTY_LINE_TO_EVICT;
-                    }
-                    ++it_addr;
-                    continue;
-                }
-            } else {
-                /* requests from L1s */
-                if (l2_req->status() == CACHE_REQ_HIT) {
-                    uint32_t sender = cache_req->sender;
-                    if (line_info->directory.count(sender)) {
-                        /* have to wait for a reply first */
-                        entry->status = _L2_WORK_REORDER_CACHE_REP;
-
-                        entry->accept_cache_replies = true;
-
-                        mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " received a request for " << start_maddr
-                                  << " while " << sender << " is still in the directory. waiting for the reply" << endl;
-
-                        /* cost breakdown study */
-                        entry->milestone_time = system_time;
-
+                            
                         ++it_addr;
                         continue;
-                    }
-                    if (line_info->status == READERS) {
-                        if (cache_req->type == SH_REQ || line_info->directory.empty()) {
-
-                            if (stats_enabled()) {
-                                if (line_info->directory.empty()) {
-                                    if (cache_req->type == SH_REQ) {
-                                        if (m_cfg.use_mesi) {
-                                            stats()->add_i_e();
-                                        } else {
-                                            stats()->add_i_s();
-                                        }
-                                    } else {
-                                        stats()->add_i_e();
-                                    }
-                                } else {
-                                    stats()->add_s_s();
-                                }
-                            }
-
-                            /* TODO : add the number of sharers constraints */
-                            if (cache_req->type == EX_REQ ||
-                                (m_cfg.use_mesi && line_info->directory.empty()) ) 
-                            {
-                                line_info->status = WRITER;
-                            }
-                            line_info->directory.insert(sender);
-                            l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
-                                                                               m_cfg.words_per_cache_line, 
-                                                                               line->data, 
-                                                                               line_info));
-                            l2_req->set_clean_write(line->dirty);
-                            l2_req->set_reserve(true);
-
-                            /* cost breakdown study */
-                            l2_req->set_milestone_time(system_time);
-
-                            entry->l2_req = l2_req;
-                            entry->status = _L2_WORK_UPDATE_L2_AND_SEND_REP;
-                        } else {
-
-                            if (stats_enabled()) {
-                                stats()->add_s_e();
-                            }
-                            for (set<uint32_t>::iterator it = line_info->directory.begin(); 
-                                 it != line_info->directory.end(); ++it)
-                            {
-                                shared_ptr<coherenceMsg> dir_req(new coherenceMsg);
-                                dir_req->sender = m_id;
-                                dir_req->receiver = *it;
-                                dir_req->type = INV_REQ;
-                                if (stats_enabled()) {
-                                    stats()->add_invreq();
-                                }
-                                dir_req->maddr = start_maddr;
-                                dir_req->data = shared_array<uint32_t>();
-                                dir_req->did_win_last_arbitration = false;
-                                dir_req->waited = 0; /* for debugging only. erase later */
-                                entry->dir_reqs.push_back(dir_req);
-                                line_info->status = WAITING_FOR_REPLIES;
-                            }
-                            entry->accept_cache_replies = true;
-                            entry->status = _L2_WORK_INVALIDATE_CACHES;
-                            entry->invalidate_begin_time = system_time;
-                            entry->invalidate_num_targets = entry->dir_reqs.size();
-
-                            /* cost breakdown study */
-                            entry->milestone_time = system_time;
-
-                        }
-                    } else {
-                        mh_assert(line_info->status == WRITER);
-                        shared_ptr<coherenceMsg> dir_req(new coherenceMsg);
-                        dir_req->sender = m_id;
-                        dir_req->receiver = *line_info->directory.begin();
-                        dir_req->type = cache_req->type == SH_REQ? WB_REQ : FLUSH_REQ;
-                        if (stats_enabled()) {
-                            if (cache_req->type == SH_REQ) {
-                                stats()->add_wbreq();
-                                stats()->add_e_s();
-                            } else {
-                                stats()->add_flushreq();
-                                stats()->add_e_e();
-                            }
-                        }
-                        dir_req->maddr = start_maddr;
-                        dir_req->data = shared_array<uint32_t>();
-                        dir_req->did_win_last_arbitration = false;
-                        dir_req->waited = 0; /* for debugging only. erase later */
-                        entry->dir_reqs.push_back(dir_req);
-                        line_info->status = WAITING_FOR_REPLIES;
-                        entry->accept_cache_replies = true;
-                        entry->status = _L2_WORK_INVALIDATE_CACHES;
-                        entry->invalidate_begin_time = system_time;
-                        entry->invalidate_num_targets = entry->dir_reqs.size();
-
-                        /* cost breakdown study */
-                        entry->milestone_time = system_time;
+                        /* TRANSITION */
 
                     }
-                    ++it_addr;
-                    continue;
-                } else {
-                    /* miss */
-                    entry->did_miss_on_first = true;
-                    if (line) {
-
-                        if (stats_enabled()) {
-                            if (cache_req->type == SH_REQ && !m_cfg.use_mesi) {
-                                stats()->add_i_s();
-                            } else {
-                                stats()->add_i_e();
-                            }
-                        }
-
-                        /* cost breakdown study */
-
-                        if (victim) {
-                            mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] evicted a line for " 
-                                      << victim->start_maddr << " to make a space for " << start_maddr << endl;
-                        }
-
-                        if (victim && victim->dirty) {
-                            dram_req = shared_ptr<dramMsg>(new dramMsg);
-                            dram_req->sender = m_id;
-                            dram_req->receiver = m_dramctrl_location;
-                            dram_req->req = shared_ptr<dramRequest>(new dramRequest(victim->start_maddr,
-                                                                                    DRAM_REQ_WRITE,
-                                                                                    m_cfg.words_per_cache_line,
-                                                                                    victim->data));
-                            dram_req->did_win_last_arbitration = false;
-
-                            /* cost breakdown study */
-                            dram_req->milestone_time = system_time;
-
-                            entry->dram_req = dram_req;
-                            if (m_dramctrl_location == m_id) {
-                                m_to_dram_req_schedule_q.push_back(entry->dram_req);
-                            } else {
-                                entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
-                                entry->net_msg_to_send->src = m_id;
-                                entry->net_msg_to_send->dst = m_dramctrl_location;
-                                entry->net_msg_to_send->type = MSG_DRAM_REQ;
-                                entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
-                                entry->net_msg_to_send->content = dram_req;
-                                m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
-                            }
-                            entry->status = _L2_WORK_DRAM_WRITEBACK_AND_REQUEST;
-                        } else {
-                            dram_req = shared_ptr<dramMsg>(new dramMsg);
-                            dram_req->sender = m_id;
-                            dram_req->receiver = m_dramctrl_location;
-                            dram_req->req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
-                                                                                    DRAM_REQ_READ,
-                                                                                    m_cfg.words_per_cache_line));
-                            dram_req->did_win_last_arbitration = false;
-                            entry->dram_req = dram_req;
-
-                            /* cost breakdown study */
-                            dram_req->milestone_time = system_time;
-
-                            if (m_dramctrl_location == m_id) {
-                                m_to_dram_req_schedule_q.push_back(entry->dram_req);
-                            } else {
-                                entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
-                                entry->net_msg_to_send->src = m_id;
-                                entry->net_msg_to_send->dst = m_dramctrl_location;
-                                entry->net_msg_to_send->type = MSG_DRAM_REQ;
-                                entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes);
-                                entry->net_msg_to_send->content = dram_req;
-                                m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
-                            }
-                            entry->status = _L2_WORK_SEND_DRAM_FEED_REQ;
-                        }
-                    } else {
-                        if (victim && m_l2_work_table.count(victim->start_maddr) == 0) {
-                            mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] tries to invalidate caches of line for " 
-                                      << start_maddr << " to evict the line " << endl;
-                            shared_ptr<coherenceMsg> new_msg(new coherenceMsg);
-                            new_msg->sender = m_id;
-                            new_msg->receiver = m_id;
-                            new_msg->type = EMPTY_REQ;
-                            new_msg->maddr = victim->start_maddr;
-                            new_msg->data = shared_array<uint32_t>();
-                            new_msg->did_win_last_arbitration = false;
-                            new_msg->waited = 0; /* debugging only. erase later */
-                            m_to_directory_req_schedule_q.push_back(new_msg);
-                        }
-
-                        l2_req->set_milestone_time(system_time);
-                        
-                        /* will keep trying until a line is successfully emptied. */
-                        l2_req->reset();
-                    }
-                    ++it_addr;
-                    continue;
                 }
-            }
-        } else if (entry->status == _L2_WORK_UPDATE_L2_AND_FINISH) {
-            if (l2_req->status() == CACHE_REQ_NEW || l2_req->status() == CACHE_REQ_WAIT) {
+
+                if (l1_req->status() == CACHE_REQ_NEW) {
+                    /* the L1 request has lost an arbitration - retry */
+                    if (l1_req->use_read_ports()) {
+                        m_l1_read_req_schedule_q.push_back(entry);
+                    } else {
+                        m_l1_write_req_schedule_q.push_back(entry);
+                    }
+                }
+
+                if (cat_req->status() == CAT_REQ_NEW) {
+                    /* the cat request has lost an arbitration - retry */
+                    m_cat_req_schedule_q.push_back(entry);
+                }
                 ++it_addr;
+                continue;
+                /* SPIN */
+            }
+
+            /* _CACHE_CAT_AND_L1_FOR_LOCAL */
+
+        } else if (entry->status == _CACHE_L1_FOR_DIR_REQ) {
+
+            if (l1_req->status() == CACHE_REQ_NEW) {
+                /* the L1 request has lost an arbitration - retry */
+                if (l1_req->use_read_ports()) {
+                    m_l1_read_req_schedule_q.push_back(entry);
+                } else {
+                    m_l1_write_req_schedule_q.push_back(entry);
+                }
+                ++it_addr;
+                continue;
+                /* SPIN */
+            } else if (l1_req->status() == CACHE_REQ_WAIT) {
+                ++it_addr;
+                continue;
+                /* SPIN */
+            }
+
+            if (per_mem_instr_stats) {
+                per_mem_instr_stats->clear_tentative_data();
+            }
+
+            if (l1_req->status() == CACHE_REQ_HIT) {
+
+                uint32_t home = l1_line_info->home;
+                cache_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                cache_rep->sender = m_id;
+                cache_rep->receiver = home;
+                if (dir_req->type == INV_REQ) {
+                    cache_rep->type = INV_REP;
+                    if (stats_enabled()) {
+                        stats()->evict_at_l1();
+                    }
+                } else if (dir_req->type == FLUSH_REQ) {
+                    cache_rep->type = FLUSH_REP;
+                    if (stats_enabled()) {
+                        stats()->evict_at_l1();
+                    }
+                } else {
+                    cache_rep->type = WB_REP;
+                }
+
+                cache_rep->maddr = start_maddr;
+                cache_rep->sent = false;
+                cache_rep->per_mem_instr_stats = per_mem_instr_stats;
+                cache_rep->birthtime = system_time;
+
+                if (m_cfg.use_mesi) {
+                    if (!l1_line->data_dirty) {
+                        cache_rep->word_count = 0;
+                    } else {
+                        if (stats_enabled()) {
+                            stats()->writeback_at_l1();
+                        }
+                        cache_rep->word_count = m_cfg.words_per_cache_line;
+                    }
+                } else {
+                    if (l1_line_info->status == SHARED) {
+                        cache_rep->word_count = 0;
+                    } else {
+                        if (stats_enabled()) {
+                            stats()->writeback_at_l1();
+                        }
+                        cache_rep->word_count = m_cfg.words_per_cache_line;
+                    }
+                }
+
+                cache_rep->data = l1_line->data;
+
+                m_cache_rep_schedule_q.push_back(entry);
+
+                entry->status = _CACHE_SEND_CACHE_REP;
+                entry->substatus = _CACHE_SEND_CACHE_REP__DIR_REQ;
+                ++it_addr;
+                continue;
+                /* TRANSITION */
+
+            } else {
+                /* line was evicted and a cache reply is already sent */
+                mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] discarded a directory request for "
+                          << start_maddr << " as it was already invalidated." << endl;
+                ++m_cache_table_vacancy;
+                m_cache_table.erase(it_addr++);
                 continue;
             }
 
-            /* cost breakdown study */
-            if (l2_req->milestone_time() != UINT64_MAX) {
-                if (stats_enabled()) {
-                    stats()->add_l2_action_cost(system_time - l2_req->milestone_time());
+        } else if (entry->status == _CACHE_SEND_CACHE_REQ) {
+
+            if (cache_req->sent) {
+                entry->status = _CACHE_WAIT_DIR_REP;
+                mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] sent a cache request (" << cache_req->type
+                          << ") to " << cache_req->receiver << " for " << cache_req->maddr << endl;
+                ++it_addr;
+                continue;
+                /* TRANSITION */
+            } else {
+                m_cache_req_schedule_q.push_back(entry);
+                ++it_addr;
+                continue;
+                /* SPIN */
+            }
+            /* _CACHE_SEND_CACHE_REQ */
+
+        } else if (entry->status == _CACHE_WAIT_DIR_REP) {
+
+            if (!dir_rep) {
+                ++it_addr;
+                continue;
+                /* SPIN */
+            }
+
+            if (stats_enabled() && per_mem_instr_stats) {
+                per_mem_instr_stats->add_dir_rep_nas(system_time - dir_rep->birthtime);
+            }
+
+            mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] received a directory reply ("
+                      << dir_rep->type << ") for " << start_maddr << endl;
+
+            shared_array<uint32_t> data = dir_rep->data;
+            if (core_req->is_read()) {
+                shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
+                uint32_t word_offset = (core_req->maddr().address / 4) % m_cfg.words_per_cache_line;
+                for (uint32_t i = 0; i < core_req->word_count(); ++i) {
+                    ret[i] = data[i + word_offset];
                 }
+                set_req_data(core_req, ret);
+            } else {
+                mh_assert(dir_rep->type == EX_REP);
+                uint32_t word_offset = (core_req->maddr().address / 4) % m_cfg.words_per_cache_line;
+                for (uint32_t i = 0; i < core_req->word_count(); ++i) {
+                    data[i + word_offset] = core_req->data()[i];
+                }
+            }
+
+            shared_ptr<cacheCoherenceInfo> new_info(new cacheCoherenceInfo);
+            new_info->home = dir_rep->sender;
+            new_info->status = dir_rep->type == SH_REP? SHARED : EXCLUSIVE;
+
+            l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+                                                               m_cfg.words_per_cache_line, 
+                                                               dir_rep->data, new_info));
+            l1_req->set_serialization_begin_time(system_time);
+            l1_req->set_unset_dirty_on_write(core_req->is_read());
+            l1_req->set_claim(true);
+            l1_req->set_evict(true);
+            l1_req->set_aux_info_for_coherence
+                (shared_ptr<cacheAuxInfoForCoherence>
+                    (new cacheAuxInfoForCoherence((dir_rep->type == SH_REP)? UPDATE_BY_SHREP : UPDATE_BY_EXREP)));
+
+            if (l1_req->use_read_ports()) {
+                m_l1_read_req_schedule_q.push_back(entry);
+            } else {
+                m_l1_write_req_schedule_q.push_back(entry);
+            }
+
+            entry->status = _CACHE_UPDATE_L1;
+            ++it_addr;
+            continue;
+            /* TRANSITION */
+
+            /* _CACHE_WAIT_DIR_REP */
+
+        } else if (entry->status == _CACHE_UPDATE_L1) {
+
+            if (l1_req->status() == CACHE_REQ_NEW) {
+                /* the L1 request has lost an arbitration - retry */
+                if (l1_req->use_read_ports()) {
+                    m_l1_read_req_schedule_q.push_back(entry);
+                } else {
+                    m_l1_write_req_schedule_q.push_back(entry);
+                }
+                ++it_addr;
+                continue;
+                /* SPIN */
+            } else if (l1_req->status() == CACHE_REQ_WAIT) {
+                ++it_addr;
+                continue;
+                /* SPIN */
+            } else {
+                mh_assert(l1_req->status() == CACHE_REQ_HIT);
+
+                if (per_mem_instr_stats) {
+                    if (stats_enabled()) {
+                        per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_ops(system_time - l1_req->operation_begin_time());
+                        per_mem_instr_stats->add_l1_cost_for_feed(per_mem_instr_stats->get_tentative_data(T_IDX_L1)->total_cost());
+                        per_mem_instr_stats->commit_tentative_data(T_IDX_L1);
+                        stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
+                    } else {
+                        per_mem_instr_stats->clear_tentative_data();
+                    }
+                }
+
+                if (!l1_victim) {
+                    mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] is updated for " << start_maddr << " finishing serve"
+                              << endl;
+                    if (stats_enabled()) {
+                        if (core_req->is_read()) {
+                            stats()->did_finish_read();
+                        } else {
+                            stats()->did_finish_write();
+                        }
+                    }
+                    set_req_status(core_req, REQ_DONE);
+                    ++m_available_core_ports;
+                    ++m_cache_table_vacancy;
+                    m_cache_table.erase(it_addr++);
+                    continue;
+                    /* FINISHED */
+                }
+
+                /* we have a victim */
+
+                mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] is trying to evict a cache line " << l1_victim->start_maddr
+                          << endl;
+
+                if (stats_enabled()) {
+                    stats()->evict_at_l1();
+                }
+
+                cache_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                cache_rep->sender = m_id;
+                cache_rep->receiver = l1_victim_info->home;
+                if (l1_victim_info->status == SHARED) {
+                    cache_rep->type = INV_REP;
+                } else {
+                    cache_rep->type = FLUSH_REP;
+                }
+
+                cache_rep->maddr = l1_victim->start_maddr;
+                cache_rep->sent = false;
+                cache_rep->per_mem_instr_stats = shared_ptr<privateSharedMSIStatsPerMemInstr>();
+                cache_rep->birthtime = system_time;
+
+                if (m_cfg.use_mesi) {
+                    if (!l1_victim->data_dirty) {
+                        cache_rep->word_count = 0;
+                    } else {
+                        if (stats_enabled()) {
+                            stats()->writeback_at_l1();
+                        }
+                        cache_rep->word_count = m_cfg.words_per_cache_line;
+                    }
+                } else {
+                    if (l1_victim_info->status == SHARED) {
+                        cache_rep->word_count = 0;
+                    } else {
+                        if (stats_enabled()) {
+                            stats()->writeback_at_l1();
+                        }
+                        cache_rep->word_count = m_cfg.words_per_cache_line;
+                    }
+                }
+                cache_rep->data = l1_victim->data;
+
+                m_cache_rep_schedule_q.push_back(entry);
+
+                entry->status = _CACHE_SEND_CACHE_REP;
+                entry->substatus = _CACHE_SEND_CACHE_REP__EVICT;
+                ++it_addr;
+                continue;
+                /* TRANSITION */
+            }
+
+            /* _CACHE_UPDATE_L1 */
+ 
+        } else if (entry->status == _CACHE_SEND_CACHE_REP) {
+
+            if (!cache_rep->sent) {
+                m_cache_rep_schedule_q.push_back(entry);
+                ++it_addr;
+                continue;
+                /* SPIN */
+            }
+
+            mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] sent a cache reply (" << cache_rep->type 
+                      << ") for " << cache_rep->maddr << " to " << cache_rep->receiver << endl;
+
+            if (entry->substatus == _CACHE_SEND_CACHE_REP__SWITCH) {
+                if (stats_enabled() && per_mem_instr_stats) {
+                    per_mem_instr_stats->add_cache_rep_srz_for_switch(system_time - cache_rep->birthtime);
+                }
+                cache_req->birthtime = system_time;
+                m_cache_req_schedule_q.push_back(entry);
+
+                entry->status = _CACHE_SEND_CACHE_REQ;
+                ++it_addr;
+                continue;
+                /* TRANSITION */
+            } else if (entry->substatus == _CACHE_SEND_CACHE_REP__EVICT) {
+                if (stats_enabled()) {
+                    if (core_req->is_read()) {
+                        stats()->did_finish_read();
+                    } else {
+                        stats()->did_finish_write();
+                    }
+                    
+                    if (per_mem_instr_stats) {
+                        per_mem_instr_stats->add_cache_rep_srz_for_evict(system_time - cache_rep->birthtime);
+                    }
+                }
+                set_req_status(core_req, REQ_DONE);
+                ++m_available_core_ports;
+                ++m_cache_table_vacancy;
+                m_cache_table.erase(it_addr++);
+                continue;
+                /* FINISHED */
+            } else if (entry->substatus == _CACHE_SEND_CACHE_REP__DIR_REQ) {
+                ++m_cache_table_vacancy;
+                m_cache_table.erase(it_addr++);
+                continue;
+                /* FINISHED */
+            }
+
+        }
+
+    }
+
+}
+
+void privateSharedMSI::update_dir_table() {
+
+    for (dirTable::iterator it_addr = m_dir_table.begin(); it_addr != m_dir_table.end(); ) {
+
+        maddr_t start_maddr = it_addr->first;
+        shared_ptr<dirTableEntry>& entry = it_addr->second;
+
+        shared_ptr<coherenceMsg> __attribute__ ((unused)) & cache_req = entry->cache_req;
+        shared_ptr<cacheRequest> __attribute__ ((unused)) & l2_req = entry->l2_req;
+        shared_ptr<coherenceMsg> __attribute__ ((unused)) & cache_rep = entry->cache_rep;
+        vector<shared_ptr<coherenceMsg> > __attribute__ ((unused)) & dir_reqs = entry->dir_reqs;
+        shared_ptr<coherenceMsg> __attribute__ ((unused)) & dir_rep = entry->dir_rep;
+        shared_ptr<coherenceMsg> __attribute__ ((unused)) & empty_req = entry->empty_req;
+        shared_ptr<dramctrlMsg> __attribute__ ((unused)) & dramctrl_req = entry->dramctrl_req;
+        shared_ptr<dramctrlMsg> __attribute__ ((unused)) & dramctrl_rep = entry->dramctrl_rep;
+
+        shared_ptr<cacheLine> l2_line = (l2_req)? l2_req->line_copy() : shared_ptr<cacheLine>();
+        shared_ptr<cacheLine> l2_victim = (l2_req)? l2_req->line_to_evict_copy() : shared_ptr<cacheLine>();
+        shared_ptr<dirCoherenceInfo> l2_line_info = 
+            (l2_line)? static_pointer_cast<dirCoherenceInfo>(l2_line->coherence_info) : shared_ptr<dirCoherenceInfo>();
+        shared_ptr<dirCoherenceInfo> l2_victim_info = 
+            (l2_victim)? static_pointer_cast<dirCoherenceInfo>(l2_victim->coherence_info) : shared_ptr<dirCoherenceInfo>();
+        shared_ptr<dirAuxInfoForCoherence> l2_aux_info = static_pointer_cast<dirAuxInfoForCoherence>(l2_req->aux_info_for_coherence());
+
+        shared_ptr<privateSharedMSIStatsPerMemInstr> __attribute__((unused)) & per_mem_instr_stats = entry->per_mem_instr_stats;
+
+        if (entry->status == _DIR_L2_FOR_CACHE_REQ) {
+
+            if (l2_req->status() == CACHE_REQ_NEW) {
+                if (l2_req->use_read_ports()) {
+                    m_l2_read_req_schedule_q.push_back(entry);
+                } else {
+                    m_l2_write_req_schedule_q.push_back(entry);
+                }
+                ++it_addr;
+                continue;
+                /* SPIN */
+            } 
+            if (l2_req->status() == CACHE_REQ_WAIT) {
+                ++it_addr;
+                continue;
+                /* SPIN */
+            }
+            if (l2_req->status() == CACHE_REQ_HIT) {
+
+                mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] gets a L2 HIT on "
+                          << cache_req->maddr << endl;
+
+                if (stats_enabled()) {
+                    if (per_mem_instr_stats) {
+                        per_mem_instr_stats->get_tentative_data(T_IDX_L2)->add_l2_ops(system_time - l2_req->serialization_begin_time());
+                        if (cache_req->sender == m_id) {
+                            per_mem_instr_stats->add_local_l2_cost_for_hit(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                        } else {
+                            per_mem_instr_stats->add_remote_l2_cost_for_hit(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                        }
+                        per_mem_instr_stats->commit_tentative_data(T_IDX_L2);
+                    }
+                    if (cache_req->type == SH_REQ) {
+                        if (cache_req->sender == m_id) {
+                            stats()->hit_for_read_instr_at_local_l2();
+                        } else {
+                            stats()->hit_for_read_instr_at_remote_l2();
+                        }
+                        stats()->hit_for_read_instr_at_l2();
+                    } else {
+                        if (cache_req->sender == m_id) {
+                            stats()->hit_for_write_instr_at_local_l2();
+                        } else {
+                            stats()->hit_for_write_instr_at_remote_l2();
+                        }
+                        stats()->hit_for_write_instr_at_l2();
+                    }
+                } else if (per_mem_instr_stats) {
+                    per_mem_instr_stats->clear_tentative_data();
+                }
+
+                if (l2_aux_info->initial_dir_info->dir.count(cache_req->sender)) {
+                    /* cache rep/req out of order */
+
+                    entry->cached_dir = *(l2_aux_info->initial_dir_info);
+
+                    mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] now waits for delayed cache reply on "
+                              << cache_req->maddr << endl;
+
+                    if (per_mem_instr_stats) {
+                        per_mem_instr_stats->begin_reorder(system_time);
+                    }
+
+                    entry->status = _DIR_SEND_DIR_REQ_AND_WAIT_CACHE_REP;
+                    entry->substatus = _DIR_SEND_DIR_REQ_AND_WAIT_CACHE_REP__REORDER;
+                    ++it_addr;
+                    continue;
+                    /* TRANSITION */
+
+                } else {
+                    dir_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                    dir_rep->sender = m_id;
+                    dir_rep->receiver = cache_req->sender;
+                    dir_rep->type = (cache_req->type == SH_REQ)? SH_REP : EX_REP;
+                    dir_rep->word_count = m_cfg.words_per_cache_line;
+                    dir_rep->maddr = start_maddr;
+                    dir_rep->data = l2_line->data;
+                    dir_rep->sent = false;
+                    dir_rep->per_mem_instr_stats = per_mem_instr_stats;
+                    dir_rep->birthtime = system_time;
+
+                    m_dir_rep_schedule_q.push_back(entry);
+
+                    entry->status = _DIR_SEND_DIR_REP;
+                    ++it_addr;
+                    continue;
+                    /* TRANSITION */
+                }
+
+            } else {
+                /* miss */
+                if (!l2_line) {
+                    /* true miss */
+                    mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] gets an L2 true miss on "
+                              << cache_req->maddr << endl;
+
+                    if (stats_enabled()) {
+                        if (per_mem_instr_stats) {
+                            per_mem_instr_stats->
+                                get_tentative_data(T_IDX_L2)->add_l2_ops(system_time - l2_req->serialization_begin_time());
+                            if (cache_req->sender == m_id) {
+                                per_mem_instr_stats->
+                                    add_local_l2_cost_for_true_miss(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                            } else {
+                                per_mem_instr_stats->
+                                    add_remote_l2_cost_for_true_miss(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                            }
+                            per_mem_instr_stats->commit_tentative_data(T_IDX_L2);
+                        }
+                        if (cache_req->type == SH_REQ) {
+                            if (cache_req->sender == m_id) {
+                                stats()->true_miss_for_read_instr_at_local_l2();
+                            } else {
+                                stats()->true_miss_for_read_instr_at_remote_l2();
+                            }
+                            stats()->true_miss_for_read_instr_at_l2();
+                        } else {
+                            if (cache_req->sender == m_id) {
+                                stats()->true_miss_for_write_instr_at_local_l2();
+                            } else {
+                                stats()->true_miss_for_write_instr_at_remote_l2();
+                            }
+                            stats()->true_miss_for_write_instr_at_l2();
+                        }
+                    } else if (per_mem_instr_stats) {
+                        per_mem_instr_stats->clear_tentative_data();
+                    }
+
+                    dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                    dramctrl_req->sender = m_id;
+                    dramctrl_req->receiver = m_dramctrl_location;
+                    dramctrl_req->maddr = start_maddr;
+                    dramctrl_req->dram_req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
+                                                                                     DRAM_REQ_READ,
+                                                                                     m_cfg.words_per_cache_line));
+                    dramctrl_req->sent = false;
+                    dramctrl_req->birthtime = system_time;
+                    dramctrl_req->per_mem_instr_stats = per_mem_instr_stats;
+
+                    m_dramctrl_req_schedule_q.push_back(make_tuple(false, entry)); /* mark it as from local */
+
+                    entry->status = _DIR_SEND_DRAMCTRL_REQ;
+
+                    ++it_addr;
+                    continue;
+                    /* TRANSITION */
+
+                } else {
+                    /* coherence miss */
+                    mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] gets an L2 coherence miss on "
+                              << cache_req->maddr << endl;
+
+                    /* cache the current directory */
+                    entry->cached_dir = *(l2_aux_info->initial_dir_info);
+                    mh_log(4) << "    current directory : ";
+                    if (entry->cached_dir.status == SHARED) {
+                        mh_log(4) << "SHARED ";
+                    } else {
+                        mh_log(4) << "EXCLUSIVE ";
+                    }
+                    for (set<uint32_t>::iterator it = entry->cached_dir.dir.begin(); it != entry->cached_dir.dir.end(); ++it) {
+                        mh_log(4) << *it << " ";
+                    }
+                    mh_log(4) << endl;
+
+                    /* queue up directory requests to send */
+                    for (set<uint32_t>::iterator it = entry->cached_dir.dir.begin(); it != entry->cached_dir.dir.end(); ++it) {
+                        if (*it == cache_req->sender) {
+                            /* a cache rep is coming, need not send a dir req */
+                            continue;
+                        }
+                        shared_ptr<coherenceMsg> new_dir_req(new coherenceMsg);
+                        new_dir_req->sender = m_id;
+                        new_dir_req->receiver = *it;
+                        if (entry->cached_dir.status == SHARED) {
+                            new_dir_req->type = INV_REQ;
+                        } else if (cache_req->type == SH_REQ) {
+                            new_dir_req->type = WB_REQ;
+                        } else {
+                            new_dir_req->type = FLUSH_REQ;
+                        }
+                        new_dir_req->word_count = 0;
+                        new_dir_req->maddr = start_maddr;
+                        new_dir_req->data = shared_array<uint32_t>();
+                        new_dir_req->sent = false;
+                        new_dir_req->per_mem_instr_stats = shared_ptr<privateSharedMSIStatsPerMemInstr>();
+                        new_dir_req->birthtime = system_time;
+
+                        dir_reqs.push_back(new_dir_req);
+                    }
+                    if (!dir_reqs.empty()) {
+                        m_dir_req_schedule_q.push_back(entry);
+                    }
+
+                    /* statistics */
+                    if (stats_enabled()) {
+                        if (per_mem_instr_stats) {
+                            per_mem_instr_stats->
+                                get_tentative_data(T_IDX_L2)->add_l2_ops(system_time - l2_req->serialization_begin_time());
+                            if (entry->cached_dir.status == EXCLUSIVE) {
+                                if (cache_req->type == SH_REQ) {
+                                    if (cache_req->sender == m_id) {
+                                        per_mem_instr_stats->
+                                            add_local_l2_cost_for_read_on_exclusive_miss
+                                                (per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                                    } else {
+                                        per_mem_instr_stats->
+                                            add_remote_l2_cost_for_read_on_exclusive_miss
+                                                (per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                                    }
+                                } else {
+                                    if (cache_req->sender == m_id) {
+                                        per_mem_instr_stats->
+                                            add_local_l2_cost_for_write_on_exclusive_miss
+                                                (per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                                    } else {
+                                        per_mem_instr_stats->
+                                            add_remote_l2_cost_for_write_on_exclusive_miss
+                                                (per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                                    }
+                                }
+                            } else {
+                                mh_assert(cache_req->type == EX_REQ);
+                                if (cache_req->sender == m_id) {
+                                    per_mem_instr_stats->
+                                        add_local_l2_cost_for_write_on_shared_miss
+                                            (per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                                } else {
+                                    per_mem_instr_stats->
+                                        add_remote_l2_cost_for_write_on_shared_miss
+                                            (per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                                }
+                            }
+                            per_mem_instr_stats->commit_tentative_data(T_IDX_L2);
+
+                            per_mem_instr_stats->begin_inv_for_coherence(system_time, dir_reqs.size());
+                        }
+
+                        if (entry->cached_dir.status == EXCLUSIVE) {
+                            if (cache_req->type == SH_REQ) {
+                                stats()->read_on_exclusive_miss_for_read_instr_at_l2();
+                                if (cache_req->sender == m_id) {
+                                    stats()->read_on_exclusive_miss_for_read_instr_at_local_l2();
+                                } else {
+                                    stats()->read_on_exclusive_miss_for_read_instr_at_remote_l2();
+                                }
+                            } else {
+                                stats()->write_on_exclusive_miss_for_write_instr_at_l2();
+                                if (cache_req->sender == m_id) {
+                                    stats()->write_on_exclusive_miss_for_write_instr_at_local_l2();
+                                } else {
+                                    stats()->write_on_exclusive_miss_for_write_instr_at_remote_l2();
+                                }
+                            }
+                        } else {
+                            stats()->write_on_shared_miss_for_write_instr_at_l2();
+                            if (cache_req->sender == m_id) {
+                                stats()->write_on_shared_miss_for_write_instr_at_local_l2();
+                            } else {
+                                stats()->write_on_shared_miss_for_write_instr_at_remote_l2();
+                            }
+                        }
+                    } else if (per_mem_instr_stats) {
+                        per_mem_instr_stats->clear_tentative_data();
+                    }
+
+                    entry->status = _DIR_SEND_DIR_REQ_AND_WAIT_CACHE_REP;
+                    entry->substatus = _DIR_SEND_DIR_REQ_AND_WAIT_CACHE_REP__COHERENCE;
+                    ++it_addr;
+                    continue;
+                    /* TRANSITION */
+                }
+
+            }
+
+        } else if (entry->status == _DIR_L2_FOR_EMPTY_REQ) {
+
+            if (l2_req->status() == CACHE_REQ_NEW) {
+                if (l2_req->use_read_ports()) {
+                    m_l2_read_req_schedule_q.push_back(entry);
+                } else {
+                    m_l2_write_req_schedule_q.push_back(entry);
+                }
+                ++it_addr;
+                continue;
+                /* SPIN */
+            } 
+            if (l2_req->status() == CACHE_REQ_WAIT) {
+                ++it_addr;
+                continue;
+                /* SPIN */
+            }
+
+            /* statistics */
+            if (per_mem_instr_stats) {
+                if (stats_enabled()) {
+                    per_mem_instr_stats->get_tentative_data(T_IDX_L2)->add_l2_ops(system_time - l2_req->serialization_begin_time());
+                    if (empty_req->new_requester == m_id) {
+                        per_mem_instr_stats->add_local_l2_cost_for_evict(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                    } else {
+                        per_mem_instr_stats->add_remote_l2_cost_for_evict(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                    }
+                    per_mem_instr_stats->commit_tentative_data(T_IDX_L2);
+                } else {
+                    per_mem_instr_stats->clear_tentative_data();
+                }
+            }
+
+            mh_assert(l2_req->status() == CACHE_REQ_HIT) ;
+
+            if (l2_aux_info->initial_dir_info->dir.size()) {
+
+                mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] need to invalidate sharers to evict a line of "
+                          << start_maddr << endl;
+
+                /* cache the current directory */
+                entry->cached_dir = *(l2_aux_info->initial_dir_info);
+
+                /* queue up directory requests to send */
+                for (set<uint32_t>::iterator it = entry->cached_dir.dir.begin(); it != entry->cached_dir.dir.end(); ++it) {
+                    shared_ptr<coherenceMsg> new_dir_req(new coherenceMsg);
+                    new_dir_req->sender = m_id;
+                    new_dir_req->receiver = *it;
+                    new_dir_req->type = (entry->cached_dir.status == SHARED)? INV_REQ : FLUSH_REQ;
+                    new_dir_req->word_count = 0;
+                    new_dir_req->maddr = start_maddr;
+                    new_dir_req->data = shared_array<uint32_t>();
+                    new_dir_req->sent = false;
+                    new_dir_req->per_mem_instr_stats = shared_ptr<privateSharedMSIStatsPerMemInstr>();
+                    new_dir_req->birthtime = system_time;
+
+                    dir_reqs.push_back(new_dir_req);
+                }
+                if (!dir_reqs.empty()) {
+                    m_dir_req_schedule_q.push_back(entry);
+                }
+
+                if (per_mem_instr_stats) {
+                    per_mem_instr_stats->begin_inv_for_evict(system_time, entry->cached_dir.dir.size());
+                }
+
+                entry->status = _DIR_SEND_DIR_REQ_AND_WAIT_CACHE_REP;
+                entry->substatus = _DIR_SEND_DIR_REQ_AND_WAIT_CACHE_REP__EMPTY_REQ;
+                ++it_addr;
+                continue;
+                /* TRANSITION */
+
+            } else {
+                /* hit */
+                if (stats_enabled()) {
+                    stats()->evict_at_l2();
+                }
+
+                if (l2_aux_info->is_replaced_line_dirty) {
+                    mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] evicted a line of "
+                              << start_maddr << " by an empty req without invalidation but with writeback" << endl;
+                    if (stats_enabled()) {
+                        stats()->writeback_at_l2();
+                    }
+
+                    dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                    dramctrl_req->sender = m_id;
+                    dramctrl_req->receiver = m_dramctrl_location;
+                    dramctrl_req->maddr = start_maddr;
+
+                    dramctrl_req->dram_req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
+                                                                                     DRAM_REQ_WRITE,
+                                                                                     m_cfg.words_per_cache_line,
+                                                                                     l2_aux_info->replaced_line));
+                    dramctrl_req->sent = false;
+                    dramctrl_req->birthtime = system_time;
+                    dramctrl_req->per_mem_instr_stats = per_mem_instr_stats;
+
+                    m_dramctrl_req_schedule_q.push_back(make_tuple(false/*local*/, entry));
+                    m_dramctrl_writeback_status[start_maddr] = entry;
+
+                    entry->status = _DIR_SEND_DRAMCTRL_WRITEBACK;
+                    entry->substatus = _DIR_SEND_DRAMCTRL_WRITEBACK__FROM_EVICT;
+                    ++it_addr;
+                    continue;
+                    /* TRANSITION */
+
+                } else {
+                    mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] evicted a line of "
+                              << start_maddr << " by an empty req without invalidation/writeback" << endl;
+                    empty_req->is_empty_req_done = true;
+
+                    if (entry->using_empty_req_exclusive_space) {
+                        ++m_dir_table_vacancy_empty_req_exclusive;
+                    } else {
+                        ++m_dir_table_vacancy_shared;
+                    }
+                    mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] vacancy empty req : " 
+                              << m_dir_table_vacancy_empty_req_exclusive
+                              << " vacancy shared : " << m_dir_table_vacancy_shared << endl;
+
+                    m_dir_table.erase(it_addr++);
+                    continue;
+                    /* FINISH */
+                }
+            }
+
+            /* _DIR_L2_FOR_EMPTY_REQ */
+        } else if (entry->status == _DIR_L2_FOR_CACHE_REP) {
+
+            if (l2_req->status() == CACHE_REQ_NEW) {
+                if (l2_req->use_read_ports()) {
+                    m_l2_read_req_schedule_q.push_back(entry);
+                } else {
+                    m_l2_write_req_schedule_q.push_back(entry);
+                }
+                ++it_addr;
+                continue;
+                /* SPIN */
+            } 
+            if (l2_req->status() == CACHE_REQ_WAIT) {
+                ++it_addr;
+                continue;
+                /* SPIN */
+            }
+
+            if (per_mem_instr_stats) {
+                per_mem_instr_stats->clear_tentative_data();
             }
 
             mh_assert(l2_req->status() == CACHE_REQ_HIT);
-            if (entry->using_space_for_evict) {
-                ++m_l2_work_table_vacancy_evict;
-            } else if (entry->using_space_for_reply) {
-                ++m_l2_work_table_vacancy_replies;
+
+            if (entry->using_cache_rep_exclusive_space) {
+                ++m_dir_table_vacancy_cache_rep_exclusive;
             } else {
-                ++m_l2_work_table_vacancy_shared;
+                ++m_dir_table_vacancy_shared;
             }
-            m_l2_work_table.erase(it_addr++);
+
+            m_dir_table.erase(it_addr++);
             continue;
-        } else if (entry->status == _L2_WORK_DRAM_WRITEBACK_AND_EVICT) {
-            if (dram_req->did_win_last_arbitration) {
-                if (entry->net_msg_to_send) {
-                    entry->net_msg_to_send = shared_ptr<message_t>();
-                }
-                dram_req->did_win_last_arbitration = false;
-                mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] sent a DRAM writeback for "
-                          << dram_req->req->maddr() << endl;
-                entry->status = _L2_WORK_UPDATE_L2_AND_FINISH;
-            } else if (m_dramctrl_location == m_id) {
-                m_to_dram_req_schedule_q.push_back(entry->dram_req);
-            } else {
-                m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
-            }
-            ++it_addr;
-            continue;
-        } else if (entry->status == _L2_WORK_EMPTY_LINE_TO_EVICT) {
-            if (cache_rep) {
-                process_cache_rep(line, cache_rep);
-                entry->cache_rep = shared_ptr<coherenceMsg>();
-                if (line_info->directory.empty()) {
-                    entry->accept_cache_replies = false;
-                    l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_INVALIDATE));
-                    l2_req->set_reserve(false);
+            /* FINISH */
 
-                    /* cost breakdown study */
-                    l2_req->set_milestone_time(UINT64_MAX);
-
-                    entry->l2_req = l2_req;
-                    if (stats_enabled()) {
-                        stats()->did_invalidate_caches(entry->invalidate_num_targets, system_time - entry->invalidate_begin_time);
-                    }
-                    if (line->dirty) {
-                        dram_req = shared_ptr<dramMsg>(new dramMsg);
-                        dram_req->sender = m_id;
-                        dram_req->receiver = m_dramctrl_location;
-                        dram_req->req = shared_ptr<dramRequest>(new dramRequest(line->start_maddr,
-                                                                                DRAM_REQ_WRITE,
-                                                                                m_cfg.words_per_cache_line,
-                                                                                line->data));
-                        dram_req->did_win_last_arbitration = false;
-
-                        /* cost breakdown study */
-                        dram_req->milestone_time = UINT64_MAX;
-
-                        entry->dram_req = dram_req;
-                        if (m_dramctrl_location == m_id) {
-                            m_to_dram_req_schedule_q.push_back(entry->dram_req);
-                        } else {
-                            entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
-                            entry->net_msg_to_send->src = m_id;
-                            entry->net_msg_to_send->dst = m_dramctrl_location;
-                            entry->net_msg_to_send->type = MSG_DRAM_REQ;
-                            entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
-                            entry->net_msg_to_send->content = dram_req;
-                            m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
-                        }
-
-                        entry->status = _L2_WORK_DRAM_WRITEBACK_AND_EVICT;
-                    } else {
-                        entry->status = _L2_WORK_UPDATE_L2_AND_FINISH;
-                    }
-                    ++it_addr;
-                    continue;
-                }
-            }
-            /* this is supposed to happen in the previous cycle */
-            while (entry->dir_reqs.size()) {
-                shared_ptr<coherenceMsg> dir_req = entry->dir_reqs.front();
-                if (dir_req->did_win_last_arbitration) {
-                    mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] has sent a directory request "
-                        << "to " << dir_req->receiver << " for " << dir_req->maddr << endl;
-                    if (entry->net_msg_to_send) {
-                        entry->net_msg_to_send = shared_ptr<message_t>();
-                    }
-                    dir_req->did_win_last_arbitration = false;
-                    entry->dir_reqs.erase(entry->dir_reqs.begin());
-                } else {
-                    break;
-                }
-            }
-            if (entry->dir_reqs.size()) {
-                shared_ptr<coherenceMsg> dir_req = entry->dir_reqs.front();
-                if (dir_req->receiver == m_id) {
-                    m_to_cache_req_schedule_q.push_back(make_tuple(false/* not a core request */, dir_req));
-                } else {
-                    if (!entry->net_msg_to_send) {
-                        shared_ptr<message_t> new_msg(new message_t);
-                        new_msg->type = MSG_DIRECTORY_REQ_REP;
-                        new_msg->src = m_id;
-                        new_msg->dst = dir_req->receiver;
-                        new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
-                        new_msg->content = dir_req;
-                        entry->net_msg_to_send = new_msg;
-                    }
-                    m_to_network_schedule_q[MSG_DIRECTORY_REQ_REP].push_back(entry->net_msg_to_send);
-                }
-            }
-            ++it_addr;
-            continue;
-        } else if (entry->status == _L2_WORK_REORDER_CACHE_REP) {
-            if (cache_rep) {
-                process_cache_rep(line, cache_rep);
-                entry->cache_rep = shared_ptr<coherenceMsg>();
-                if (line_info->directory.count(cache_req->sender) == 0) {
-
-                    /* cost breakdown study */
-                    if (stats_enabled()) {
-                        stats()->add_l2_network_plus_serialization_cost(system_time - entry->milestone_time);
-                    }
-
-                    entry->accept_cache_replies = false;
-                    entry->status = _L2_WORK_READ_L2;
-                    l2_req->set_milestone_time(UINT64_MAX);
-                }
-            }
-            ++it_addr;
-            continue;
-        } else if (entry->status == _L2_WORK_INVALIDATE_CACHES) {
-            if (cache_rep) {
-                process_cache_rep(line, cache_rep);
-                entry->cache_rep = shared_ptr<coherenceMsg>();
-                if ((cache_req->type == SH_REQ && line_info->status == READERS) ||
-                    line_info->directory.empty()) {
-
-                    /* cost breakdown study */
-                    if (stats_enabled()) {
-                        stats()->add_l2_invalidation_cost(system_time - entry->milestone_time);
-                    }
-
-                    uint32_t sender = cache_req->sender;
-                    entry->accept_cache_replies = false;
-                    if (cache_req->type == EX_REQ || (m_cfg.use_mesi && line_info->directory.empty())) {
-                        line_info->status = WRITER;
-                    }
-                    line_info->directory.insert(sender);
-                    l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
-                                                                       m_cfg.words_per_cache_line,
-                                                                       line->data,
-                                                                       line_info));
-                    l2_req->set_clean_write(line->dirty);
-                    l2_req->set_reserve(true);
-
-                    /* cost breakdown study */
-                    l2_req->set_milestone_time(system_time);
-
-                    entry->l2_req = l2_req;
-                    entry->status = _L2_WORK_UPDATE_L2_AND_SEND_REP;
-                    if (stats_enabled()) {
-                        stats()->did_invalidate_caches(entry->invalidate_num_targets, system_time - entry->invalidate_begin_time);
-                    }
-                    ++it_addr;
-                    continue;
-                }
-            }
-            /* this is supposed to happen in the previous cycle */
-            while (entry->dir_reqs.size()) {
-                shared_ptr<coherenceMsg> dir_req = entry->dir_reqs.front();
-                if (dir_req->did_win_last_arbitration) {
-                    mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] has sent a directory request "
-                        << "to " << dir_req->receiver << " for " << dir_req->maddr << endl;
-                    if (entry->net_msg_to_send) {
-                        entry->net_msg_to_send = shared_ptr<message_t>();
-                    }
-                    dir_req->did_win_last_arbitration = false;
-                    entry->dir_reqs.erase(entry->dir_reqs.begin());
-                } else if (line_info->directory.count(dir_req->receiver) == 0) {
-                    mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] already received a cache reply "
-                        << " for " << dir_req->maddr << " so do not send a request " << endl;
-                    if (entry->net_msg_to_send) {
-                        entry->net_msg_to_send = shared_ptr<message_t>();
-                    }
-                    dir_req->did_win_last_arbitration = false;
-                    entry->dir_reqs.erase(entry->dir_reqs.begin());
-
-                } else {
-#if 1
-                    if (++dir_req->waited > 10000) {
-                        mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] cannot send a directory request "
-                                  << "to " << dir_req->receiver << " for " << dir_req->maddr;
-                        mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] cannot send a directory request "
-                                  << "to " << dir_req->receiver << " for " << dir_req->maddr;
-                    }
-                    if (dir_req->waited > 10100) {
-                        throw err_bad_shmem_cfg("seems like a deadlock");
-                    }
-#endif
-
-                    break;
-                }
-            }
-            if (entry->dir_reqs.size()) {
-                shared_ptr<coherenceMsg> dir_req = entry->dir_reqs.front();
-                if (dir_req->receiver == m_id) {
-                    m_to_cache_req_schedule_q.push_back(make_tuple(false/* not a core request */, dir_req));
-                } else {
-                    if (!entry->net_msg_to_send) {
-                        shared_ptr<message_t> new_msg(new message_t);
-                        new_msg->type = MSG_DIRECTORY_REQ_REP;
-                        new_msg->src = m_id;
-                        new_msg->dst = dir_req->receiver;
-                        new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
-                        new_msg->content = dir_req;
-                        entry->net_msg_to_send = new_msg;
-                    }
-                    m_to_network_schedule_q[MSG_DIRECTORY_REQ_REP].push_back(entry->net_msg_to_send);
-                }
-            }
-            ++it_addr;
-            continue;
-        } else if (entry->status == _L2_WORK_UPDATE_L2_AND_SEND_REP) {
-            if (l2_req->status() == CACHE_REQ_NEW || l2_req->status() == CACHE_REQ_WAIT) {
+        } else if (entry->status == _DIR_SEND_DRAMCTRL_REQ) {
+            if (!dramctrl_req->sent) {
+                m_dramctrl_req_schedule_q.push_back(make_tuple(false, entry));
                 ++it_addr;
                 continue;
+                /* SPIN */
             }
 
-            /* cost breakdown study */
-            if (l2_req->milestone_time() != UINT64_MAX) {
-                if (stats_enabled()) {
-                    stats()->add_l2_action_cost(system_time - l2_req->milestone_time());
+            mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] sent a DRAM request for "
+                      << dramctrl_req->dram_req->maddr() << " to " << dramctrl_req->receiver << endl;
+            
+            entry->status = _DIR_WAIT_DRAMCTRL_REP;
+            ++it_addr;
+            continue;
+            /* TRANSITION */
+
+        } else if (entry->status == _DIR_WAIT_DRAMCTRL_REP) {
+
+            if (!dramctrl_rep) {
+                ++it_addr;
+                continue;
+                /* SPIN */
+            } 
+
+            mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] received a DRAM reply for " 
+                      << dramctrl_rep->dram_req->maddr() << endl;
+
+            if (stats_enabled() && per_mem_instr_stats) {
+                per_mem_instr_stats->add_dramctrl_rep_nas(system_time - dramctrl_rep->birthtime);
+            }
+
+            shared_ptr<dirCoherenceInfo> new_info(new dirCoherenceInfo);
+            new_info->status = (cache_req->type == SH_REQ)? SHARED : EXCLUSIVE;
+            new_info->locked = false;
+            new_info->dir.insert(cache_req->sender);
+
+            l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+                                                               m_cfg.words_per_cache_line,
+                                                               dramctrl_rep->dram_req->read(),
+                                                               new_info));
+            l2_req->set_serialization_begin_time(system_time);
+            l2_req->set_unset_dirty_on_write(true);
+            l2_req->set_claim(true);
+            l2_req->set_evict(true);
+
+            shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
+            aux_info->core_id = cache_req->sender;
+            aux_info->req_type = UPDATE_FOR_DRAMFEED;
+            l2_req->set_aux_info_for_coherence(aux_info);
+
+            if (l2_req->use_read_ports()) {
+                m_l2_read_req_schedule_q.push_back(entry);
+            } else {
+                m_l2_write_req_schedule_q.push_back(entry);
+            }
+
+            entry->status = _DIR_UPDATE_L2;
+            entry->substatus = _DIR_UPDATE_L2__FEED;
+            ++it_addr;
+            continue;
+            /* TRANSITION */
+
+            /* _DIR_WAIT_DRAMCTRL_REP */
+
+        } else if (entry->status == _DIR_UPDATE_L2) {
+
+            if (l2_req->status() == CACHE_REQ_NEW) {
+                if (l2_req->use_read_ports()) {
+                    m_l2_read_req_schedule_q.push_back(entry);
+                } else {
+                    m_l2_write_req_schedule_q.push_back(entry);
                 }
+                ++it_addr;
+                continue;
+                /* SPIN */
+            } 
+            if (l2_req->status() == CACHE_REQ_WAIT) {
+                ++it_addr;
+                continue;
+                /* SPIN */
             }
 
-            if (l2_req->status() == CACHE_REQ_HIT) {
-                uint32_t sender = cache_req->sender;
+            if (entry->substatus == _DIR_UPDATE_L2__DIR_UPDATE_OR_WRITEBACK) {
+                mh_assert(l2_req->status() == CACHE_REQ_HIT);
+                
+                if (per_mem_instr_stats) {
+                    if (stats_enabled()) {
+                        per_mem_instr_stats->
+                            get_tentative_data(T_IDX_L2)->add_l2_ops(system_time - l2_req->serialization_begin_time());
+                        if (entry->is_written_back) {
+                            if (cache_req->sender == m_id) {
+                                per_mem_instr_stats->
+                                    add_local_l2_cost_for_directory_update(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                            } else {
+                                per_mem_instr_stats->
+                                    add_remote_l2_cost_for_directory_update(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                            }
+                        } else {
+                            if (cache_req->sender == m_id) {
+                                per_mem_instr_stats->
+                                    add_local_l2_cost_for_writeback(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                            } else {
+                                per_mem_instr_stats->
+                                    add_remote_l2_cost_for_writeback(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                            }
+                        }
+                        per_mem_instr_stats->commit_tentative_data(T_IDX_L2);
+                    } else {
+                        per_mem_instr_stats->clear_tentative_data();
+                    }
+                }
+
                 dir_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
                 dir_rep->sender = m_id;
-                dir_rep->receiver = sender;
-                dir_rep->type = line_info->status == READERS ? SH_REP : EX_REP;
-                if (stats_enabled()) {
-                    if (line_info->status == READERS) {
-                        stats()->add_shrep();
-                    } else {
-                        stats()->add_exrep();
-                    }
-                }
+                dir_rep->receiver = cache_req->sender;
+                dir_rep->type = (cache_req->type == SH_REQ)? SH_REP : EX_REP;
+                dir_rep->word_count = m_cfg.words_per_cache_line;
                 dir_rep->maddr = start_maddr;
-                dir_rep->data = line->data;
-                dir_rep->did_win_last_arbitration = false;
-                dir_rep->waited = 0; /* debugging only. erase later */
+                dir_rep->data = l2_line->data;
+                dir_rep->sent = false;
+                dir_rep->per_mem_instr_stats = per_mem_instr_stats;
+                dir_rep->birthtime = system_time;
 
-                /* cost breakdown study */
-                dir_rep->milestone_time = system_time;
+                m_dir_rep_schedule_q.push_back(entry);
 
-                entry->dir_rep = dir_rep;
-                if (sender == m_id) {
-                    mh_assert(m_l1_work_table.count(start_maddr) &&
-                              m_l1_work_table[start_maddr]->status == _L1_WORK_WAIT_DIRECTORY_REP);
-                    m_l1_work_table[start_maddr]->dir_rep = entry->dir_rep;
+                entry->status = _DIR_SEND_DIR_REP;
+                ++it_addr;
+                continue;
+                /* TRANSITION */
+            }
+
+            if (entry->substatus == _DIR_UPDATE_L2__FEED) {
+
+                if (l2_req->status() == CACHE_REQ_MISS && !l2_victim) {
+                    mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] L2 feed failed due to no victim candidates " << endl;
                     if (stats_enabled()) {
-                        stats()->did_access_l2(!entry->did_miss_on_first);
-                    }
-                    mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] sent a directory reply to "
-                        << m_id << " for " << start_maddr << endl;
-                    if (entry->using_space_for_evict) {
-                        ++m_l2_work_table_vacancy_evict;
-                    } else if (entry->using_space_for_reply) {
-                        ++m_l2_work_table_vacancy_replies;
-                    } else {
-                        ++m_l2_work_table_vacancy_shared;
-                    }
-                    m_l2_work_table.erase(it_addr++);
-                    continue;
-                } else {
-                    entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
-                    entry->net_msg_to_send->type = MSG_DIRECTORY_REQ_REP;
-                    entry->net_msg_to_send->src = m_id;
-                    entry->net_msg_to_send->dst = sender;
-                    entry->net_msg_to_send->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
-                    entry->net_msg_to_send->content = dir_rep;
-                    m_to_network_schedule_q[MSG_DIRECTORY_REQ_REP].push_back(entry->net_msg_to_send);
-                    entry->status = _L2_WORK_SEND_DIRECTORY_REP;
-                    ++it_addr;
-                    continue;
-                }
-            } else {
-                /* miss */
-                if (line) {
-                    if (victim && victim->dirty) {
-                        dram_req = shared_ptr<dramMsg>(new dramMsg);
-                        dram_req->sender = m_id;
-                        dram_req->receiver = m_dramctrl_location;
-                        dram_req->req = shared_ptr<dramRequest>(new dramRequest(victim->start_maddr,
-                                                                                DRAM_REQ_WRITE,
-                                                                                m_cfg.words_per_cache_line,
-                                                                                victim->data));
-                        dram_req->did_win_last_arbitration = false;
-
-                        /* cost breakdown study */
-                        dram_req->milestone_time = system_time;
-
-                        entry->dram_req = dram_req;
-                        if (m_dramctrl_location == m_id) {
-                            m_to_dram_req_schedule_q.push_back(entry->dram_req);
-                        } else {
-                            entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
-                            entry->net_msg_to_send->src = m_id;
-                            entry->net_msg_to_send->dst = m_dramctrl_location;
-                            entry->net_msg_to_send->type = MSG_DRAM_REQ;
-                            entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
-                            entry->net_msg_to_send->content = dram_req;
-                            m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
+                        if (per_mem_instr_stats) {
+                            per_mem_instr_stats->
+                                get_tentative_data(T_IDX_L2)->add_l2_ops(system_time - l2_req->serialization_begin_time());
+                            if (cache_req->sender == m_id) {
+                                per_mem_instr_stats->
+                                    add_local_l2_cost_for_feed_retry(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                            } else {
+                                per_mem_instr_stats->
+                                    add_remote_l2_cost_for_feed_retry(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                            }
+                            per_mem_instr_stats->commit_tentative_data(T_IDX_L2);
                         }
-                        entry->status = _L2_WORK_DRAM_WRITEBACK_AND_UPDATE;
-                    } else {
-
-                        /* cost breakdown study */
-                        l2_req->set_milestone_time(system_time);
-
-                        l2_req->reset(); /* retry */
+                        stats()->retry_for_update_at_l2();
+                    } else if (per_mem_instr_stats) {
+                        per_mem_instr_stats->clear_tentative_data();
                     }
-                } else {
-                    if (victim && m_l2_work_table.count(victim->start_maddr) == 0) {
-                        shared_ptr<coherenceMsg> new_msg(new coherenceMsg);
-                        new_msg->sender = m_id;
-                        new_msg->receiver = m_id;
-                        new_msg->type = EMPTY_REQ;
-                        new_msg->maddr = victim->start_maddr;
-                        new_msg->data = shared_array<uint32_t>();
-                        new_msg->did_win_last_arbitration = false;
-                        new_msg->waited = 0; /* debugging only. erase later */
-                        m_to_directory_req_schedule_q.push_back(new_msg);
-                    }
-
-                    /* cost breadown study */
-                    l2_req->set_milestone_time(system_time);
 
                     l2_req->reset();
+                    l2_req->set_serialization_begin_time(system_time);
+                    if (l2_req->use_read_ports()) {
+                        m_l2_read_req_schedule_q.push_back(entry);
+                    } else {
+                        m_l2_write_req_schedule_q.push_back(entry);
+                    }
+                    ++it_addr;
+                    continue;
+                    /* SPIN */
                 }
+
+                if (per_mem_instr_stats) {
+                    if (stats_enabled()) {
+                        per_mem_instr_stats->
+                            get_tentative_data(T_IDX_L2)->add_l2_ops(system_time - l2_req->serialization_begin_time());
+                        if (cache_req->sender == m_id) {
+                            per_mem_instr_stats->
+                                add_local_l2_cost_for_feed(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                        } else {
+                            per_mem_instr_stats->
+                                add_remote_l2_cost_for_feed(per_mem_instr_stats->get_tentative_data(T_IDX_L2)->total_cost());
+                        }
+                        per_mem_instr_stats->commit_tentative_data(T_IDX_L2);
+                    } else {
+                        per_mem_instr_stats->clear_tentative_data();
+                    }
+                }
+
+                if (l2_req->status() == CACHE_REQ_HIT) {
+                    if (!l2_victim || !l2_victim->data_dirty) {
+                        /* no need to writeback */
+
+                        if (stats_enabled() && l2_victim) {
+                            stats()->evict_at_l2();
+                            mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] invalidated a line of "
+                                      << l2_victim->start_maddr << " by an L2 feed" << endl;
+                        }
+
+                        dir_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                        dir_rep->sender = m_id;
+                        dir_rep->receiver = cache_req->sender;
+                        dir_rep->type = (cache_req->type == SH_REQ)? SH_REP : EX_REP;
+                        dir_rep->word_count = m_cfg.words_per_cache_line;
+                        dir_rep->maddr = start_maddr;
+                        dir_rep->data = l2_line->data;
+                        dir_rep->sent = false;
+                        dir_rep->per_mem_instr_stats = per_mem_instr_stats;
+                        dir_rep->birthtime = system_time;
+
+                        m_dir_rep_schedule_q.push_back(entry);
+
+                        entry->status = _DIR_SEND_DIR_REP;
+                        ++it_addr;
+                        continue;
+                    } else {
+                        /* need to writeback */
+
+                        if (stats_enabled() && l2_victim) {
+                            stats()->evict_at_l2();
+                            stats()->writeback_at_l2();
+                            mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] invalidated a line of "
+                                      << l2_victim->start_maddr << " by an L2 feed" << endl;
+                        }
+
+                        dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                        dramctrl_req->sender = m_id;
+                        dramctrl_req->receiver = m_dramctrl_location;
+                        dramctrl_req->maddr = l2_victim->start_maddr;
+                        dramctrl_req->dram_req = shared_ptr<dramRequest>(new dramRequest(l2_victim->start_maddr,
+                                                                                         DRAM_REQ_WRITE,
+                                                                                         m_cfg.words_per_cache_line,
+                                                                                         l2_victim->data));
+                        dramctrl_req->sent = false;
+                        dramctrl_req->birthtime = system_time;
+                        dramctrl_req->per_mem_instr_stats = per_mem_instr_stats;
+
+                        m_dramctrl_req_schedule_q.push_back(make_tuple(false/*local*/, entry));
+                        m_dramctrl_writeback_status[l2_victim->start_maddr] = entry;
+
+                        entry->status = _DIR_SEND_DRAMCTRL_WRITEBACK;
+                        entry->substatus = _DIR_SEND_DRAMCTRL_WRITEBACK__FROM_L2_FEED;
+                        ++it_addr;
+                        continue;
+
+                        /* TRANSITION */
+                    }
+
+                }  else {
+                    mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] trying to empty " << l2_victim->start_maddr
+                              << " to make space for " << start_maddr << endl;
+                    mh_log(4) << "    target's current directory : ";
+                    if (l2_victim_info->status == SHARED) {
+                        mh_log(4) << "SHARED ";
+                    } else {
+                        mh_log(4) << "EXCLUSIVE ";
+                    }
+                    for (set<uint32_t>::iterator it = l2_victim_info->dir.begin(); it != l2_victim_info->dir.end(); ++it) {
+                        mh_log(4) << *it << " ";
+                    }
+                    mh_log(4) << endl;
+
+
+                    empty_req = shared_ptr<coherenceMsg>(new coherenceMsg);
+
+                    empty_req->sender = m_id;
+                    empty_req->receiver = m_id;
+                    empty_req->type = EMPTY_REQ;
+                    empty_req->word_count = m_cfg.words_per_cache_line;
+                    empty_req->maddr = l2_victim->start_maddr;
+                    empty_req->data = dramctrl_rep->dram_req->read();
+                    empty_req->sent = false;
+                    empty_req->replacing_maddr = l2_req->maddr();
+                    empty_req->empty_req_for_shreq = (cache_req->type == SH_REQ);
+                    empty_req->new_requester = cache_req->sender;
+                    empty_req->is_empty_req_done = false;
+
+                    empty_req->per_mem_instr_stats = per_mem_instr_stats;
+                    empty_req->birthtime = system_time;
+
+                    m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(false/* local */, empty_req));
+
+                    entry->status = _DIR_EMPTY_VICTIM;
+                    ++it_addr;
+                    continue;
+
+                }
+            }
+
+        } else if (entry->status == _DIR_SEND_DRAMCTRL_WRITEBACK) {
+            if (!dramctrl_req->sent) {
+                m_dramctrl_req_schedule_q.push_back(make_tuple(false, entry)); /* mark as from local */
+                /* need to declare writebacking to prioritize (a separate data structure for simulation performance) */
+                m_dramctrl_writeback_status[l2_victim->start_maddr] =  entry;
                 ++it_addr;
                 continue;
+                /* SPIN */
             }
-        } else if (entry->status == _L2_WORK_DRAM_WRITEBACK_AND_UPDATE) {
-            if (dram_req->did_win_last_arbitration) {
 
-                /* cost breakdown study */
-                if (stats_enabled()) {
-                    stats()->add_dram_network_plus_serialization_cost(system_time - dram_req->milestone_time);
-                }
-                l2_req->set_milestone_time(system_time);
-
-                if (entry->net_msg_to_send) {
-                    entry->net_msg_to_send = shared_ptr<message_t>();
-                }
-                dram_req->did_win_last_arbitration = false;
-                mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] sent a DRAM writeback for "
-                          << dram_req->req->maddr() << endl;
-                l2_req->reset();
-                entry->status = _L2_WORK_UPDATE_L2_AND_SEND_REP;
-            } else if (m_dramctrl_location == m_id) {
-                m_to_dram_req_schedule_q.push_back(entry->dram_req);
-            } else {
-                m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
+            if (stats_enabled() && per_mem_instr_stats) {
+                per_mem_instr_stats->add_dramctrl_req_nas(system_time - dramctrl_req->birthtime);
             }
-            ++it_addr;
-            continue;
-        } else if (entry->status == _L2_WORK_DRAM_WRITEBACK_AND_REQUEST) {
-            if (dram_req->did_win_last_arbitration) {
 
-                /* cost breakdown study */
-                if (stats_enabled()) {
-                    stats()->add_dram_network_plus_serialization_cost(system_time - dram_req->milestone_time);
-                }
+            if (entry->substatus == _DIR_SEND_DRAMCTRL_WRITEBACK__FROM_L2_FEED) {
+                mh_log(4) << "[DRAMCTRL " << m_id << " @ " << system_time << " ] written back sent for address "
+                          << l2_victim->start_maddr << endl;
 
-                if (entry->net_msg_to_send) {
-                    entry->net_msg_to_send = shared_ptr<message_t>();
-                }
-                dram_req->did_win_last_arbitration = false;
+                dir_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                dir_rep->sender = m_id;
+                dir_rep->receiver = cache_req->sender;
+                dir_rep->type = (cache_req->type == SH_REQ)? SH_REP : EX_REP;
+                dir_rep->word_count = m_cfg.words_per_cache_line;
+                dir_rep->maddr = start_maddr;
+                dir_rep->data = l2_line->data;
+                dir_rep->sent = false;
+                dir_rep->per_mem_instr_stats = per_mem_instr_stats;
+                dir_rep->birthtime = system_time;
 
-                mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] sent a DRAM writeback for "
-                          << dram_req->req->maddr() << endl;
+                m_dir_rep_schedule_q.push_back(entry);
 
-                dram_req = shared_ptr<dramMsg>(new dramMsg);
-                dram_req->sender = m_id;
-                dram_req->receiver = m_dramctrl_location;
-                dram_req->req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
-                                                                        DRAM_REQ_READ,
-                                                                        m_cfg.words_per_cache_line));
-                dram_req->did_win_last_arbitration = false;
-
-                /* cost breakdown study */
-                dram_req->milestone_time = system_time;
-
-                entry->dram_req = dram_req;
-                if (m_dramctrl_location == m_id) {
-                    m_to_dram_req_schedule_q.push_back(entry->dram_req);
-                } else {
-                    entry->net_msg_to_send = shared_ptr<message_t>(new message_t);
-                    entry->net_msg_to_send->src = m_id;
-                    entry->net_msg_to_send->dst = m_dramctrl_location;
-                    entry->net_msg_to_send->type = MSG_DRAM_REQ;
-                    entry->net_msg_to_send->flit_count = get_flit_count (1 + m_cfg.address_size_in_bytes);
-                    entry->net_msg_to_send->content = dram_req;
-                    m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
-                }
-                entry->status = _L2_WORK_SEND_DRAM_FEED_REQ;
-            } else if (m_dramctrl_location == m_id) {
-                m_to_dram_req_schedule_q.push_back(entry->dram_req);
-            } else {
-                m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
-            }
-            ++it_addr;
-            continue;
-        } else if (entry->status == _L2_WORK_SEND_DRAM_FEED_REQ) {
-            if (dram_req->did_win_last_arbitration) {
-
-                if (entry->net_msg_to_send) {
-                    entry->net_msg_to_send = shared_ptr<message_t>();
-                }
-                dram_req->did_win_last_arbitration = false;
-
-                mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] sent a DRAM request for "
-                          << dram_req->req->maddr() << endl;
-
-                entry->status = _L2_WORK_WAIT_DRAM_FEED;
-            } else if (m_dramctrl_location == m_id) {
-                m_to_dram_req_schedule_q.push_back(entry->dram_req);
-            } else {
-                m_to_network_schedule_q[MSG_DRAM_REQ].push_back(entry->net_msg_to_send);
-            }
-            ++it_addr;
-            continue;
-        } else if (entry->status == _L2_WORK_WAIT_DRAM_FEED) {
-            if (dram_rep) {
-
-                /* cost breakdown study */
-                if (stats_enabled()) {
-                    stats()->add_dram_network_plus_serialization_cost(system_time - dram_rep->milestone_time);
-                }
-
-                mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] received a DRAM reply for "
-                          << dram_rep->req->maddr() << endl;
-                line_info = shared_ptr<directoryCoherenceInfo>(new directoryCoherenceInfo);
-                if (cache_req->type == EX_REQ || m_cfg.use_mesi) {
-                    line_info->status = WRITER;
-                } else {
-                    line_info->status = READERS;
-                }
-                line_info->directory.insert(cache_req->sender);
-                l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr,
-                                                                   CACHE_REQ_UPDATE,
-                                                                   m_cfg.words_per_cache_line,
-                                                                   dram_rep->req->read(), line_info));
-                l2_req->set_clean_write(true);
-
-                /* cost breakdown study */
-                l2_req->set_milestone_time(system_time);
-
-                entry->l2_req = l2_req;
-                entry->status = _L2_WORK_UPDATE_L2_AND_SEND_REP;
-            }
-            ++it_addr;
-            continue;
-        } else if (entry->status == _L2_WORK_SEND_DIRECTORY_REP) {
-            if (dir_rep->did_win_last_arbitration) {
-                dir_rep->did_win_last_arbitration = false;
-                if (stats_enabled()) {
-                    stats()->did_access_l2(!entry->did_miss_on_first);
-                }
-                mh_log(4) << "[DIRECTORY " << m_id << " @ " << system_time << " ] sent a directory reply to "
-                    << dir_rep->receiver << " for " << start_maddr << endl;
-                if (entry->using_space_for_evict) {
-                    ++m_l2_work_table_vacancy_evict;
-                } else if (entry->using_space_for_reply) {
-                    ++m_l2_work_table_vacancy_replies;
-                } else {
-                    ++m_l2_work_table_vacancy_shared;
-                }
-                m_l2_work_table.erase(it_addr++);
-                continue;
-            } else {
-                m_to_network_schedule_q[MSG_DIRECTORY_REQ_REP].push_back(entry->net_msg_to_send);
+                entry->status = _DIR_SEND_DIR_REP;
                 ++it_addr;
                 continue;
+            } else {
+                mh_log(4) << "[DRAMCTRL " << m_id << " @ " << system_time << " ] written back sent for address "
+                          << l2_req->maddr() << " for empty req " << endl;
+
+                empty_req->is_empty_req_done = true;
+
+                if (entry->using_empty_req_exclusive_space) {
+                    ++m_dir_table_vacancy_empty_req_exclusive;
+                } else {
+                    ++m_dir_table_vacancy_shared;
+                }
+
+                mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] vacancy empty req : " 
+                          << m_dir_table_vacancy_empty_req_exclusive
+                          << " vacancy shared : " << m_dir_table_vacancy_shared << endl;
+
+                m_dir_table.erase(it_addr++);
+                continue;
+                /* FINISH */
+
             }
+
+        } else if (entry->status == _DIR_EMPTY_VICTIM) {
+            if (!empty_req->sent) {
+                mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] an empty req "
+                          << "is trying to get in for address " << empty_req->maddr << endl;
+
+                m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(false/* local */, empty_req));
+                ++it_addr;
+                continue;
+                /* SPIN */
+            } 
+            if (!empty_req->is_empty_req_done) {
+                ++it_addr;
+                continue;
+                /* SPIN */
+            }
+            mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] finished emptying " << empty_req->maddr 
+                      << " for " << start_maddr << endl;
+            dir_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+            dir_rep->sender = m_id;
+            dir_rep->receiver = cache_req->sender;
+            dir_rep->type = (cache_req->type == SH_REQ)? SH_REP : EX_REP;
+            dir_rep->word_count = m_cfg.words_per_cache_line;
+            dir_rep->maddr = start_maddr;
+            dir_rep->data = dramctrl_rep->dram_req->read();
+            dir_rep->sent = false;
+            dir_rep->per_mem_instr_stats = per_mem_instr_stats;
+            dir_rep->birthtime = system_time;
+
+            m_dir_rep_schedule_q.push_back(entry);
+
+            entry->status = _DIR_SEND_DIR_REP;
+            ++it_addr;
+            continue;
+
+        } else if (entry->status == _DIR_SEND_DIR_REP) {
+            if (!dir_rep->sent) {
+                m_dir_rep_schedule_q.push_back(entry);
+                ++it_addr;
+                continue;
+                /* SPIN */
+            }
+
+            mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] sent a directory rep (" << dir_rep->type 
+                      << ") for " << dir_rep->maddr
+                      << " to " << dir_rep->receiver << endl;
+            
+            ++m_dir_table_vacancy_shared;
+            m_dir_table.erase(it_addr++);
+            continue;
+            /* FINISH */
+
+        } else if (entry->status == _DIR_SEND_DIR_REQ_AND_WAIT_CACHE_REP) {
+
+            if (cache_rep) {
+                mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] received a cache reply from " << cache_rep->sender
+                          << " for address " << cache_rep->maddr << endl;
+
+                mh_assert(entry->cached_dir.dir.count(cache_rep->sender));
+
+                /* directory speculation */
+                if (!m_cfg.use_dir_speculation) {
+                    /* must always update the directory when not using speculation */
+                    entry->need_to_writeback_dir = true;
+                }
+                if (entry->substatus == _DIR_SEND_DIR_REQ_AND_WAIT_CACHE_REP__REORDER &&
+                    cache_rep->sender != cache_req->sender) 
+                {
+                    /* didn't expect that other current sharers will send a cache reply. the speculative directory state is not correct, so need to update L2 */
+                    entry->need_to_writeback_dir = true;
+                }
+                if (entry->substatus == _DIR_SEND_DIR_REQ_AND_WAIT_CACHE_REP__COHERENCE &&
+                    cache_rep->type == FLUSH_REP)
+                {
+                    /* expecting a wbRep, but had a flushRep. The speculated directory has the current owner, so need to update this */
+                    entry->need_to_writeback_dir = true;
+                }
+
+                if (cache_rep->type == WB_REP) {
+                    mh_assert(entry->cached_dir.dir.size() == 1);
+                    entry->cached_dir.status = SHARED;
+                    entry->is_written_back = true;
+                    entry->cached_line = cache_rep->data;
+                } else {
+                    entry->cached_dir.dir.erase(cache_rep->sender);
+                    if (cache_rep->type == FLUSH_REP) {
+                        entry->is_written_back = true;
+                        entry->cached_dir.status = SHARED;
+                        entry->cached_line = cache_rep->data;
+                    }
+                }
+                cache_rep = shared_ptr<coherenceMsg>();
+            }
+
+            if (entry->substatus == _DIR_SEND_DIR_REQ_AND_WAIT_CACHE_REP__EMPTY_REQ) {
+                /* substatus empty req */
+                if (entry->cached_dir.dir.size() == 0) {
+                    if (per_mem_instr_stats) {
+                        per_mem_instr_stats->end_inv_for_evict(system_time, stats_enabled(), empty_req->new_requester == m_id /* local? */);
+                    }
+                    if (entry->is_written_back || l2_aux_info->is_replaced_line_dirty) {
+                        /* need to writeback */
+
+                        mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] evicting a line of "
+                                  << start_maddr << " by an empty req and invalidation and with writeback " << endl;
+                        if (stats_enabled()) {
+                            stats()->evict_at_l2();
+                            stats()->writeback_at_l2();
+                        }
+
+                        dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                        dramctrl_req->sender = m_id;
+                        dramctrl_req->receiver = m_dramctrl_location;
+                        dramctrl_req->maddr = start_maddr;
+
+                        dramctrl_req->dram_req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
+                                                                                         DRAM_REQ_WRITE,
+                                                                                         m_cfg.words_per_cache_line,
+                                                                                         (entry->is_written_back)? 
+                                                                                             entry->cached_line : 
+                                                                                             l2_aux_info->replaced_line));
+                        dramctrl_req->sent = false;
+                        dramctrl_req->birthtime = system_time;
+                        dramctrl_req->per_mem_instr_stats = per_mem_instr_stats;
+
+                        m_dramctrl_req_schedule_q.push_back(make_tuple(false/*local*/, entry));
+                        m_dramctrl_writeback_status[start_maddr] = entry;
+
+                        entry->status = _DIR_SEND_DRAMCTRL_WRITEBACK;
+                        entry->substatus = _DIR_SEND_DRAMCTRL_WRITEBACK__FROM_EVICT;
+                        ++it_addr;
+                        continue;
+                        /* TRANSITION */
+
+                    } else {
+                        mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] evicting a line of "
+                                  << start_maddr << " by an empty req and invalidation and without writeback " << endl;
+                        if (stats_enabled()) {
+                            stats()->evict_at_l2();
+                        }
+
+                        empty_req->is_empty_req_done = true;
+
+                        if (entry->using_empty_req_exclusive_space) {
+                            ++m_dir_table_vacancy_empty_req_exclusive;
+                        } else {
+                            ++m_dir_table_vacancy_shared;
+                        }
+
+                        mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] vacancy empty req : " 
+                                  << m_dir_table_vacancy_empty_req_exclusive
+                                  << " vacancy shared : " << m_dir_table_vacancy_shared << endl;
+
+                        m_dir_table.erase(it_addr++);
+                        continue;
+                        /* FINISH */
+                    }
+                }
+            } else {
+
+                bool is_done = false;
+
+                if (entry->substatus == _DIR_SEND_DIR_REQ_AND_WAIT_CACHE_REP__REORDER) {
+                    if (entry->cached_dir.dir.count(cache_req->sender) == 0) {
+                        if (per_mem_instr_stats) {
+                            per_mem_instr_stats->end_reorder(system_time, stats_enabled(), cache_req->sender == m_id /*local?*/);
+                        }
+                        mh_log(4) << "[Mem " << m_id << " @ " << system_time << " ] reordering finished " << endl;
+
+                        is_done = true;
+
+                    }
+                } else {
+                    /* coherence */
+                    if ((cache_req->type == SH_REQ && entry->cached_dir.status == SHARED) ||
+                        (cache_req->type == EX_REQ && entry->cached_dir.dir.empty()))
+                    {
+                        /* invalidation is finished */
+                        if (per_mem_instr_stats) {
+                            per_mem_instr_stats->end_inv_for_coherence(system_time, stats_enabled(), cache_req->sender == m_id /*local?*/);
+                        }
+                        mh_log(4) << "[Mem " << m_id << " @ " << system_time << " ] invalidation (for coherence) finished on " << start_maddr << endl;
+
+                        is_done = true;
+
+                    }
+                }
+
+                if (is_done) {
+                    if (entry->is_written_back || entry->need_to_writeback_dir) {
+
+                        shared_ptr<dirCoherenceInfo> new_info(new dirCoherenceInfo(entry->cached_dir));
+                        l2_req = 
+                            shared_ptr<cacheRequest>(new cacheRequest(start_maddr, 
+                                                                      CACHE_REQ_UPDATE,
+                                                                      (entry->is_written_back)? m_cfg.words_per_cache_line : 0,
+                                                                      entry->cached_line,
+                                                                      (entry->need_to_writeback_dir)? 
+                                                                      new_info : shared_ptr<dirCoherenceInfo>())
+                                                    );
+                        l2_req->set_serialization_begin_time(system_time);
+                        l2_req->set_unset_dirty_on_write(!entry->is_written_back);
+                        l2_req->set_claim(false);
+                        l2_req->set_evict(false);
+
+                        shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
+                        aux_info->core_id = cache_req->sender;
+                        aux_info->req_type = UPDATE_FOR_DIR_UPDATE_OR_WRITEBACK;
+                        l2_req->set_aux_info_for_coherence(aux_info);
+
+                        if (l2_req->use_read_ports()) {
+                            m_l2_read_req_schedule_q.push_back(entry);
+                        } else {
+                            m_l2_write_req_schedule_q.push_back(entry);
+                        }
+
+                        entry->status = _DIR_UPDATE_L2;
+                        entry->substatus = _DIR_UPDATE_L2__DIR_UPDATE_OR_WRITEBACK;
+                        ++it_addr;
+                        continue;
+                        /* TRANSITION */
+
+                    } else {
+                        dir_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                        dir_rep->sender = m_id;
+                        dir_rep->receiver = cache_req->sender;
+                        dir_rep->type = (cache_req->type == SH_REQ)? SH_REP : EX_REP;
+                        dir_rep->word_count = m_cfg.words_per_cache_line;
+                        dir_rep->maddr = start_maddr;
+                        dir_rep->data = l2_line->data;
+                        dir_rep->sent = false;
+                        dir_rep->per_mem_instr_stats = per_mem_instr_stats;
+                        dir_rep->birthtime = system_time;
+
+                        m_dir_rep_schedule_q.push_back(entry);
+
+                        entry->status = _DIR_SEND_DIR_REP;
+                        ++it_addr;
+                        continue;
+                        /* TRANSITION */
+                    }
+                }
+            }
+
+            if (!dir_reqs.empty()) {
+                if (dir_reqs.front()->sent) {
+                    mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] sent a directory request to " 
+                              << dir_reqs.front()->receiver 
+                              << " for address " << dir_reqs.front()->maddr << endl;
+                    dir_reqs.erase(dir_reqs.begin());
+                }
+                if (!dir_reqs.empty()) {
+                    m_dir_req_schedule_q.push_back(entry);
+                }
+            }
+
+            ++it_addr;
+            continue;
+            /* SPIN */
+
         }
     }
 
 }
 
-void privateSharedMSI::dram_work_table_update() {
-    for (toDRAMTable::iterator it_addr = m_dram_work_table.begin(); it_addr != m_dram_work_table.end(); ) {
-        shared_ptr<toDRAMEntry> entry = it_addr->second;
-        if (entry->dram_req->req->status() == DRAM_REQ_DONE) {
+void privateSharedMSI::update_dramctrl_work_table() {
 
-            /* cost breakdown study */
-            if (stats_enabled()) {
-                stats()->add_dram_offchip_network_plus_dram_action_cost(system_time - entry->milestone_time);
+    for (dramctrlTable::iterator it_addr = m_dramctrl_work_table.begin(); it_addr != m_dramctrl_work_table.end(); ) {
+        shared_ptr<dramctrlTableEntry>& entry = it_addr->second;
+        shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
+        shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
+        shared_ptr<privateSharedMSIStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
+
+        /* only reads are in the table */
+        if (dramctrl_req->dram_req->status() == DRAM_REQ_DONE) {
+
+            if (!dramctrl_rep) {
+                if (stats_enabled() && per_mem_instr_stats) {
+                    per_mem_instr_stats->add_dram_ops(system_time - entry->operation_begin_time);
+                }
+                dramctrl_rep = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                dramctrl_rep->sender = m_id;
+                dramctrl_rep->maddr = dramctrl_req->maddr;
+                dramctrl_rep->dram_req = dramctrl_req->dram_req;
+                dramctrl_rep->sent = false;
+                dramctrl_rep->birthtime = system_time;
+                dramctrl_rep->per_mem_instr_stats = per_mem_instr_stats;
             }
 
-            if (!entry->dram_rep) {
-                entry->dram_rep = shared_ptr<dramMsg>(new dramMsg);
-                entry->dram_rep->sender = m_id;
-                entry->dram_rep->req = entry->dram_req->req;
-                entry->dram_rep->did_win_last_arbitration = false;
-
-                /* cost breakdown study */
-                entry->dram_rep->milestone_time = system_time;
-
-            }
-            if (entry->dram_req->sender == m_id) {
-                /* guaranteed to have an active entry in l2 work table */
-                maddr_t start_maddr = entry->dram_req->req->maddr();
-                mh_assert(m_l2_work_table.count(start_maddr) && m_l2_work_table[start_maddr]->status == _L2_WORK_WAIT_DRAM_FEED);
-                m_l2_work_table[start_maddr]->dram_rep = entry->dram_rep;
-                mh_log(4) << "[DRAM " << m_id << " @ " << system_time << " ] has sent a dram rep for address " << entry->dram_rep->req->maddr()
-                          << " to core " << m_id << endl;
-                m_dram_work_table.erase(it_addr++);
+            if (!dramctrl_rep->sent) {
+                m_dramctrl_rep_schedule_q.push_back(entry);
+                ++it_addr;
                 continue;
             } else {
-                if (!entry->dram_rep->did_win_last_arbitration) {
-                    if (!entry->net_msg_to_send) {
-                        shared_ptr<message_t> new_msg(new message_t);
-                        new_msg->type = MSG_DRAM_REP;
-                        new_msg->src = m_id;
-                        new_msg->dst = entry->dram_req->sender;
-                        uint32_t data_size = m_cfg.words_per_cache_line * 4;
-                        new_msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + data_size);
-                        new_msg->content = entry->dram_rep;
-                        entry->net_msg_to_send = new_msg;
-                    }
-                    m_to_network_schedule_q[MSG_DRAM_REP].push_back(entry->net_msg_to_send);
-                } else {
-                    entry->dram_rep->did_win_last_arbitration = false;
-                    if (entry->net_msg_to_send) {
-                        entry->net_msg_to_send = shared_ptr<message_t>();
-                    }
-                    mh_log(4) << "[DRAM " << m_id << " @ " << system_time << " ] has sent a dram rep for address " 
-                              << entry->dram_rep->req->maddr() << " to core " << entry->dram_req->sender << endl;
-                    m_dram_work_table.erase(it_addr++);
-                    continue;
-                }
+                m_dramctrl_work_table.erase(it_addr++);
+                continue;
             }
+        } else {
+            ++it_addr;
+            continue;;
         }
-        ++it_addr;
+
     }
+
 }
 
 void privateSharedMSI::accept_incoming_messages() {
 
-    while (m_core_receive_queues[MSG_DIRECTORY_REQ_REP]->size()) {
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_DIRECTORY_REQ_REP]->front();
-        shared_ptr<coherenceMsg> cc_msg = static_pointer_cast<coherenceMsg>(msg->content);
-        if (cc_msg->did_win_last_arbitration) {
-            /* reset the flag for the next arbitration */
-            cc_msg->did_win_last_arbitration = false;
-            m_core_receive_queues[MSG_DIRECTORY_REQ_REP]->pop();
-            /* this pop is supposed to be done in the previous cycle. continue to the next cycle */
-           continue;
+    /* Directory requests and replies (from the network) */
+    while (m_core_receive_queues[MSG_DIR_REQ_REP]->size()) {
+        shared_ptr<message_t> msg = m_core_receive_queues[MSG_DIR_REQ_REP]->front();
+        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+        if (data_msg->type == SH_REP || data_msg->type == EX_REP) {
+            maddr_t msg_start_maddr = get_start_maddr_in_line(data_msg->maddr);
+            mh_assert(m_cache_table.count(msg_start_maddr) &&
+                      m_cache_table[msg_start_maddr]->status == _CACHE_WAIT_DIR_REP);
+            m_cache_table[msg_start_maddr]->dir_rep = data_msg;
+            m_core_receive_queues[MSG_DIR_REQ_REP]->pop();
         } else {
-
-            /* for debugging only - erase later */
-#if 1
-            if (++cc_msg->waited > 10000) {
-                mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] cannot receive a directory ";
-                mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] cannot receive a directory ";
-                if (cc_msg->type == SH_REP || cc_msg->type == EX_REP) {
-                    mh_log(4) << "reply (";
-                    mh_log(4) << "reply (";
-                } else {
-                    mh_log(4) << "request (";
-                    mh_log(4) << "request (";
-                } 
-                mh_log(4) << cc_msg->type 
-                    << ") for " << cc_msg->maddr  
-                    << " from " << msg->src << " cannot get in"  
-                    << " (table:size " << m_l1_work_table.size() << " ) ";
-                if (m_l1_work_table.count(cc_msg->maddr)) {
-                    mh_log(4) << "existing entry state : " << m_l1_work_table[cc_msg->maddr]->status << endl;
-                    mh_log(4) << "existing entry state : " << m_l1_work_table[cc_msg->maddr]->status << endl;
-                } else {
-                    mh_log(4) << "table full" << endl;
-                    mh_log(4) << "table full" << endl;
-                }
-            }
-            if (cc_msg->waited > 10100) {
-                throw err_bad_shmem_cfg("seems like a deadlock");
-            }
-#endif
-
-            if (cc_msg->type == SH_REP || cc_msg->type == EX_REP) {
-                /* guaranteed to accept */
-                mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] received a directory reply for " 
-                          << cc_msg->maddr << endl;
-                mh_assert(m_l1_work_table.count(cc_msg->maddr) && 
-                          m_l1_work_table[cc_msg->maddr]->status == _L1_WORK_WAIT_DIRECTORY_REP &&
-                          !m_l1_work_table[cc_msg->maddr]->dir_rep);
-                m_l1_work_table[cc_msg->maddr]->dir_rep = cc_msg;
-                m_core_receive_queues[MSG_DIRECTORY_REQ_REP]->pop();
-            } else {
-                /* directory -> cache requests */
-                m_to_cache_req_schedule_q.push_back(make_tuple(false, cc_msg));
-            }
-            break;
+            // dir req 
+            mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] a directory req from " << data_msg->sender 
+                      << " is trying to get in for address " << data_msg->maddr << endl;
+            m_new_cache_table_entry_schedule_q.push_back(make_tuple(FROM_REMOTE_DIR_REQ, data_msg));
         }
+        /* only one message a time (otherwise out-of-order reception may happen) */
+        break;
     }
 
+    /* Cache requests (from the network) */
     while (m_core_receive_queues[MSG_CACHE_REQ]->size()) {
         shared_ptr<message_t> msg = m_core_receive_queues[MSG_CACHE_REQ]->front();
-        shared_ptr<coherenceMsg> cc_msg = static_pointer_cast<coherenceMsg>(msg->content);
-        if (cc_msg->did_win_last_arbitration) {
-            /* reset the flag for the next arbitration */
-            cc_msg->did_win_last_arbitration = false;
-            m_core_receive_queues[MSG_CACHE_REQ]->pop();
-            /* this pop is supposed to be done in the previous cycle. continue to the next cycle */
-            continue;
-        } else {
-
-            /* erase later */
-#if 1
-            if (++cc_msg->waited > 10000) {
-                mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] cannot receive a cache req (" << cc_msg->type 
-                    << ") for " << cc_msg->maddr  
-                    << " from " << msg->src << " cannot get in"  
-                    << " (table:size " << m_l2_work_table.size() << " ) ";
-                mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] cannot receive a cache req (" << cc_msg->type 
-                    << ") for " << cc_msg->maddr  
-                    << " from " << msg->src << " cannot get in"  
-                    << " (table:size " << m_l2_work_table.size() << " ) ";
-                if (m_l2_work_table.count(cc_msg->maddr)) {
-                    mh_log(4) << "existing entry state : " << m_l2_work_table[cc_msg->maddr]->status << endl;
-                    mh_log(4) << "existing entry state : " << m_l2_work_table[cc_msg->maddr]->status << endl;
-                } else {
-                    mh_log(4) << "table full" << endl;
-                    mh_log(4) << "table full" << endl;
-                }
-            }
-            if (cc_msg->waited > 10100) {
-                throw err_bad_shmem_cfg("seems like a deadlock");
-            }
-#endif
-
-            m_to_directory_req_schedule_q.push_back(cc_msg);
-            break;
-        }
+        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+        m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(true/* is remote */, data_msg));
+        mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] a cache req from " << data_msg->sender 
+                  << " is trying to get in for address " << data_msg->maddr << endl;
+        break;
     }
-
+        
+    /* Cache replies (from the network) */
     while (m_core_receive_queues[MSG_CACHE_REP]->size()) {
         shared_ptr<message_t> msg = m_core_receive_queues[MSG_CACHE_REP]->front();
-        shared_ptr<coherenceMsg> cc_msg = static_pointer_cast<coherenceMsg>(msg->content);
-        if (cc_msg->did_win_last_arbitration) {
-            /* reset the flag for the next arbitration */
-            cc_msg->did_win_last_arbitration = false;
-            m_core_receive_queues[MSG_CACHE_REP]->pop();
-            /* this pop is supposed to be done in the previous cycle. continue to the next cycle */
-            continue;
-        } else {
-
-            /* erase later */
-#if 1
-            if (++cc_msg->waited > 10000) {
-                mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] cannot receive a cache rep (" << cc_msg->type 
-                    << ") for " << cc_msg->maddr  
-                    << " from " << msg->src << " cannot get in"  
-                    << " (table:size " << m_l2_work_table.size() << " ) ";
-                mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] cannot receive a cache rep (" << cc_msg->type 
-                    << ") for " << cc_msg->maddr  
-                    << " from " << msg->src << " cannot get in"  
-                    << " (table:size " << m_l2_work_table.size() << " ) ";
-                if (m_l2_work_table.count(cc_msg->maddr)) {
-                    mh_log(4) << "existing entry state : " << m_l2_work_table[cc_msg->maddr]->status << endl;
-                    mh_log(4) << "existing entry state : " << m_l2_work_table[cc_msg->maddr]->status << endl;
-                } else {
-                    mh_log(4) << "table full" << endl;
-                    mh_log(4) << "table full" << endl;
-                }
-            }
-            if (cc_msg->waited > 10100) {
-                throw err_bad_shmem_cfg("seems like a deadlock");
-            }
-#endif
-
-            m_to_directory_rep_schedule_q.push_back(cc_msg);
-            break;
-        }
+        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+        m_new_dir_table_entry_for_cache_rep_schedule_q.push_back(make_tuple(true/* is remote */, data_msg));
+        mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] a cache rep from " << data_msg->sender 
+                  << " is trying to get in for address " << data_msg->maddr << endl;
+        break;
     }
 
-    while (m_core_receive_queues[MSG_DRAM_REQ]->size()) {
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAM_REQ]->front();
-        shared_ptr<dramMsg> dram_msg = static_pointer_cast<dramMsg>(msg->content);
-        if (dram_msg->did_win_last_arbitration) {
-            dram_msg->did_win_last_arbitration = false;
-            m_core_receive_queues[MSG_DRAM_REQ]->pop();
-            continue;
-        } else {
-            m_to_dram_req_schedule_q.push_back(dram_msg);
-            break;
-        }
+    /* DRAMCTRL requests and replies from the network */
+    if (m_core_receive_queues[MSG_DRAMCTRL_REQ]->size()) {
+        shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAMCTRL_REQ]->front();
+        shared_ptr<dramctrlMsg> dram_msg = static_pointer_cast<dramctrlMsg>(msg->content);
+        m_dramctrl_req_schedule_q.push_back(make_tuple(true/* is remote */, dram_msg));
     }
 
-    if (m_core_receive_queues[MSG_DRAM_REP]->size()) {
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAM_REP]->front();
-        shared_ptr<dramMsg> dram_msg = static_pointer_cast<dramMsg>(msg->content);
-        maddr_t start_maddr = dram_msg->req->maddr(); /* always access by a cache line */
-        /* always for a read */
-        mh_assert(m_l2_work_table.count(start_maddr) > 0 && m_l2_work_table[start_maddr]->status == _L2_WORK_WAIT_DRAM_FEED);
-        m_l2_work_table[start_maddr]->dram_rep = dram_msg;
-        m_core_receive_queues[MSG_DRAM_REP]->pop();
+    if (m_core_receive_queues[MSG_DRAMCTRL_REP]->size()) {
+        /* note: no replies for DRAM writes */
+        shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAMCTRL_REP]->front();
+        shared_ptr<dramctrlMsg> dramctrl_msg = static_pointer_cast<dramctrlMsg>(msg->content);
+        maddr_t start_maddr = dramctrl_msg->dram_req->maddr(); /* always access by a cache line */
+        mh_assert(m_dir_table.count(start_maddr) > 0 &&
+                  m_dir_table[dramctrl_msg->maddr]->status == _DIR_WAIT_DRAMCTRL_REP);
+        m_dir_table[start_maddr]->dramctrl_rep = dramctrl_msg;
+        m_core_receive_queues[MSG_DRAMCTRL_REP]->pop();
     }
 
 }
 
 void privateSharedMSI::schedule_requests() {
 
-    /* random arbitration */
-    boost::function<int(int)> rr_fn = bind(&random_gen::random_range, ran, _1);
+    static boost::function<int(int)> rr_fn = bind(&random_gen::random_range, ran, _1);
 
+    /*****************************************/
+    /* scheduling for sending cache requests */
+    /*****************************************/
 
-    /* 1 : arbitrates requests from the core. */
-    /*     the core is assumed to have a finite number of access ports to the memory */
-    /*     this ports are hold by accepted requests until it is eventually served    */
+    random_shuffle(m_cache_req_schedule_q.begin(), m_cache_req_schedule_q.end(), rr_fn);
+    while (m_cache_req_schedule_q.size()) {
+        shared_ptr<cacheTableEntry>& entry = m_cache_req_schedule_q.front();
+        shared_ptr<coherenceMsg>& cache_req = entry->cache_req;
+
+        if (m_id == cache_req->receiver) {
+            m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(false, cache_req));
+        } else if (m_core_send_queues[MSG_CACHE_REQ]->available()) {
+            shared_ptr<message_t> msg(new message_t);
+            msg->src = m_id;
+            msg->dst = cache_req->receiver;
+            msg->type = MSG_CACHE_REQ;
+            msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
+            msg->content = cache_req;
+            m_core_send_queues[MSG_CACHE_REQ]->push_back(msg);
+            cache_req->sent = true;
+
+            mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] cache request sent " << m_id << " -> " 
+                      << msg->dst << " num flits " << msg->flit_count << endl;
+
+        }
+
+        m_cache_req_schedule_q.erase(m_cache_req_schedule_q.begin());
+    }
+
+    /****************************************/
+    /* scheduling for sending cache replies */
+    /****************************************/
+
+    random_shuffle(m_cache_rep_schedule_q.begin(), m_cache_rep_schedule_q.end(), rr_fn);
+    while (m_cache_rep_schedule_q.size()) {
+        shared_ptr<cacheTableEntry>& entry = m_cache_rep_schedule_q.front();
+        shared_ptr<coherenceMsg>& cache_rep = entry->cache_rep;
+
+        if (m_id == cache_rep->receiver) {
+            m_new_dir_table_entry_for_cache_rep_schedule_q.push_back(make_tuple(false, cache_rep));
+        } else if (m_core_send_queues[MSG_CACHE_REP]->available()) {
+            shared_ptr<message_t> msg(new message_t);
+            msg->src = m_id;
+            msg->dst = cache_rep->receiver;
+            msg->type = MSG_CACHE_REP;
+            msg->flit_count = get_flit_count(1 + cache_rep->word_count * 4);
+            msg->content = cache_rep;
+            m_core_send_queues[MSG_CACHE_REP]->push_back(msg);
+            cache_rep->sent = true;
+
+            mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] cache reply sent " << m_id << " -> " 
+                      << msg->dst << " num flits " << msg->flit_count << endl;
+
+        }
+
+        m_cache_rep_schedule_q.erase(m_cache_rep_schedule_q.begin());
+
+    }
+
+    /*********************************************/
+    /* scheduling for sending directory requests */
+    /*********************************************/
+
+    random_shuffle(m_dir_req_schedule_q.begin(), m_dir_req_schedule_q.end(), rr_fn);
+    while (m_dir_req_schedule_q.size()) {
+        shared_ptr<dirTableEntry>& entry = m_dir_req_schedule_q.front();
+        shared_ptr<coherenceMsg>& dir_req = entry->dir_reqs.front();
+
+        if (m_id == dir_req->receiver) {
+            m_new_cache_table_entry_schedule_q.push_back(make_tuple(FROM_LOCAL_DIR_REQ, dir_req));
+        } else if (m_core_send_queues[MSG_DIR_REQ_REP]->available()) {
+            shared_ptr<message_t> msg(new message_t);
+            msg->src = m_id;
+            msg->dst = dir_req->receiver;
+            msg->type = MSG_DIR_REQ_REP;
+            msg->flit_count = get_flit_count(1 + m_cfg.words_per_cache_line * 4);
+            msg->content = dir_req;
+            m_core_send_queues[MSG_DIR_REQ_REP]->push_back(msg);
+            dir_req->sent = true;
+
+            mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] directory request sent " << m_id << " -> " 
+                      << msg->dst << " num flits " << msg->flit_count << endl;
+        }
+
+        m_dir_req_schedule_q.erase(m_dir_req_schedule_q.begin());
+    }
+
+    /********************************************/
+    /* scheduling for sending directory replies */
+    /********************************************/
+
+    random_shuffle(m_dir_rep_schedule_q.begin(), m_dir_rep_schedule_q.end(), rr_fn);
+    while (m_dir_rep_schedule_q.size()) {
+        shared_ptr<dirTableEntry>& entry = m_dir_rep_schedule_q.front();
+        shared_ptr<coherenceMsg>& dir_rep = entry->dir_rep;
+
+        if (m_id == dir_rep->receiver) {
+            mh_assert(m_cache_table.count(dir_rep->maddr));
+            mh_assert(m_cache_table[dir_rep->maddr]->status == _CACHE_WAIT_DIR_REP);
+            m_cache_table[dir_rep->maddr]->dir_rep = dir_rep;
+            dir_rep->sent = true;
+
+            if (stats_enabled()) {
+                if (dir_rep->type == SH_REP) {
+                    stats()->shrep_sent(m_id != dir_rep->receiver);
+                } else {
+                    stats()->exrep_sent(m_id != dir_rep->receiver);
+                }
+            }
+
+        } else if (m_core_send_queues[MSG_DIR_REQ_REP]->available()) {
+            shared_ptr<message_t> msg(new message_t);
+            msg->src = m_id;
+            msg->dst = dir_rep->receiver;
+            msg->type = MSG_DIR_REQ_REP;
+            msg->flit_count = get_flit_count(1 + dir_rep->word_count * 4);
+            msg->content = dir_rep;
+            m_core_send_queues[MSG_DIR_REQ_REP]->push_back(msg);
+            dir_rep->sent = true;
+
+            mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] directory reply sent " << m_id << " -> " 
+                      << msg->dst << " num flits " << msg->flit_count << endl;
+
+            if (stats_enabled()) {
+                if (dir_rep->type == SH_REP) {
+                    stats()->shrep_sent(m_id != dir_rep->receiver);
+                } else {
+                    stats()->exrep_sent(m_id != dir_rep->receiver);
+                }
+            }
+
+        }
+
+        m_dir_rep_schedule_q.erase(m_dir_rep_schedule_q.begin());
+
+    }
+
+    /*****************************/
+    /* scheduling for core ports */
+    /*****************************/
+
     random_shuffle(m_core_port_schedule_q.begin(), m_core_port_schedule_q.end(), rr_fn);
-    uint32_t count = 0;
+    uint32_t requested = 0;
     while (m_core_port_schedule_q.size()) {
         shared_ptr<memoryRequest> req = m_core_port_schedule_q.front();
-        if (count < m_available_core_ports) {
-            m_to_cache_req_schedule_q.push_back(make_tuple(true, req));
-            ++count;
+        if (requested < m_available_core_ports) {
+            m_new_cache_table_entry_schedule_q.push_back(make_tuple(FROM_LOCAL_CORE_REQ, req));
+            ++requested;
         } else {
             set_req_status(req, REQ_RETRY);
         }
         m_core_port_schedule_q.erase(m_core_port_schedule_q.begin());
     }
-    
-    /* 2 : arbitrates l1 work table for new entries */
-    random_shuffle(m_to_cache_req_schedule_q.begin(), m_to_cache_req_schedule_q.end(), rr_fn);
-    while (m_to_cache_req_schedule_q.size()) {
-        bool is_core_req = m_to_cache_req_schedule_q.front().get<0>();
-        if (is_core_req) {
-            shared_ptr<memoryRequest> req = 
-                static_pointer_cast<memoryRequest>(m_to_cache_req_schedule_q.front().get<1>());
-            maddr_t start_maddr = get_start_maddr_in_line(req->maddr());
-            if (m_l1_work_table.count(start_maddr) || m_l1_work_table_vacancy == 0 || m_available_core_ports == 0) {
-                mh_log(4) << "you have to retry" << endl;
-                set_req_status(req, REQ_RETRY);
 
-                m_to_cache_req_schedule_q.erase(m_to_cache_req_schedule_q.begin());
+    /**********************************/
+    /* schedule for cache table space */
+    /**********************************/
+
+    random_shuffle(m_new_cache_table_entry_schedule_q.begin(), m_new_cache_table_entry_schedule_q.end(), rr_fn);
+    while (m_new_cache_table_entry_schedule_q.size()) {
+        cacheTableEntrySrc_t source = m_new_cache_table_entry_schedule_q.front().get<0>();
+        if (source == FROM_LOCAL_CORE_REQ) {
+
+            shared_ptr<memoryRequest> core_req = static_pointer_cast<memoryRequest>(m_new_cache_table_entry_schedule_q.front().get<1>());
+            shared_ptr<privateSharedMSIStatsPerMemInstr> per_mem_instr_stats = 
+                (core_req->per_mem_instr_runtime_info())?
+                    static_pointer_cast<privateSharedMSIStatsPerMemInstr>(*(core_req->per_mem_instr_runtime_info()))
+                :
+                    shared_ptr<privateSharedMSIStatsPerMemInstr>();
+            maddr_t start_maddr = get_start_maddr_in_line(core_req->maddr());
+            if (m_cache_table.count(start_maddr) || m_cache_table_vacancy == 0 || m_available_core_ports == 0) {
+                set_req_status(core_req, REQ_RETRY);
+                m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
                 continue;
             }
-
             if (stats_enabled()) {
-                stats()->add_memory_subsystem_serialization_cost(system_time - req->serialization_begin_time());
+                if (per_mem_instr_stats) {
+                    per_mem_instr_stats->add_mem_srz(system_time - per_mem_instr_stats->serialization_begin_time_at_current_core());
+                }
+                if (core_req->is_read()) {
+                    stats()->new_read_instr_at_l1();
+                } else {
+                    stats()->new_write_instr_at_l1();
+                }
             }
 
-            shared_ptr<toL1Entry> new_entry(new toL1Entry);
-            new_entry->status = _L1_WORK_READ_L1;
-            new_entry->core_req = req;
+            shared_ptr<catRequest> cat_req(new catRequest(core_req->maddr(), m_id));
+            cat_req->set_serialization_begin_time(system_time);
 
-            shared_ptr<cacheRequest> l1_req
-                (new cacheRequest(req->maddr(), 
-                                  req->is_read()? CACHE_REQ_READ : CACHE_REQ_WRITE,
-                                  req->word_count(),
-                                  req->is_read()? shared_array<uint32_t>() : req->data()));
+            shared_ptr<cacheRequest> l1_req(new cacheRequest(core_req->maddr(),
+                                                             core_req->is_read()? CACHE_REQ_READ : CACHE_REQ_WRITE,
+                                                             core_req->word_count(),
+                                                             core_req->is_read()? shared_array<uint32_t>() : core_req->data()));
+            l1_req->set_serialization_begin_time(system_time);
+            l1_req->set_unset_dirty_on_write(false);
+            l1_req->set_claim(false);
+            l1_req->set_evict(false);
+            l1_req->set_aux_info_for_coherence
+                (shared_ptr<cacheAuxInfoForCoherence>(new cacheAuxInfoForCoherence(core_req->is_read()? LOCAL_READ : LOCAL_WRITE)));
 
-            /* cost breakdown study */
-            l1_req->set_milestone_time(system_time);
-
-            new_entry->l1_req = l1_req;
-           
-            shared_ptr<catRequest> cat_req(new catRequest(req->maddr(), m_id));
-
-            /* cost breakdown study */
-            cat_req->set_milestone_time(UINT64_MAX);
-
+            shared_ptr<cacheTableEntry> new_entry(new cacheTableEntry);
+            new_entry->core_req =  core_req;
             new_entry->cat_req = cat_req;
-
+            new_entry->l1_req = l1_req;
             new_entry->dir_req = shared_ptr<coherenceMsg>();
             new_entry->dir_rep = shared_ptr<coherenceMsg>();
             new_entry->cache_req = shared_ptr<coherenceMsg>();
             new_entry->cache_rep = shared_ptr<coherenceMsg>();
-            new_entry->requested_time = system_time;
-            new_entry->net_msg_to_send = shared_ptr<message_t>();
 
-            set_req_status(req, REQ_WAIT);
+            new_entry->per_mem_instr_stats = per_mem_instr_stats;
+
+            new_entry->status = _CACHE_CAT_AND_L1_FOR_LOCAL;
+
+            m_cat_req_schedule_q.push_back(new_entry);
+            if (l1_req->use_read_ports()) {
+                m_l1_read_req_schedule_q.push_back(new_entry);
+            } else {
+                m_l1_write_req_schedule_q.push_back(new_entry);
+            }
+
+            m_cache_table[start_maddr] = new_entry;
+            --m_cache_table_vacancy;
+
             --m_available_core_ports;
 
-            m_l1_work_table[start_maddr] = new_entry;
-            --m_l1_work_table_vacancy;
+            m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
 
-            m_to_cache_req_schedule_q.erase(m_to_cache_req_schedule_q.begin());
+            mh_log(4) << "[Mem " << m_id << " @ " << system_time 
+                      << " ] A core request on " << core_req->maddr() << " got into the table " << endl;
 
         } else {
-            /* a request from directory */
-            shared_ptr<coherenceMsg> msg = 
-                static_pointer_cast<coherenceMsg>(m_to_cache_req_schedule_q.front().get<1>());
-            maddr_t start_maddr = msg->maddr;
-            if (m_l1_work_table.count(start_maddr)) {
-                /* discard this directory request if currency core request gets or got a miss */
-                if ((m_l1_work_table[start_maddr]->status != _L1_WORK_READ_L1) &&
-                    !(m_l1_work_table[start_maddr]->dir_rep))
+
+            /* a directory request from the local or a remote directory */
+
+            shared_ptr<coherenceMsg> dir_req = static_pointer_cast<coherenceMsg>(m_new_cache_table_entry_schedule_q.front().get<1>());
+            mh_assert(get_start_maddr_in_line(dir_req->maddr) == dir_req->maddr);
+            if (m_cache_table.count(dir_req->maddr)) {
+                
+                /* A directory request must not block a directory reply for which the existing entry created by a local request */
+                /* on the same cache line is waiting. */
+                /* This could happen when a cache line is evicted from cache before a directory request arrives, */
+                /* and a following local access on the cache line gets a miss and sends a cache request. */
+                /* Therefore, if the existing entry gets a miss, then the directory request can and must be discarded. */
+                /* If the entry's state is not _CACHE_CAT_AND_L1_FOR_LOCAL, it gets a miss. */
+                /* And if it didn't receive a directory reply yet, it IS waiting for a directory reply that comes after */
+                /* the current directory request */
+
+                if ((m_cache_table[dir_req->maddr]->status != _CACHE_CAT_AND_L1_FOR_LOCAL) &&
+                    !(m_cache_table[dir_req->maddr]->dir_rep))
                 {
-                    msg->did_win_last_arbitration = true; /* will be discarded from the network queue */
-                    mh_log(4) << "[L1 " << m_id  << " @ " << system_time << " ] discarded a directory request (" << msg->type 
-                        << ") for address " << msg->maddr << " (state: " << m_l1_work_table[start_maddr]->status << " ) " << endl;
+                    /* consumed */
+                    mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] discarded a directory request (" << dir_req->type
+                              << ") for address " << dir_req->maddr << " fron " << dir_req->sender
+                              << " (state: " << m_cache_table[dir_req->maddr]->status 
+                              << " ) " << endl;
+                    if (source == FROM_REMOTE_DIR_REQ) {
+                        m_core_receive_queues[MSG_DIR_REQ_REP]->pop();
+                    } else {
+                        dir_req->sent = true;
+                    }
+                    
+                    if (stats_enabled()) {
+                        if (dir_req->type == INV_REQ) {
+                            stats()->invreq_sent(m_id != dir_req->receiver);
+                        } else if (dir_req->type == FLUSH_REQ) {
+                            stats()->flushreq_sent(m_id != dir_req->receiver);
+                        } else if (dir_req->type == WB_REQ) {
+                            stats()->wbreq_sent(m_id != dir_req->receiver);
+                        }
+                    }
+
                 }
-            } else if (m_l1_work_table_vacancy) {
-                shared_ptr<toL1Entry> new_entry(new toL1Entry);
-                new_entry->status = _L1_WORK_READ_L1;
-                new_entry->core_req = shared_ptr<memoryRequest>();
 
-                mh_log(4) << "[L1 " << m_id  << " @ " << system_time << " ] received a directory request (" << msg->type 
-                    << ") for address " << msg->maddr << endl;
+                /* If the existing entry is testing the L1, or if it alrady received a directory reply and is trying to */
+                /* update its L1, the directory request must not be discarded and taken after the current entry finishes */
+                m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
+                continue;
 
-                shared_ptr<cacheRequest> l1_req;
-                if (msg->type == WB_REQ) {
-                    shared_ptr<cacheCoherenceInfo> new_info(new cacheCoherenceInfo);
-                    new_info->status = SHARED;
-                    new_info->directory_home = msg->sender;
-                    l1_req = shared_ptr<cacheRequest>(new cacheRequest(msg->maddr, CACHE_REQ_UPDATE,
-                                                                       0, shared_array<uint32_t>(), new_info));
+            } else if (m_cache_table_vacancy == 0) {
+                //mh_log(4) << "[Mem " << m_id << " @ " << system_time << " ] a directory request on " << dir_req->maddr
+                //          << " could not get info the table for the table is full." << endl;
+                m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
+                continue;
+            }
+
+            mh_log(4) << "[L1 " << m_id  << " @ " << system_time << " ] received a directory request (" << dir_req->type 
+                      << ") for address " << dir_req->maddr << endl;
+
+            if (stats_enabled()) {
+                if (dir_req->type == INV_REQ) {
+                    stats()->invreq_sent(m_id != dir_req->receiver);
+                } else if (dir_req->type == FLUSH_REQ) {
+                    stats()->flushreq_sent(m_id != dir_req->receiver);
+                } else if (dir_req->type == WB_REQ) {
+                    stats()->wbreq_sent(m_id != dir_req->receiver);
+                }
+            }
+
+            shared_ptr<cacheRequest> l1_req;
+            if (dir_req->type == WB_REQ) {
+                shared_ptr<cacheCoherenceInfo> new_info(new cacheCoherenceInfo);
+                new_info->status = SHARED;
+                new_info->home = dir_req->sender;
+                l1_req = shared_ptr<cacheRequest>(new cacheRequest(dir_req->maddr, CACHE_REQ_UPDATE,
+                                                                   0, shared_array<uint32_t>(), new_info));
+                l1_req->set_aux_info_for_coherence
+                    (shared_ptr<cacheAuxInfoForCoherence>(new cacheAuxInfoForCoherence(UPDATE_BY_WBREQ)));
+            } else {
+                /* invReq or flushReq */
+                l1_req = shared_ptr<cacheRequest>(new cacheRequest(dir_req->maddr, CACHE_REQ_INVALIDATE));
+                if (dir_req->type == INV_REQ) {
+                    l1_req->set_aux_info_for_coherence
+                        (shared_ptr<cacheAuxInfoForCoherence>(new cacheAuxInfoForCoherence(INVALIDATE_BY_INVREQ)));
                 } else {
-                    /* invReq or flushReq */
-                    l1_req = shared_ptr<cacheRequest>(new cacheRequest(msg->maddr, CACHE_REQ_INVALIDATE));
+                    l1_req->set_aux_info_for_coherence
+                        (shared_ptr<cacheAuxInfoForCoherence>(new cacheAuxInfoForCoherence(INVALIDATE_BY_FLUSHREQ)));
                 }
-                l1_req->set_reserve(false);
-
-                /* cost breakdown study */
-                /* directory request cost is all considered as invalidation cost */
-                l1_req->set_milestone_time(UINT64_MAX); /* will not count */
-
-                new_entry->l1_req = l1_req;
-
-                new_entry->cat_req = shared_ptr<catRequest>();
-                new_entry->dir_req = msg;
-                new_entry->dir_rep = shared_ptr<coherenceMsg>();
-                new_entry->cache_req = shared_ptr<coherenceMsg>();
-                new_entry->cache_req = shared_ptr<coherenceMsg>();
-                new_entry->net_msg_to_send = shared_ptr<message_t>();
-
-                msg->did_win_last_arbitration = true;
-
-                m_l1_work_table[start_maddr] = new_entry;
-                --m_l1_work_table_vacancy;
             }
-            m_to_cache_req_schedule_q.erase(m_to_cache_req_schedule_q.begin());
+            l1_req->set_serialization_begin_time(system_time);
+            l1_req->set_unset_dirty_on_write(false);
+            l1_req->set_claim(false);
+            l1_req->set_evict(false);
+
+            shared_ptr<cacheTableEntry> new_entry(new cacheTableEntry);
+            new_entry->core_req =  shared_ptr<memoryRequest>();
+            new_entry->cat_req = shared_ptr<catRequest>();
+            new_entry->l1_req = l1_req;
+            new_entry->dir_req = dir_req;
+            new_entry->dir_rep = shared_ptr<coherenceMsg>();
+            new_entry->cache_req = shared_ptr<coherenceMsg>();
+            new_entry->cache_rep = shared_ptr<coherenceMsg>();
+
+            new_entry->per_mem_instr_stats = shared_ptr<privateSharedMSIStatsPerMemInstr>();
+
+            new_entry->status = _CACHE_L1_FOR_DIR_REQ;
+
+            if (l1_req->use_read_ports()) {
+                m_l1_read_req_schedule_q.push_back(new_entry);
+            } else {
+                m_l1_write_req_schedule_q.push_back(new_entry);
+            }
+
+            m_cache_table[dir_req->maddr] = new_entry;
+            --m_cache_table_vacancy;
+
+            if (source == FROM_LOCAL_DIR_REQ) {
+                dir_req->sent = true;
+            } else {
+                m_core_receive_queues[MSG_DIR_REQ_REP]->pop();
+            }
+            m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
+            continue;
+
         }
     }
-    m_to_cache_req_schedule_q.clear();
 
-    random_shuffle(m_to_directory_rep_schedule_q.begin(), m_to_directory_rep_schedule_q.end(), rr_fn);
-    while (m_to_directory_rep_schedule_q.size()) {
-        shared_ptr<coherenceMsg> msg = m_to_directory_rep_schedule_q.front();
-        maddr_t start_maddr = msg->maddr;
-        if (m_l2_work_table.count(start_maddr)) {
-            if (m_l2_work_table[start_maddr]->accept_cache_replies && !m_l2_work_table[start_maddr]->cache_rep) {
-                mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache reply (" << msg->type 
-                          << ") from " << msg->sender << " for address " << msg->maddr 
-                          << " (state: " << m_l2_work_table[start_maddr]->status << ")" << endl;
-                m_l2_work_table[start_maddr]->cache_rep = msg;
-                msg->did_win_last_arbitration = true;
+    /* cache replies is prior to other requests */
+    random_shuffle(m_new_dir_table_entry_for_cache_rep_schedule_q.begin(), m_new_dir_table_entry_for_cache_rep_schedule_q.end(), rr_fn);
+    while (m_new_dir_table_entry_for_cache_rep_schedule_q.size()) {
+        bool is_remote = m_new_dir_table_entry_for_cache_rep_schedule_q.front().get<0>();
+        shared_ptr<coherenceMsg> cache_rep = m_new_dir_table_entry_for_cache_rep_schedule_q.front().get<1>();
+        mh_assert(get_start_maddr_in_line(cache_rep->maddr) == cache_rep->maddr);
+        if (m_dir_table.count(cache_rep->maddr)) {
+            if (m_dir_table[cache_rep->maddr]->status == _DIR_SEND_DIR_REQ_AND_WAIT_CACHE_REP &&
+                !m_dir_table[cache_rep->maddr]->cache_rep) 
+            {
+                m_dir_table[cache_rep->maddr]->cache_rep = cache_rep;
+                if (is_remote) {
+                    m_core_receive_queues[MSG_CACHE_REP]->pop();
+                } else {
+                    cache_rep->sent = true;
+                }
+                if (stats_enabled()) {
+                    if (cache_rep->type == INV_REP) {
+                        stats()->invrep_sent(is_remote);
+                    } else if (cache_rep->type == FLUSH_REP) {
+                        stats()->flushrep_sent(is_remote);
+                    } else {
+                        stats()->wbrep_sent(is_remote);
+                    }
+                }
+
             }
-        } else if (m_l2_work_table_vacancy_replies) {
-            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache reply from " << msg->sender 
-                << " for address " << msg->maddr << " (new entry - reserved) " << endl;
-            shared_ptr<toL2Entry> new_entry(new toL2Entry);
-            new_entry->accept_cache_replies = false;
-            new_entry->using_space_for_evict = false;
-            new_entry->using_space_for_reply = true;
-            new_entry->status = _L2_WORK_READ_L2;
-            new_entry->did_miss_on_first = false;
-            new_entry->cache_rep = msg;
+            m_new_dir_table_entry_for_cache_rep_schedule_q.erase(m_new_dir_table_entry_for_cache_rep_schedule_q.begin());
+            continue;
+        } else if (m_dir_table_vacancy_cache_rep_exclusive == 0 && m_dir_table_vacancy_shared == 0)  {
+            m_new_dir_table_entry_for_cache_rep_schedule_q.erase(m_new_dir_table_entry_for_cache_rep_schedule_q.begin());
+            continue;
+        } else {
+            bool use_exclusive = m_dir_table_vacancy_cache_rep_exclusive > 0;
 
-            shared_ptr<cacheRequest> l2_req(new cacheRequest(msg->maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
-            l2_req->set_reserve(true);
-            new_entry->l2_req = l2_req;
+            if (stats_enabled()) {
+                if (cache_rep->type == INV_REP) {
+                    stats()->invrep_sent(is_remote);
+                } else if (cache_rep->type == FLUSH_REP) {
+                    stats()->flushrep_sent(is_remote);
+                } else {
+                    stats()->wbrep_sent(is_remote);
+                }
+            }
 
-            /* cost breakdown study */
-            l2_req->set_milestone_time(UINT64_MAX);
+            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache reply from " << cache_rep->sender 
+                      << " for address " << cache_rep->maddr << " (new entry) " << endl;
 
+            shared_ptr<cacheRequest> l2_req;
+            l2_req = shared_ptr<cacheRequest>(new cacheRequest(cache_rep->maddr, CACHE_REQ_UPDATE,
+                                                               (cache_rep->type == INV_REP)? 0 : m_cfg.words_per_cache_line,
+                                                               (cache_rep->type == INV_REP)? shared_array<uint32_t>() : cache_rep->data
+                                                              ));
+            l2_req->set_serialization_begin_time(UINT64_MAX);
+            l2_req->set_unset_dirty_on_write(false);
+            l2_req->set_claim(false);
+            l2_req->set_evict(false);
+
+            shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
+            aux_info->core_id = cache_rep->sender;
+            if (cache_rep->type == WB_REP) {
+                aux_info->req_type = UPDATE_FOR_WBREP;
+            } else {
+                aux_info->req_type = UPDATE_FOR_INVREP_OR_FLUSHREP;
+            }
+            l2_req->set_aux_info_for_coherence(aux_info);
+
+            shared_ptr<dirTableEntry> new_entry(new dirTableEntry);
             new_entry->cache_req = shared_ptr<coherenceMsg>();
-            new_entry->dir_rep = shared_ptr<coherenceMsg>();
-            new_entry->dram_req = shared_ptr<dramMsg>();
-            new_entry->dram_rep = shared_ptr<dramMsg>();
-
-            msg->did_win_last_arbitration = true;
-
-            m_l2_work_table[start_maddr] = new_entry;
-            --m_l2_work_table_vacancy_replies;
-
-        } else if (m_l2_work_table_vacancy_shared) {
-            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache reply from " << msg->sender 
-                      << " for address " << msg->maddr << " (new entry) " << endl;
-            shared_ptr<toL2Entry> new_entry(new toL2Entry);
-            new_entry->accept_cache_replies = false;
-            new_entry->using_space_for_evict = false;
-            new_entry->using_space_for_reply = false;
-            new_entry->status = _L2_WORK_READ_L2;
-            new_entry->did_miss_on_first = false;
-            new_entry->cache_rep = msg;
-
-            shared_ptr<cacheRequest> l2_req(new cacheRequest(msg->maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
-            l2_req->set_reserve(true);
             new_entry->l2_req = l2_req;
-
-            /* cost breakdown study */
-            l2_req->set_milestone_time(UINT64_MAX);
-
-            new_entry->cache_req = shared_ptr<coherenceMsg>();
+            new_entry->cache_rep = cache_rep;
             new_entry->dir_rep = shared_ptr<coherenceMsg>();
-            new_entry->dram_req = shared_ptr<dramMsg>();
-            new_entry->dram_rep = shared_ptr<dramMsg>();
+            new_entry->dramctrl_req = shared_ptr<dramctrlMsg>();
+            new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
+            new_entry->empty_req = shared_ptr<coherenceMsg>();
+            new_entry->is_written_back = false;
+            new_entry->need_to_writeback_dir = false;
+            if (use_exclusive) {
+                --m_dir_table_vacancy_cache_rep_exclusive;
+                new_entry->using_cache_rep_exclusive_space = true;
+                new_entry->using_empty_req_exclusive_space = false;
+            } else {
+                --m_dir_table_vacancy_shared;
+                new_entry->using_cache_rep_exclusive_space = false;
+                new_entry->using_empty_req_exclusive_space = false;
+            }
+            new_entry->per_mem_instr_stats = cache_rep->per_mem_instr_stats;
 
-            msg->did_win_last_arbitration = true;
+            new_entry->status = _DIR_L2_FOR_CACHE_REP;
 
-            m_l2_work_table[start_maddr] = new_entry;
-            --m_l2_work_table_vacancy_shared;
+            if (l2_req->use_read_ports()) {
+                m_l2_read_req_schedule_q.push_back(new_entry);
+            } else {
+                m_l2_write_req_schedule_q.push_back(new_entry);
+            }
+
+            m_dir_table[cache_rep->maddr] = new_entry;
+
+            if (is_remote) {
+                m_core_receive_queues[MSG_CACHE_REP]->pop();
+            } else {
+                cache_rep->sent = true;
+            }
+
+            m_new_dir_table_entry_for_cache_rep_schedule_q.erase(m_new_dir_table_entry_for_cache_rep_schedule_q.begin());
+            continue;
+            
         }
-        m_to_directory_rep_schedule_q.erase(m_to_directory_rep_schedule_q.begin());
+                
     }
-    random_shuffle(m_to_directory_req_schedule_q.begin(), m_to_directory_req_schedule_q.end(), rr_fn);
-    while (m_to_directory_req_schedule_q.size()) {
-        shared_ptr<coherenceMsg> msg = m_to_directory_req_schedule_q.front();
-        maddr_t start_maddr = msg->maddr;
-        if (m_l2_work_table.count(start_maddr)) {
-            /* need to finish the previous request first */
-            m_to_directory_req_schedule_q.erase(m_to_directory_req_schedule_q.begin());
+
+    /* cache requests/empty requests scheuling */
+    random_shuffle(m_new_dir_table_entry_for_req_schedule_q.begin(), m_new_dir_table_entry_for_req_schedule_q.end(), rr_fn);
+    while (m_new_dir_table_entry_for_req_schedule_q.size()) {
+        bool is_remote = m_new_dir_table_entry_for_req_schedule_q.front().get<0>();
+        shared_ptr<coherenceMsg> req = static_pointer_cast<coherenceMsg>(m_new_dir_table_entry_for_req_schedule_q.front().get<1>());
+
+        mh_assert(get_start_maddr_in_line(req->maddr) == req->maddr);
+
+        if (m_dir_table.count(req->maddr)) {
+            /* need to finish the previous entry first */
+            m_new_dir_table_entry_for_req_schedule_q.erase(m_new_dir_table_entry_for_req_schedule_q.begin());
+            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache request (" << req->type 
+                      << ") from " << req->sender << " for address " << req->maddr << " but has an existing entry " << endl;
             continue;
         }
-        if (msg->type == EMPTY_REQ && m_l2_work_table_vacancy_evict) {
-            /* the hardware needs a dedicated space for invalidating L1 caches in order to evict a line */
-            /* otherwise, it may deadlock when all entries are trying to evict a line but there's no space in the table */
-            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache request from " << msg->sender 
-                      << " for address " << msg->maddr << " (new entry) " << endl;
-            shared_ptr<toL2Entry> new_entry(new toL2Entry);
-            new_entry->accept_cache_replies = true;
-            new_entry->using_space_for_evict = true;
-            new_entry->using_space_for_reply = false;
-            new_entry->status = _L2_WORK_READ_L2;
-            new_entry->did_miss_on_first = false;
-            new_entry->cache_req = msg;
 
-            shared_ptr<cacheRequest> l2_req(new cacheRequest(msg->maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
-            l2_req->set_reserve(false); /* if it misses, no need to bring the line in */
-            new_entry->l2_req = l2_req;
+        bool use_exclusive = (req->type == EMPTY_REQ && m_dir_table_vacancy_empty_req_exclusive > 0);
+        if (m_dir_table_vacancy_shared == 0 && !use_exclusive) {
+            /* no space */
+            m_new_dir_table_entry_for_req_schedule_q.erase(m_new_dir_table_entry_for_req_schedule_q.begin());
+            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache request (" << req->type 
+                      << ") from " << req->sender << " for address " << req->maddr << " but has no space " << endl;
+            continue;
+        }
 
-            new_entry->cache_rep = shared_ptr<coherenceMsg>();
-            new_entry->dir_rep = shared_ptr<coherenceMsg>();
-            new_entry->dram_req = shared_ptr<dramMsg>();
-            new_entry->dram_rep = shared_ptr<dramMsg>();
+        if (is_remote) {
+            m_core_receive_queues[MSG_CACHE_REQ]->pop();
+        } else {
+            req->sent = true;
+        }
+            
+        mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache request (" << req->type 
+                  << ") from " << req->sender << " for address " << req->maddr << " (new entry) " << endl;
 
-            msg->did_win_last_arbitration = true;
+        shared_ptr<cacheRequest> l2_req;
+        shared_ptr<dirTableEntry> new_entry(new dirTableEntry);
 
-            /* cost breakdown study */
-            l2_req->set_milestone_time(UINT64_MAX);
+        if (req->type == EMPTY_REQ) {
 
-            m_l2_work_table[start_maddr] = new_entry;
-            --m_l2_work_table_vacancy_evict;
-        } else if (m_l2_work_table_vacancy_shared) {
-            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache request from " << msg->sender 
-                      << " for address " << msg->maddr << " (new entry) " << endl;
-            shared_ptr<toL2Entry> new_entry(new toL2Entry);
-            new_entry->accept_cache_replies = false;
-            new_entry->using_space_for_evict = false;
-            new_entry->using_space_for_reply = false;
-            new_entry->status = _L2_WORK_READ_L2;
-            new_entry->cache_req = msg;
-
-            shared_ptr<cacheRequest> l2_req(new cacheRequest(msg->maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
-            l2_req->set_reserve(true);
-            new_entry->l2_req = l2_req;
-
-            new_entry->cache_rep = shared_ptr<coherenceMsg>();
-            new_entry->dir_rep = shared_ptr<coherenceMsg>();
-            new_entry->dram_req = shared_ptr<dramMsg>();
-            new_entry->dram_rep = shared_ptr<dramMsg>();
-
-            msg->did_win_last_arbitration = true;
-
-            /* cost breakdown study */
-            l2_req->set_milestone_time(system_time);
-            if (msg->type != EMPTY_REQ && stats_enabled()) {
-                stats()->add_l2_network_plus_serialization_cost(system_time - msg->milestone_time);
+            if (stats_enabled()) {
+                stats()->empty_req_sent();
             }
 
-            m_l2_work_table[start_maddr] = new_entry;
-            --m_l2_work_table_vacancy_shared;
-        }
-        m_to_directory_req_schedule_q.erase(m_to_directory_req_schedule_q.begin());
-    }
-    
-    /* 4 : arbitrate inputs to dram work table */
-    random_shuffle(m_to_dram_req_schedule_q.begin(), m_to_dram_req_schedule_q.end(), rr_fn);
-    while (m_to_dram_req_schedule_q.size()) {
-        mh_assert(m_dramctrl);
-        shared_ptr<dramMsg> msg = m_to_dram_req_schedule_q.front();
-        if (m_dramctrl->available()) {
-            if (msg->req->is_read()) {
+            shared_ptr<dirCoherenceInfo> new_info(new dirCoherenceInfo);
+            new_info->status = (req->empty_req_for_shreq)? SHARED : EXCLUSIVE;
+            new_info->locked = false;
+            new_info->dir.insert(req->new_requester);
 
-                /* cost breakdown study */
-                if (stats_enabled()) {
-                    stats()->add_dram_network_plus_serialization_cost(system_time - msg->milestone_time);
+            l2_req = shared_ptr<cacheRequest>(new cacheRequest(req->maddr, CACHE_REQ_UPDATE,
+                                                               m_cfg.words_per_cache_line, req->data, new_info));
+            l2_req->set_serialization_begin_time(system_time);
+            l2_req->set_unset_dirty_on_write(req->empty_req_for_shreq);
+            l2_req->set_claim(false);
+            l2_req->set_evict(false);
+
+            shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
+            aux_info->core_id = req->new_requester;
+            aux_info->req_type = UPDATE_FOR_EMPTYREQ;
+            aux_info->replacing_maddr = req->replacing_maddr;
+            aux_info->empty_req_for_shreq = req->empty_req_for_shreq;
+            aux_info->is_replaced_line_dirty = false;
+            l2_req->set_aux_info_for_coherence(aux_info);
+
+            new_entry->cache_req = shared_ptr<coherenceMsg>();
+            new_entry->empty_req = req;
+
+            new_entry->status = _DIR_L2_FOR_EMPTY_REQ;
+            new_entry->per_mem_instr_stats = req->per_mem_instr_stats;
+
+            if (l2_req->use_read_ports()) {
+                m_l2_read_req_schedule_q.push_back(new_entry);
+            } else {
+                m_l2_write_req_schedule_q.push_back(new_entry);
+            }
+
+            if (stats_enabled() && req->per_mem_instr_stats) {
+                req->per_mem_instr_stats->add_empty_req_srz(system_time - req->birthtime, req->new_requester == m_id/*local?*/);
+            }
+
+        } else {
+
+            if (stats_enabled()) {
+                if (req->type == SH_REQ) {
+                    stats()->shreq_sent(is_remote);
+                } else {
+                    stats()->exreq_sent(is_remote);
+                }
+            }
+
+            l2_req = shared_ptr<cacheRequest>(new cacheRequest(req->maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
+            l2_req->set_serialization_begin_time(system_time);
+            l2_req->set_unset_dirty_on_write(false);
+            l2_req->set_claim(false);
+            l2_req->set_evict(false);
+
+            shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
+            aux_info->core_id = req->sender;
+            aux_info->req_type = (req->type == SH_REQ)? READ_FOR_SHREQ : READ_FOR_EXREQ;
+            l2_req->set_aux_info_for_coherence(aux_info);
+
+            new_entry->cache_req = req;
+            new_entry->empty_req = shared_ptr<coherenceMsg>();
+
+            new_entry->status = _DIR_L2_FOR_CACHE_REQ;
+            new_entry->per_mem_instr_stats = req->per_mem_instr_stats;
+
+            if (l2_req->use_read_ports()) {
+                m_l2_read_req_schedule_q.push_back(new_entry);
+            } else {
+                m_l2_write_req_schedule_q.push_back(new_entry);
+            }
+
+            if (stats_enabled()) {
+                if (req->per_mem_instr_stats) {
+                    req->per_mem_instr_stats->add_cache_req_nas(system_time - req->birthtime);
+                }
+                if (req->type == SH_REQ) {
+                    stats()->new_read_instr_at_l2();
+                } else {
+                    stats()->new_write_instr_at_l2();
+                }
+            }
+
+        }
+
+        new_entry->l2_req = l2_req;
+        new_entry->cache_rep = shared_ptr<coherenceMsg>();
+        new_entry->dir_rep = shared_ptr<coherenceMsg>();
+        new_entry->dramctrl_req = shared_ptr<dramctrlMsg>();
+        new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
+        new_entry->is_written_back = false;
+        new_entry->need_to_writeback_dir = false;
+
+        if (use_exclusive) {
+            --m_dir_table_vacancy_empty_req_exclusive;
+            new_entry->using_cache_rep_exclusive_space = false;
+            new_entry->using_empty_req_exclusive_space = true;
+        } else {
+            --m_dir_table_vacancy_shared;
+            new_entry->using_cache_rep_exclusive_space = false;
+            new_entry->using_empty_req_exclusive_space = false;
+        }
+
+        if (l2_req->use_read_ports()) {
+            m_l2_read_req_schedule_q.push_back(new_entry);
+        } else {
+            m_l2_write_req_schedule_q.push_back(new_entry);
+        }
+
+        m_dir_table[req->maddr] = new_entry;
+
+        m_new_dir_table_entry_for_req_schedule_q.erase(m_new_dir_table_entry_for_req_schedule_q.begin());
+        continue;
+
+    }
+
+    /************************************/
+    /* scheduling for dramctrl requests */
+    /************************************/
+    
+    random_shuffle(m_dramctrl_req_schedule_q.begin(), m_dramctrl_req_schedule_q.end(), rr_fn);
+    while (m_dramctrl_req_schedule_q.size()) {
+        bool is_remote = m_dramctrl_req_schedule_q.front().get<0>();
+        shared_ptr<dirTableEntry> entry = shared_ptr<dirTableEntry>();
+        shared_ptr<dramctrlMsg> dramctrl_msg = shared_ptr<dramctrlMsg>();
+        if (is_remote) {
+            dramctrl_msg = static_pointer_cast<dramctrlMsg>(m_dramctrl_req_schedule_q.front().get<1>());
+        } else {
+            entry = static_pointer_cast<dirTableEntry>(m_dramctrl_req_schedule_q.front().get<1>());
+            dramctrl_msg = entry->dramctrl_req;
+            if (m_dramctrl_writeback_status.count(entry->dramctrl_req->maddr) && 
+                m_dramctrl_writeback_status[entry->dramctrl_req->maddr] != entry) 
+            {
+                mh_log(4) << "[DRAMCTRL " << m_id << " @ " << system_time 
+                          << " ] A local DRAM read request on " << dramctrl_msg->maddr << " blocked by a writeback " << endl;
+                
+                m_dramctrl_req_schedule_q.erase(m_dramctrl_req_schedule_q.begin());
+                continue;
+            }
+        }
+
+        if (m_dramctrl_location == m_id) {
+            if (m_dramctrl->available()) {
+                if (m_dramctrl_work_table.count(dramctrl_msg->maddr)) {
+                    m_dramctrl_req_schedule_q.erase(m_dramctrl_req_schedule_q.begin());
+                    continue;
+                }
+                if (dramctrl_msg->dram_req->is_read()) {
+                    shared_ptr<dramctrlTableEntry> new_entry(new dramctrlTableEntry);
+                    new_entry->dramctrl_req = dramctrl_msg;
+                    new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
+                    new_entry->per_mem_instr_stats = dramctrl_msg->per_mem_instr_stats;
+                    new_entry->operation_begin_time= system_time;
+
+                    m_dramctrl_work_table[dramctrl_msg->maddr] = new_entry;
+
+                    if (is_remote && stats_enabled() && new_entry->per_mem_instr_stats) {
+                        new_entry->per_mem_instr_stats->add_dramctrl_req_nas(system_time - dramctrl_msg->birthtime);
+                    }
+                    mh_log(4) << "[DRAMCTRL " << m_id << " @ " << system_time 
+                              << " ] A DRAM read request on " << dramctrl_msg->maddr << " got into the table " << endl;
+                } else {
+                    /* if write, nothing else to do */
+                    mh_log(4) << "[DRAMCTRL " << m_id << " @ " << system_time 
+                              << " ] A DRAM write request on " << dramctrl_msg->maddr << " left for DRAM " << endl;
                 }
 
-                mh_assert(!m_dram_work_table.count(msg->req->maddr()));
-                shared_ptr<toDRAMEntry> new_entry(new toDRAMEntry);
-                new_entry->dram_req = msg;
-                new_entry->dram_rep = shared_ptr<dramMsg>();
-                new_entry->net_msg_to_send = shared_ptr<message_t>();
+                m_dramctrl->request(dramctrl_msg->dram_req);
 
-                /* cost breakdown study */
-                new_entry->milestone_time = system_time;
+                if (stats_enabled()) {
+                    stats()->add_dram_action();
+                }
 
-                m_dram_work_table[msg->req->maddr()] = new_entry;
-            }
-                /* if write, make a request and done */
-            m_dramctrl->request(msg->req);
-            msg->did_win_last_arbitration = true;
-        }
-        m_to_dram_req_schedule_q.erase(m_to_dram_req_schedule_q.begin());
-    }
+                dramctrl_msg->sent = true;
 
-    /* try make cache requests */
-    for (toL1Table::iterator it_addr = m_l1_work_table.begin(); it_addr != m_l1_work_table.end(); ++it_addr) {
-        maddr_t start_maddr = it_addr->first;
-        shared_ptr<toL1Entry> entry = it_addr->second;
-        if (entry->l1_req && entry->l1_req->status() == CACHE_REQ_NEW) {
-            /* not requested yet */
-            shared_ptr<cacheRequest> l1_req = entry->l1_req;
-            if (l1_req->request_type() == CACHE_REQ_WRITE || 
-                l1_req->request_type() == CACHE_REQ_UPDATE ||
-                l1_req->request_type() == CACHE_REQ_WRITE) {
-                m_l1_write_req_schedule_q.push_back(l1_req);
+                if (is_remote) {
+                    m_core_receive_queues[MSG_DRAMCTRL_REQ]->pop();
+                }
+
+                m_dramctrl_req_schedule_q.erase(m_dramctrl_req_schedule_q.begin());
+
             } else {
-                m_l1_read_req_schedule_q.push_back(l1_req);
+                break;
             }
-        }
-        if (entry->cat_req && entry->cat_req->status() == CAT_REQ_NEW) {
-                m_cat_req_schedule_q.push_back(entry->cat_req);
-        }
-    }
+        } else {
+            if (m_core_send_queues[MSG_DRAMCTRL_REQ]->available()) {
 
-    for (toL2Table::iterator it_addr = m_l2_work_table.begin(); it_addr != m_l2_work_table.end(); ++it_addr) {
-        maddr_t start_maddr = it_addr->first;
-        shared_ptr<toL2Entry> entry = it_addr->second;
-        if (entry->l2_req && entry->l2_req->status() == CACHE_REQ_NEW) {
-            shared_ptr<cacheRequest> l2_req = entry->l2_req;
-            if (l2_req->request_type() == CACHE_REQ_WRITE || 
-                l2_req->request_type() == CACHE_REQ_UPDATE || 
-                l2_req->request_type() == CACHE_REQ_WRITE) {
-                m_l2_write_req_schedule_q.push_back(l2_req);
+                shared_ptr<message_t> msg(new message_t);
+                msg->src = m_id;
+                msg->dst = m_dramctrl_location;
+                msg->type = MSG_DRAMCTRL_REQ;
+                msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
+                msg->content = dramctrl_msg;
+
+                m_core_send_queues[MSG_DRAMCTRL_REQ]->push_back(msg);
+
+                dramctrl_msg->sent = true;
+
+                mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] DRAMCTRL req sent " 
+                          << m_id << " -> " << msg->dst << " num flits " << msg->flit_count << endl;
+                m_dramctrl_req_schedule_q.erase(m_dramctrl_req_schedule_q.begin());
+
             } else {
-                m_l2_read_req_schedule_q.push_back(l2_req);
+                break;
             }
         }
     }
+    m_dramctrl_req_schedule_q.clear();
+    m_dramctrl_writeback_status.clear();
 
-    /* cat requests */
+    /**********************/
+    /* scheduling for CAT */
+    /**********************/
+
     random_shuffle(m_cat_req_schedule_q.begin(), m_cat_req_schedule_q.end(), rr_fn);
     while (m_cat->available() && m_cat_req_schedule_q.size()) {
-        m_cat->request(m_cat_req_schedule_q.front());
+        shared_ptr<cacheTableEntry> entry = m_cat_req_schedule_q.front();
+        shared_ptr<catRequest> cat_req = entry->cat_req;
 
-        /* cost breakdown study */
-        if (m_cat_req_schedule_q.front()->milestone_time() != UINT64_MAX) {
-            if (stats_enabled()) {
-                stats()->add_cat_serialization_cost(system_time - m_cat_req_schedule_q.front()->milestone_time());
+        if (cat_req->serialization_begin_time() == UINT64_MAX) {
+            cat_req->set_operation_begin_time(UINT64_MAX);
+        } else {
+            cat_req->set_operation_begin_time(system_time);
+            if (stats_enabled() && entry->per_mem_instr_stats) {
+                entry->per_mem_instr_stats->get_tentative_data(T_IDX_CAT)->add_cat_srz
+                    (system_time - cat_req->serialization_begin_time());
             }
-            m_cat_req_schedule_q.front()->set_milestone_time(system_time);
         }
 
+        m_cat->request(cat_req);
+
+        if (stats_enabled()) {
+            stats()->add_cat_action();
+        }
         m_cat_req_schedule_q.erase(m_cat_req_schedule_q.begin());
     }
     m_cat_req_schedule_q.clear();
 
-    /* l1 read requests */
+    /*********************/
+    /* scheduling for L1 */
+    /*********************/
+
     random_shuffle(m_l1_read_req_schedule_q.begin(), m_l1_read_req_schedule_q.end(), rr_fn);
     while (m_l1->read_port_available() && m_l1_read_req_schedule_q.size()) {
-        m_l1->request(m_l1_read_req_schedule_q.front());
+        shared_ptr<cacheTableEntry>& entry = m_l1_read_req_schedule_q.front();
+        shared_ptr<cacheRequest>& l1_req = entry->l1_req;
 
-        /* cost breakdown study */
+        if (l1_req->serialization_begin_time() == UINT64_MAX) {
+            l1_req->set_operation_begin_time(UINT64_MAX);
+        } else {
+            l1_req->set_operation_begin_time(system_time);
+            if (stats_enabled() && entry->per_mem_instr_stats) {
+                entry->per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_srz(system_time - l1_req->serialization_begin_time());
+            }
+        }
         if (stats_enabled()) {
             stats()->add_l1_action();
         }
-        if (m_l1_read_req_schedule_q.front()->milestone_time() != UINT64_MAX) {
-            if (stats_enabled()) {
-                stats()->add_l1_serialization_cost(system_time - m_l1_read_req_schedule_q.front()->milestone_time());
-            }
-            m_l1_read_req_schedule_q.front()->set_milestone_time(system_time);
-        }
+        
+        m_l1->request(l1_req);
 
+        if (stats_enabled()) {
+            stats()->add_l1_action();
+        }
         m_l1_read_req_schedule_q.erase(m_l1_read_req_schedule_q.begin());
     }
     m_l1_read_req_schedule_q.clear();
-    
-    /* l1 write requests */
+
     random_shuffle(m_l1_write_req_schedule_q.begin(), m_l1_write_req_schedule_q.end(), rr_fn);
     while (m_l1->write_port_available() && m_l1_write_req_schedule_q.size()) {
-        m_l1->request(m_l1_write_req_schedule_q.front());
+        shared_ptr<cacheTableEntry>& entry = m_l1_write_req_schedule_q.front();
+        shared_ptr<cacheRequest>& l1_req = entry->l1_req;
 
-        /* cost breakdown study */
+        if (l1_req->serialization_begin_time() == UINT64_MAX) {
+            l1_req->set_operation_begin_time(UINT64_MAX);
+        } else {
+            l1_req->set_operation_begin_time(system_time);
+            if (stats_enabled() && entry->per_mem_instr_stats) {
+                entry->per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_srz(system_time - l1_req->serialization_begin_time());
+            }
+        }
         if (stats_enabled()) {
             stats()->add_l1_action();
         }
-        if (m_l1_write_req_schedule_q.front()->milestone_time() != UINT64_MAX) {
-            if (stats_enabled()) {
-                stats()->add_l1_serialization_cost(system_time - m_l1_write_req_schedule_q.front()->milestone_time());
-            }
-            m_l1_write_req_schedule_q.front()->set_milestone_time(system_time);
-        }
+        
+        m_l1->request(l1_req);
 
+        if (stats_enabled()) {
+            stats()->add_l1_action();
+        }
         m_l1_write_req_schedule_q.erase(m_l1_write_req_schedule_q.begin());
     }
     m_l1_write_req_schedule_q.clear();
+   
+    /*********************/
+    /* scheduling for L2 */
+    /*********************/
 
-    /* l2 read requests */
-    set<maddr_t> issued_start_maddrs; 
     random_shuffle(m_l2_read_req_schedule_q.begin(), m_l2_read_req_schedule_q.end(), rr_fn);
     while (m_l2->read_port_available() && m_l2_read_req_schedule_q.size()) {
-        shared_ptr<cacheRequest> req = m_l2_read_req_schedule_q.front();
-        maddr_t start_maddr = get_start_maddr_in_line(req->maddr());
-        if (issued_start_maddrs.count(start_maddr) == 0) {
-            m_l2->request(req);
-            issued_start_maddrs.insert(start_maddr);
+        shared_ptr<dirTableEntry>& entry = m_l2_read_req_schedule_q.front();
+        shared_ptr<cacheRequest>& l2_req = entry->l2_req;
 
-            /* cost breakdown study */
-            if (stats_enabled()) {
-                stats()->add_l2_action();
-            }
-            if (req->milestone_time() != UINT64_MAX) {
-                if (stats_enabled()) {
-                    stats()->add_l2_network_plus_serialization_cost(system_time - req->milestone_time());
-                }
-                req->set_milestone_time(system_time);
-            }
-
+        if (m_l2_writeback_status.count(get_start_maddr_in_line(l2_req->maddr())) > 0) {
+            m_l2_read_req_schedule_q.erase(m_l2_read_req_schedule_q.begin());
+            continue;
         }
-        m_l2_read_req_schedule_q.erase(m_l2_read_req_schedule_q.begin());
-    }
-    issued_start_maddrs.clear();
-    m_l2_read_req_schedule_q.clear();
 
-    /* l2 write requests */
-    random_shuffle(m_l2_write_req_schedule_q.begin(), m_l2_write_req_schedule_q.end(), rr_fn);
-    while (m_l2->write_port_available() && m_l2_write_req_schedule_q.size()) {
-        shared_ptr<cacheRequest> req = m_l2_write_req_schedule_q.front();
-        maddr_t start_maddr = get_start_maddr_in_line(req->maddr());
-        m_l2->request(req);
-        
-        /* cost breakdown study */
+        if (l2_req->serialization_begin_time() == UINT64_MAX) {
+            l2_req->set_operation_begin_time(UINT64_MAX);
+        } else {
+            l2_req->set_operation_begin_time(system_time);
+            if (stats_enabled() && entry->per_mem_instr_stats) {
+                entry->per_mem_instr_stats->get_tentative_data(T_IDX_L2)->add_l2_srz(system_time - l2_req->serialization_begin_time());
+            }
+        }
         if (stats_enabled()) {
             stats()->add_l2_action();
         }
-        if (req->milestone_time() != UINT64_MAX) {
-            if (stats_enabled()) {
-                stats()->add_l2_network_plus_serialization_cost(system_time - req->milestone_time());
-            }
-            req->set_milestone_time(system_time);
+        
+        m_l2->request(l2_req);
+
+        if (stats_enabled()) {
+            stats()->add_l2_action();
+        }
+        m_l2_read_req_schedule_q.erase(m_l2_read_req_schedule_q.begin());
+    }
+    m_l2_read_req_schedule_q.clear();
+
+    random_shuffle(m_l2_write_req_schedule_q.begin(), m_l2_write_req_schedule_q.end(), rr_fn);
+    while (m_l2->write_port_available() && m_l2_write_req_schedule_q.size()) {
+        shared_ptr<dirTableEntry>& entry = m_l2_write_req_schedule_q.front();
+        shared_ptr<cacheRequest>& l2_req = entry->l2_req;
+
+        if (m_l2_writeback_status.count(get_start_maddr_in_line(l2_req->maddr())) > 0 &&
+            m_l2_writeback_status[get_start_maddr_in_line(l2_req->maddr())] != entry)
+        {
+            m_l2_write_req_schedule_q.erase(m_l2_write_req_schedule_q.begin());
+            continue;
         }
 
+        if (l2_req->serialization_begin_time() == UINT64_MAX) {
+            l2_req->set_operation_begin_time(UINT64_MAX);
+        } else {
+            l2_req->set_operation_begin_time(system_time);
+            if (stats_enabled() && entry->per_mem_instr_stats) {
+                entry->per_mem_instr_stats->get_tentative_data(T_IDX_L2)->add_l2_srz(system_time - l2_req->serialization_begin_time());
+            }
+        }
+        if (stats_enabled()) {
+            stats()->add_l2_action();
+        }
+        
+        m_l2->request(l2_req);
+
+        if (stats_enabled()) {
+            stats()->add_l2_action();
+        }
         m_l2_write_req_schedule_q.erase(m_l2_write_req_schedule_q.begin());
     }
     m_l2_write_req_schedule_q.clear();
 
-    /* networks */
-    for (uint32_t it_channel = 0; it_channel < NUM_MSG_TYPES; ++it_channel) {
-        random_shuffle(m_to_network_schedule_q[it_channel].begin(), m_to_network_schedule_q[it_channel].end(), rr_fn);
-        while (m_to_network_schedule_q[it_channel].size()) {
-            shared_ptr<message_t> msg = m_to_network_schedule_q[it_channel].front();
-            if (m_core_send_queues[it_channel]->push_back(msg)) {
-                mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] network msg gone " << m_id << " -> " << msg->dst << " type " << it_channel << " num flits " << msg->flit_count << endl;
-                switch (it_channel) {
-                case MSG_CACHE_REQ:
-                case MSG_CACHE_REP:
-                case MSG_DIRECTORY_REQ_REP:
-                    {
-                        shared_ptr<coherenceMsg> cc_msg = static_pointer_cast<coherenceMsg>(msg->content);
-                        cc_msg->did_win_last_arbitration = true;
-                        break;
-                    }
-                case MSG_DRAM_REQ:
-                case MSG_DRAM_REP:
-                    {
-                        shared_ptr<dramMsg> dram_msg = static_pointer_cast<dramMsg>(msg->content);
-                        dram_msg->did_win_last_arbitration = true;
-                        break;
-                    }
-                default:
-                    mh_assert(false);
-                    break;
-                }
-            } else {
-                break;
-            }
-            m_to_network_schedule_q[it_channel].erase(m_to_network_schedule_q[it_channel].begin());
-        }
-    }
-    m_to_network_schedule_q.clear();
-}
+    /*******************************************/
+    /* scheduling for sending dramctrl replies */
+    /*******************************************/
 
+    random_shuffle(m_dramctrl_rep_schedule_q.begin(), m_dramctrl_rep_schedule_q.end(), rr_fn);
+    while (m_dramctrl_rep_schedule_q.size()) {
+        shared_ptr<dramctrlTableEntry>& entry = m_dramctrl_rep_schedule_q.front();
+        shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
+        shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
+
+        if (dramctrl_req->sender == m_id) {
+            mh_assert(m_dir_table.count(dramctrl_req->maddr));
+            m_dir_table[dramctrl_req->maddr]->dramctrl_rep = entry->dramctrl_rep;
+            mh_log(4) << "[DRAMCTRL " << m_id << " @ " << system_time << " ] has sent a DRAMCTRL rep for address " 
+                      << dramctrl_rep->maddr << " to core " << m_id << endl;
+            dramctrl_rep->sent = true;
+
+        } else if (m_core_send_queues[MSG_DRAMCTRL_REP]->available()) {
+
+            shared_ptr<message_t> msg(new message_t);
+            msg->src = m_id;
+            msg->dst = dramctrl_req->sender;
+            msg->type = MSG_DRAMCTRL_REP;
+            msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes + m_cfg.words_per_cache_line * 4);
+            msg->content = dramctrl_rep;
+
+            m_core_send_queues[MSG_DRAMCTRL_REP]->push_back(msg);
+
+            dramctrl_rep->sent = true;
+
+            mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] dramctrl rep sent " 
+                      << m_id << " -> " << msg->dst << " num flits " << msg->flit_count << endl;
+
+        }
+
+        m_dramctrl_rep_schedule_q.erase(m_dramctrl_rep_schedule_q.begin());
+
+    }
+
+}
 

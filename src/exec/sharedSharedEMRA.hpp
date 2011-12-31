@@ -165,7 +165,11 @@ private:
         maddr.address -= (maddr.address)%(m_cfg.words_per_cache_line*4); return maddr; 
     }
 
+#ifdef HIGH_LATENCY 
+    inline uint32_t get_flit_count(uint32_t bytes) { return 2*(bytes + m_cfg.bytes_per_flit - 1) / m_cfg.bytes_per_flit; }
+#else
     inline uint32_t get_flit_count(uint32_t bytes) { return (bytes + m_cfg.bytes_per_flit - 1) / m_cfg.bytes_per_flit; }
+#endif
 
     /* logics */
 

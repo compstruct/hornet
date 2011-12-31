@@ -34,7 +34,11 @@ public:
                vector<uint64_t> &per_thread_next_time,
                bool enable_fast_forward,
                int cpu_affinity, // -1 if none
-               shared_ptr<vcd_writer> vcd);
+               shared_ptr<vcd_writer> vcd
+#ifdef PROGRESSIVE_STATISTICS_REPORT
+               , shared_ptr<system_statistics> stats
+#endif
+               );
     void operator()();
 private:
     uint32_t my_thread_index;
@@ -54,6 +58,9 @@ private:
     bool enable_fast_forward;
     int cpu; // CPU this thread should be pinned to; -1 if none
     shared_ptr<vcd_writer> vcd;
+#ifdef PROGRESSIVE_STATISTICS_REPORT
+    shared_ptr<system_statistics> stats;
+#endif
 };
 
 class sim {
@@ -67,7 +74,11 @@ public:
         tile_mapping_t tile_mapping,
         const vector<unsigned> &cpu_affinities,
         shared_ptr<vcd_writer> vcd, logger &log,
-        shared_ptr<random_gen> rng);
+        shared_ptr<random_gen> rng
+#ifdef PROGRESSIVE_STATISTICS_REPORT
+        , shared_ptr<system_statistics> stats
+#endif
+        );
     virtual ~sim();
 private:
     vector<shared_ptr<sim_thread> > sim_threads;

@@ -21,8 +21,10 @@ class memoryRequest {
 public:
     /* for reads */
     memoryRequest(maddr_t maddr, uint32_t word_count);
+    memoryRequest(maddr_t maddr, uint32_t word_count, shared_ptr<shared_ptr<void> > per_mem_instr_info);
     /* for writes */
     memoryRequest(maddr_t maddr, uint32_t word_count, shared_array<uint32_t> wdata);
+    memoryRequest(maddr_t maddr, uint32_t word_count, shared_array<uint32_t> wdata, shared_ptr<shared_ptr<void> > per_mem_instr_info);
     ~memoryRequest();
 
     inline memReqStatus_t status() { return m_status; }
@@ -31,10 +33,6 @@ public:
     inline bool is_read() { return m_is_read; }
     inline uint32_t home() { return m_home; }
     inline uint32_t word_count() { return m_word_count; }
-
-    /* TRANSITION - remove */
-    inline uint64_t serialization_begin_time() { return m_serialization_begin_time; }
-    inline void set_serialization_begin_time(uint64_t time) { m_serialization_begin_time = time; }
 
     inline void set_per_mem_instr_runtime_info(shared_ptr<shared_ptr<void> > info) { m_per_mem_instr_runtime_info = info; }
     inline shared_ptr<shared_ptr<void> > per_mem_instr_runtime_info() { return m_per_mem_instr_runtime_info; }
@@ -49,8 +47,6 @@ private:
     uint32_t m_word_count;
     shared_array<uint32_t> m_data;
     uint32_t m_home;
-
-    uint64_t m_serialization_begin_time;
 
     shared_ptr<shared_ptr<void> > m_per_mem_instr_runtime_info;
 };

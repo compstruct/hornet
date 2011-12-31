@@ -3,9 +3,15 @@
 
 #include "messages.hpp"
 
-structMessage::structMessage() {}
+//static uint64_t live = 0;
 
-structMessage::~structMessage() {}
+structMessage::structMessage() {
+    //cerr << " new msg : " << ++ live << endl;
+}
+
+structMessage::~structMessage() {
+    //--live;
+}
 
 messageQueue::messageQueue(uint32_t type, uint32_t capacity) : m_type(type), m_capacity(capacity) {}
 

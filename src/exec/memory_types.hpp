@@ -12,7 +12,6 @@
 using namespace std;
 using namespace boost;
 
-/* do not change order */
 typedef enum {
     MEM_PRIVATE_SHARED_MSI_MESI = 0,
     MEM_PRIVATE_SHARED_LCC = 1,
@@ -21,7 +20,6 @@ typedef enum {
     MEM_SHARED_SHARED_LCC = 4
 } memoryType_t;
 
-/* do not change order */
 typedef enum {
     TOP_AND_BOTTOM_TO_DRAM = 0,
     BOUNDARY_TO_DRAM = 1

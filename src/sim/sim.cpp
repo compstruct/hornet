@@ -9,6 +9,12 @@
 #include <boost/task/detail/bind_processor.hpp>
 #include "sim.hpp"
 
+/* ad-hoc progressive statistic report for ISCA 2011 submission */
+#ifdef PROGRESSIVE_STATISTICS_REPORT
+#define REPORT_PERIOD 100000
+static uint64_t last_report = 0;
+#endif
+
 template<typename T>
 class minimum {
 public:
@@ -33,7 +39,11 @@ sim_thread::sim_thread(uint32_t new_thread_index,
                        vector<uint64_t> &new_per_thread_next_time,
                        bool new_enable_fast_forward,
                        int cpu_affinity,
-                       shared_ptr<vcd_writer> new_vcd)
+                       shared_ptr<vcd_writer> new_vcd
+#ifdef PROGRESSIVE_STATISTICS_REPORT
+                       , shared_ptr<system_statistics> new_stats
+#endif
+                       )
     : my_thread_index(new_thread_index), s(new_sys),
       my_tile_ids(tids.begin(), tids.end()),
       max_num_cycles(new_num_cycles), max_num_packets(new_num_packets),
@@ -47,7 +57,11 @@ sim_thread::sim_thread(uint32_t new_thread_index,
       per_thread_packet_count(new_per_thread_packet_count),
       per_thread_next_time(new_per_thread_next_time),
       enable_fast_forward(new_enable_fast_forward),
-      cpu(cpu_affinity), vcd(new_vcd) { }
+      cpu(cpu_affinity), vcd(new_vcd) 
+#ifdef PROGRESSIVE_STATISTICS_REPORT
+      , stats(new_stats)
+#endif
+{ }
 
 void sim_thread::operator()() {
     if (my_tile_ids.empty()) return;
@@ -92,6 +106,18 @@ void sim_thread::operator()() {
             s->tick_negative_edge_tile(*ti);
         }
         if (my_thread_index == 0) { // no sync, undercount at worst
+
+#ifdef PROGRESSIVE_STATISTICS_REPORT
+            if (min_clock > last_report + REPORT_PERIOD) {
+                last_report = min_clock;
+                cout << "#################################" << endl;
+                cout << " At cycle " << min_clock << endl;
+                cout << "#################################" << endl;
+
+                stats->print_exec_statistics(cout);
+            }
+#endif
+            
             bool system_drained =
                 accumulate(per_thread_drained.begin(),
                            per_thread_drained.end(), true,
@@ -147,7 +173,11 @@ sim::sim(shared_ptr<sys> s,
          tile_mapping_t tile_mapping,
          const vector<unsigned> &cpu_affinities,
          shared_ptr<vcd_writer> vcd, logger &new_log,
-         shared_ptr<random_gen> new_rng)
+         shared_ptr<random_gen> new_rng
+#ifdef PROGRESSIVE_STATISTICS_REPORT
+         ,shared_ptr<system_statistics> stats
+#endif
+         )
     : global_drained(false), global_next_time(0),
       global_max_sync_count(UINT64_MAX), log(new_log), rng(new_rng) {
     uint32_t hw_concurrency = thread::hardware_concurrency();
@@ -239,7 +269,11 @@ sim::sim(shared_ptr<sys> s,
                                                   per_thread_next_time,
                                                   enable_fast_forward,
                                                   cpu_affinity,
-                                                  thr_vcd));
+                                                  thr_vcd
+#ifdef PROGRESSIVE_STATISTICS_REPORT
+                                                  , stats
+#endif
+                                                  ));
         sim_threads.push_back(st);
         try {
             threads.create_thread(*st);

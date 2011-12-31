@@ -342,15 +342,16 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                 {
                     privateSharedMSI::privateSharedMSICfg_t cfg;
                     cfg.use_mesi = read_word(img);
+                    cfg.use_dir_speculation = true;
                     cfg.num_nodes = num_nodes;
                     cfg.bytes_per_flit = bytes_per_flit;
                     cfg.address_size_in_bytes = address_size_in_bytes;
-                    cfg.l1_work_table_size= read_word(img);
-                    cfg.l2_work_table_size_shared = read_word(img);
-                    cfg.l2_work_table_size_replies = read_word(img);
-                    cfg.l2_work_table_size_evict = read_word(img);
-                    cfg.l1_replacement_policy = (replacementPolicy_t)read_word(img);
-                    cfg.l2_replacement_policy = (replacementPolicy_t)read_word(img);
+                    cfg.cache_table_size= read_word(img);
+                    cfg.dir_table_size_shared = read_word(img);
+                    cfg.dir_table_size_cache_rep_exclusive = read_word(img);
+                    cfg.dir_table_size_empty_req_exclusive = read_word(img);
+                    cfg.l1_replacement_policy = (privateSharedMSI::_replacementPolicy_t)read_word(img);
+                    cfg.l2_replacement_policy = (privateSharedMSI::_replacementPolicy_t)read_word(img);
                     cfg.words_per_cache_line = read_word(img);
                     cfg.num_local_core_ports = read_word(img);
                     cfg.lines_in_l1 = read_word(img);
@@ -385,18 +386,28 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                 }
             case MEM_PRIVATE_SHARED_LCC:
                 {
-                    privateSharedLCC::privateSharedLCCCfg_t cfg;
-                    cfg.logic = (privateSharedLCC::timestampLogic_t)read_word(img);
-                    cfg.save_timestamp_in_dram = read_word(img);
+                    throw err_bad_shmem_cfg("private-L1 shared-L2 not available for LCC for now");
+                    break;
+                }
+            case MEM_SHARED_SHARED_LCC:
+                {
+                    sharedSharedLCC::sharedSharedLCCCfg_t cfg;
+                    cfg.network_width = network_width;
+                    cfg.timestamp_logic = (sharedSharedLCC::timestampLogic_t)read_word(img);
+                    cfg.migration_logic = (sharedSharedLCC::migrationLogic_t)read_word(img);
+                    cfg.use_checkout_for_write_copy = read_word(img);
                     cfg.use_separate_vc_for_writes = read_word(img);
-                    cfg.default_timestamp_delta = read_word(img); /**/
+                    cfg.max_timestamp_delta_for_read_copy = read_word(img); 
+                    cfg.max_timestamp_delta_for_write_copy = read_word(img);
                     cfg.num_nodes = num_nodes;
                     cfg.bytes_per_flit = bytes_per_flit;
                     cfg.address_size_in_bytes = address_size_in_bytes;
-                    cfg.l2_work_table_size_shared = read_word(img);
-                    cfg.l2_work_table_size_readonly = read_word(img);
-                    cfg.l1_replacement_policy = (privateSharedLCC::_replacementPolicy_t)read_word(img);
-                    cfg.l2_replacement_policy = (privateSharedLCC::_replacementPolicy_t)read_word(img);                 
+                    cfg.work_table_size_shared = read_word(img);
+                    cfg.work_table_size_read_exclusive = read_word(img);
+                    cfg.work_table_size_send_checkin_exclusive = read_word(img);
+                    cfg.work_table_size_receive_checkin_exclusive = read_word(img);
+                    cfg.l1_replacement_policy = (sharedSharedLCC::_replacementPolicy_t)read_word(img);
+                    cfg.l2_replacement_policy = (sharedSharedLCC::_replacementPolicy_t)read_word(img);                 
                     cfg.words_per_cache_line = read_word(img);
                     cfg.num_local_core_ports = read_word(img);
                     cfg.lines_in_l1 = read_word(img);
@@ -412,15 +423,15 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
                     if (mem_stats == shared_ptr<memStats>()) {
                         mem_stats = 
-                            shared_ptr<privateSharedLCCStats>(new privateSharedLCCStats(t->get_time()));
+                            shared_ptr<sharedSharedLCCStats>(new sharedSharedLCCStats(t->get_time()));
                         stats->add_aux_statistics(mem_stats);
                     }
 
-                    shared_ptr<privateSharedLCC> new_mem = 
-                        shared_ptr<privateSharedLCC>(new privateSharedLCC(id, t->get_time(), 
+                    shared_ptr<sharedSharedLCC> new_mem = 
+                        shared_ptr<sharedSharedLCC>(new sharedSharedLCC(id, t->get_time(), 
                                                                           t->get_statistics(), log, ran, new_cat, cfg));
-                    shared_ptr<privateSharedLCCStatsPerTile> per_tile_stats = 
-                        shared_ptr<privateSharedLCCStatsPerTile>(new privateSharedLCCStatsPerTile(id, t->get_time()));
+                    shared_ptr<sharedSharedLCCStatsPerTile> per_tile_stats = 
+                        shared_ptr<sharedSharedLCCStatsPerTile>(new sharedSharedLCCStatsPerTile(id, t->get_time()));
                     new_mem->set_per_tile_stats(per_tile_stats);
 
                     mem_stats->add_per_tile_stats(per_tile_stats);
@@ -431,44 +442,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                 }
             case MEM_PRIVATE_SHARED_EMRA:
                 {
-                    privateSharedEMRA::privateSharedEMRACfg_t cfg;
-                    cfg.logic = (privateSharedEMRA::emraLogic_t)read_word(img);
-                    cfg.num_nodes = num_nodes;
-                    cfg.bytes_per_flit = bytes_per_flit;
-                    cfg.address_size_in_bytes = address_size_in_bytes;
-                    cfg.work_table_size= read_word(img);
-                    cfg.l1_replacement_policy = (privateSharedEMRA::_replacementPolicy_t)read_word(img);
-                    cfg.l2_replacement_policy = (privateSharedEMRA::_replacementPolicy_t)read_word(img);                 
-                    cfg.words_per_cache_line = read_word(img);
-                    cfg.num_local_core_ports = read_word(img);
-                    cfg.lines_in_l1 = read_word(img);
-                    cfg.l1_associativity = read_word(img);
-                    cfg.l1_hit_test_latency = read_word(img);
-                    cfg.l1_num_read_ports = read_word(img);
-                    cfg.l1_num_write_ports = read_word(img);
-                    cfg.lines_in_l2 = read_word(img);
-                    cfg.l2_associativity = read_word(img);
-                    cfg.l2_hit_test_latency = read_word(img);
-                    cfg.l2_num_read_ports = read_word(img);
-                    cfg.l2_num_write_ports = read_word(img);
-
-                    if (mem_stats == shared_ptr<memStats>()) {
-                        mem_stats = 
-                            shared_ptr<privateSharedEMRAStats>(new privateSharedEMRAStats(t->get_time()));
-                        stats->add_aux_statistics(mem_stats);
-                    }
-
-                    shared_ptr<privateSharedEMRA> new_mem = 
-                        shared_ptr<privateSharedEMRA>(new privateSharedEMRA(id, t->get_time(), 
-                                                                            t->get_statistics(), log, ran, new_cat, cfg));
-                    shared_ptr<privateSharedEMRAStatsPerTile> per_tile_stats = 
-                        shared_ptr<privateSharedEMRAStatsPerTile>(new privateSharedEMRAStatsPerTile(id, t->get_time()));
-                    new_mem->set_per_tile_stats(per_tile_stats);
-
-                    mem_stats->add_per_tile_stats(per_tile_stats);
-
-                    mem = new_mem;
-
+                    throw err_bad_shmem_cfg("private-L1 shared-L2 not available for EMRA for now");
                     break;
                 }
             case MEM_SHARED_SHARED_EMRA:
@@ -656,15 +630,16 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
             privateSharedMSI::privateSharedMSICfg_t cfg;
             cfg.use_mesi = read_word(img);
+            cfg.use_dir_speculation = true;
             cfg.num_nodes = num_nodes;
             cfg.bytes_per_flit = bytes_per_flit;
             cfg.address_size_in_bytes = address_size_in_bytes;
-            cfg.l1_work_table_size= read_word(img);
-            cfg.l2_work_table_size_shared = read_word(img);
-            cfg.l2_work_table_size_replies = read_word(img);
-            cfg.l2_work_table_size_evict = read_word(img);
-            cfg.l1_replacement_policy = (replacementPolicy_t)read_word(img);
-            cfg.l2_replacement_policy = (replacementPolicy_t)read_word(img);
+            cfg.cache_table_size= read_word(img);
+            cfg.dir_table_size_shared = read_word(img);
+            cfg.dir_table_size_cache_rep_exclusive = read_word(img);
+            cfg.dir_table_size_empty_req_exclusive = read_word(img);
+            cfg.l1_replacement_policy = (privateSharedMSI::_replacementPolicy_t)read_word(img);
+            cfg.l2_replacement_policy = (privateSharedMSI::_replacementPolicy_t)read_word(img);
             cfg.words_per_cache_line = read_word(img);
             cfg.num_local_core_ports = read_word(img);
             cfg.lines_in_l1 = read_word(img);

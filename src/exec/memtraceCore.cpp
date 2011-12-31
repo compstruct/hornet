@@ -69,7 +69,11 @@ void memtraceCore::execute() {
             for (uint32_t i = 0; i < m_lanes.size(); ++i) {
                 lane_idx_t cand = (start + i)%m_lanes.size();
                 if ((m_lanes[cand].status == LANE_IDLE || m_lanes[cand].status == LANE_MIG)
+#ifdef LIVELOCK_PERFORMANCE_STUDY
+                    && m_lanes[cand].evictable_time < system_time && m_lanes[cand].evictable) {
+#else
                     && m_lanes[cand].evictable) { 
+#endif
                     shared_ptr<message_t> new_msg(new message_t);
                     new_msg->src = get_id().get_numeric_id();
                     new_msg->dst = m_lanes[cand].thread->native_core();
@@ -157,15 +161,17 @@ void memtraceCore::execute() {
                 /* finished execution */
                 if (cur.thread->type() == memtraceThread::INST_MEMORY) {
                     if (cur.thread->is_read()) {
-                        cur.req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), cur.thread->word_count()));
+                        cur.req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), 
+                                                                              cur.thread->word_count(),
+                                                                              cur.thread->per_mem_instr_runtime_info()));
                     } else {
                         /* this core model doesn't care data */
                         shared_array<uint32_t> dummy = shared_array<uint32_t>(new uint32_t[cur.thread->word_count()]);
-                        cur.req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), cur.thread->word_count(), dummy));
+                        cur.req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), 
+                                                                              cur.thread->word_count(), 
+                                                                              dummy,
+                                                                              cur.thread->per_mem_instr_runtime_info()));
                     }
-
-                    cur.req->set_per_mem_instr_runtime_info(cur.thread->per_mem_instr_runtime_info());
-                    cur.req->set_serialization_begin_time(system_time);
 
                     m_memory->request(cur.req);
                     cur.status = LANE_WAIT;
@@ -238,6 +244,9 @@ void memtraceCore::update_from_memory_requests() {
 
                 m_memory->request(i->req); /* it's supposed to be in the positive tick of the next cycle, but doing here is equivalent */             
             } else if (m_support_em && entry.req->status() == REQ_MIGRATE) {
+                mh_log(4) << "[thread " << entry.thread->get_id() << " @ " << system_time 
+                          << " ] need to migrate from " << get_id().get_numeric_id() << " to core " << entry.req->home()
+                          << " for address " << entry.thread->maddr() << endl;
                 entry.thread->reset_current_instruction();
                 entry.status = LANE_MIG;
                 entry.thread->stats()->did_begin_migration();
@@ -264,6 +273,12 @@ void memtraceCore::load_thread(shared_ptr<memtraceThread> thread) {
         if (m_lanes[i].status == LANE_EMPTY) {
             m_lanes[i].status = LANE_IDLE;
             m_lanes[i].evictable = false;
+
+#ifdef LIVELOCK_PERFORMANCE_STUDY
+            /* livelock performance study */
+            m_lanes[i].evictable_time = system_time + APPROVED_VISIT_PERIOD;
+#endif
+
             m_lanes[i].thread = thread;
             ++m_num_threads;
             if (m_native_list.count(thread->get_id()) > 0) {

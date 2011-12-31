@@ -203,6 +203,9 @@ public:
     virtual ~aux_statistics();
 
     friend ostream &operator<<(ostream &, const system_statistics &);
+#ifdef PROGRESSIVE_STATISTICS_REPORT
+    friend class system_statistics;
+#endif
 
 protected:
     virtual void print_stats(ostream &out) = 0;
@@ -224,6 +227,11 @@ public:
     inline void add_aux_statistics(shared_ptr<aux_statistics> stats) { aux_stats.push_back(stats); }
 public:
     friend ostream &operator<<(ostream &, const system_statistics &);
+
+#ifdef PROGRESSIVE_STATISTICS_REPORT
+    void print_exec_statistics(ostream &);
+#endif
+
 private:
     typedef map<uint32_t, shared_ptr<tile_statistics> > tile_stats_t;
     typedef vector<shared_ptr<aux_statistics> > aux_stats_t;

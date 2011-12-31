@@ -206,6 +206,7 @@ address size in bytes = 4''')
 
 [memory::$memory_name]
 use Exclusive state = $mesi
+use directory speculation = yes
 words per cache line = 8
 memory access ports for local core = 2
 L1 work table size = 4

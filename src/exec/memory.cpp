@@ -13,9 +13,21 @@ memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count) :
     m_per_mem_instr_runtime_info(shared_ptr<shared_ptr<void> >())
 {}
 
+memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count, shared_ptr<shared_ptr<void> > info) :
+    m_status(REQ_NEW), m_is_read(true), m_maddr(maddr), m_word_count(word_count),
+    m_data(shared_array<uint32_t>()), 
+    m_per_mem_instr_runtime_info(info)
+{}
+
+
 memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count, shared_array<uint32_t> wdata) :
     m_status(REQ_NEW), m_is_read(false), m_maddr(maddr), m_word_count(word_count),m_data(wdata), 
     m_per_mem_instr_runtime_info(shared_ptr<shared_ptr<void> >())
+{}
+
+memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count, shared_array<uint32_t> wdata, shared_ptr<shared_ptr<void> > info) :
+    m_status(REQ_NEW), m_is_read(false), m_maddr(maddr), m_word_count(word_count),m_data(wdata), 
+    m_per_mem_instr_runtime_info(info)
 {}
 
 memoryRequest::~memoryRequest() {}

@@ -496,9 +496,9 @@ def get_memory_cfgs(cfg, core):
             else:
                 ret.append(option_id['LRU'])
 
-    if memory_arch in ['private-shared LCC']:
+    if memory_arch in ['private-shared LCC', 'shared-shared LCC']:
         section = 'memory::' + memory_arch
-        timestamp_logic_id = {'fixed':0, 'ideal':1, 'zero-delay':2}
+        timestamp_logic_id = {'fixed':0, 'ideal':1, 'period-prediction':2, 'extend and cut':3}
         if cfg.has_option(section, 'timestamp logic'):
             answer = cfg.get(section, 'timestamp logic')
             if answer not in timestamp_logic_id.keys():
@@ -507,14 +507,21 @@ def get_memory_cfgs(cfg, core):
                 ret.append(timestamp_logic_id[answer])
         else:
             ret.append(timestamp_logic_id['fixed'])
-        if cfg.has_option(section, 'evict unexpired line and store timestamp in DRAM'):
-            answer = cfg.get(section, 'evict unexpired line and store timestamp in DRAM')
+        migration_logic_id = {'never':0, 'always-on-writes':1}
+        if cfg.has_option(section, 'migration logic'):
+            answer = cfg.get(section, 'migration logic')
+            if answer not in migration_logic_id.keys():
+                raise Err('migration logic %s not supported (must be one of %s)' % (answer, str(migration_logic_id.keys())))
+            else:
+                ret.append(migration_logic_id[answer])
+        else:
+            ret.append(migration_logic_id['never'])
+        if cfg.has_option(section, 'use checkout for write copy'):
+            answer = cfg.get(section, 'use checkout for write copy')
             if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
                 ret.append(1)
             else:
                 ret.append(0)
-        else:
-            ret.append(0)
         if cfg.has_option(section, 'use separate VCs for write requests'):
             answer = cfg.get(section, 'use separate VCs for write requests')
             if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
@@ -523,24 +530,36 @@ def get_memory_cfgs(cfg, core):
                 ret.append(0)
         else:
             ret.append(0)
-        if cfg.has_option(section, 'default timestamp delta'):
-            ret.append(int(cfg.get(section, 'default timestamp delta')))
+        if cfg.has_option(section, 'maximum timestamp delta for read copy or zero if unlimited'):
+            ret.append(int(cfg.get(section, 'maximum timestamp delta for read copy or zero if unlimited')))
         else:
             ret.append(100)
-        if cfg.has_option(section, 'shared L2 work table size'):
-            ret.append(int(cfg.get(section, 'shared L2 work table size')))
+        if cfg.has_option(section, 'maximum timestamp delta for write copy or zero if unlimited'):
+            ret.append(int(cfg.get(section, 'maximum timestamp delta for write copy or zero if unlimited')))
         else:
-            ret.append(4)
-        if cfg.has_option(section, 'reserved L2 work table size for reads'):
-            ret.append(int(cfg.get(section, 'reserved L2 work table size for reads')))
+            ret.append(100)
+        if cfg.has_option(section, 'shared work table size'):
+            ret.append(int(cfg.get(section, 'shared work table size')))
+        else:
+            ret.append(6)
+        if cfg.has_option(section, 'reserved work table size for reads'):
+            ret.append(int(cfg.get(section, 'reserved work table size for reads')))
         else:
             ret.append(2)
+        if cfg.has_option(section, 'reserved work table size for sending checkins'):
+            ret.append(int(cfg.get(section, 'reserved work table size for sending checkins')))
+        else:
+            ret.append(0)
+        if cfg.has_option(section, 'reserved work table size for receiving checkins'):
+            ret.append(int(cfg.get(section, 'reserved work table size for receiving checkins')))
+        else:
+            ret.append(0)
         for cache_name in ['L1', 'L2']:
             option_id = {
                 'LRU':0,
                 'random':1,
-                'nearest expiration and LRU':2,
-                'nearest expiration and random':3 }
+                'away-expired home-evictable LRU':2,
+                'away-expired home-evictable random':3 }
             if cfg.has_option(section, 'replacement policy in ' + cache_name):
                 option = cfg.get(section, 'replacement policy in ' + cache_name)
                 if (option_id.has_key(option)):
@@ -555,6 +574,14 @@ def get_memory_cfgs(cfg, core):
         section = 'memory::' + memory_arch
         if cfg.has_option(section, 'use Exclusive state'):
             answer = cfg.get(section, 'use Exclusive state')
+            if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
+                ret.append(1)
+            else:
+                ret.append(0)
+        else:
+            ret.append(0)
+        if cfg.has_option(section, 'use directory speculation'):
+            answer = cfg.get(section, 'use directory speculation')
             if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
                 ret.append(1)
             else:
@@ -594,7 +621,8 @@ def get_memory_cfgs(cfg, core):
     if memory_arch in ['private-shared MSI/MESI', \
                        'private-shared LCC', \
                        'private-shared EMRA', \
-                       'shared-shared EMRA' ]:
+                       'shared-shared EMRA', \
+                       'shared-shared LCC']:
         section = 'memory::' + memory_arch
         if cfg.has_option(section, 'words per cache line'):
             ret.append(int(cfg.get(section, 'words per cache line')))
