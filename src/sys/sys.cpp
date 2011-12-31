@@ -342,7 +342,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                 {
                     privateSharedMSI::privateSharedMSICfg_t cfg;
                     cfg.use_mesi = read_word(img);
-                    cfg.use_dir_speculation = true;
+                    cfg.use_dir_speculation = read_word(img);
                     cfg.num_nodes = num_nodes;
                     cfg.bytes_per_flit = bytes_per_flit;
                     cfg.address_size_in_bytes = address_size_in_bytes;
@@ -630,7 +630,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
             privateSharedMSI::privateSharedMSICfg_t cfg;
             cfg.use_mesi = read_word(img);
-            cfg.use_dir_speculation = true;
+            cfg.use_dir_speculation = read_word(img);
             cfg.num_nodes = num_nodes;
             cfg.bytes_per_flit = bytes_per_flit;
             cfg.address_size_in_bytes = address_size_in_bytes;
