@@ -384,6 +384,59 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
                     break;
                 }
+            case MEM_PRIVATE_SHARED_PTI:
+                {
+                    privateSharedPTI::privateSharedPTICfg_t cfg;
+                    cfg.renewal_type = (privateSharedPTI::_renewalType_t)read_word(img);
+                    cfg.delta = read_word(img);
+                    cfg.renewal_threshold = read_word(img);
+                    cfg.renewal_schedule_queue_size = read_word(img);
+                    cfg.allow_revive = read_word(img);
+                    cfg.retry_rReq = !((bool)read_word(img));
+                    cfg.use_rRep_for_tReq = read_word(img);
+                    cfg.rRep_type = (privateSharedPTI::_rRepType_t)read_word(img);
+                    cfg.num_nodes = num_nodes;
+                    cfg.bytes_per_flit = bytes_per_flit;
+                    cfg.address_size_in_bytes = address_size_in_bytes;
+                    cfg.cache_table_size= read_word(img);
+                    cfg.dir_table_size_shared = read_word(img);
+                    cfg.dir_table_size_cache_rep_exclusive = read_word(img);
+                    cfg.dir_table_size_empty_req_exclusive = read_word(img);
+                    cfg.l1_replacement_policy = (privateSharedPTI::_replacementPolicy_t)read_word(img);
+                    cfg.l2_replacement_policy = (privateSharedPTI::_replacementPolicy_t)read_word(img);
+                    cfg.words_per_cache_line = read_word(img);
+                    cfg.num_local_core_ports = read_word(img);
+                    cfg.lines_in_l1 = read_word(img);
+                    cfg.l1_associativity = read_word(img);
+                    cfg.l1_hit_test_latency = read_word(img);
+                    cfg.l1_num_read_ports = read_word(img);
+                    cfg.l1_num_write_ports = read_word(img);
+                    cfg.lines_in_l2 = read_word(img);
+                    cfg.l2_associativity = read_word(img);
+                    cfg.l2_hit_test_latency = read_word(img);
+                    cfg.l2_num_read_ports = read_word(img);
+                    cfg.l2_num_write_ports = read_word(img);
+
+                    assert(support_em == false);
+                    if (mem_stats == shared_ptr<memStats>()) {
+                        mem_stats = 
+                            shared_ptr<privateSharedPTIStats>(new privateSharedPTIStats(t->get_time()));
+                        stats->add_aux_statistics(mem_stats);
+                    }
+                    shared_ptr<privateSharedPTI> new_mem = 
+                        shared_ptr<privateSharedPTI>(new privateSharedPTI(id, t->get_time(), 
+                                                                          t->get_statistics(), log, ran, new_cat, cfg));
+                    shared_ptr<privateSharedPTIStatsPerTile> per_tile_stats = 
+                        shared_ptr<privateSharedPTIStatsPerTile>(new privateSharedPTIStatsPerTile(id, t->get_time()));
+                    new_mem->set_per_tile_stats(per_tile_stats);
+
+                    mem_stats->add_per_tile_stats(per_tile_stats);
+
+                    mem = new_mem;
+
+                    break;
+                }
+
             case MEM_PRIVATE_SHARED_LCC:
                 {
                     throw err_bad_shmem_cfg("private-L1 shared-L2 not available for LCC for now");

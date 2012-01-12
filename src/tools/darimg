@@ -356,10 +356,11 @@ def get_core_cfgs(cfg, core):
 
 def get_memory_cfgs(cfg, core):
     memory_id = {'private-shared MSI/MESI':0, 
-                 'private-shared LCC':1,
-                 'private-shared EMRA':2,
+                 'private-shared LCC':1, # not used
+                 'private-shared EMRA':2, # not used
                  'shared-shared EMRA':3,
-                 'shared-shared LCC':4}
+                 'shared-shared LCC':4,
+                 'private-shared PTI':5}
     ret = []
     if core in ['mips_mpi', 'injector']:
         # need no memory configurations
@@ -617,12 +618,99 @@ def get_memory_cfgs(cfg, core):
             else:
                 ret.append(option_id['LRU'])
 
+    if memory_arch in ['private-shared PTI']:
+        section = 'memory::' + memory_arch
+        renewal_type_id = {'ideal':0, 'synched':1, 'scheduled':2, 'never':3}
+        if cfg.has_option(section, 'renewal type'):
+            answer = cfg.get(section, 'renewal type')
+            if answer not in renewal_type_id.keys():
+                raise Err('renewal type %s not supported (must be one of %s)' % (answer, str(renewal_type_id.keys())))
+            else:
+                ret.append(renewal_type_id[answer])
+        else:
+            ret.append(renewal_type_id['ideal'])
+        if cfg.has_option(section, 'timestamp increasement'):
+            ret.append(int(cfg.get(section, 'timestamp increasement')))
+        else:
+            ret.append(100)
+        if cfg.has_option(section, 'renewal threshold'):
+            ret.append(int(cfg.get(section, 'renewal threshold')))
+        else:
+            ret.append(0)
+        if cfg.has_option(section, 'scheduled renewal queue size'):
+            ret.append(int(cfg.get(section, 'scheduled renewal queue size')))
+        else:
+            ret.append(0)
+        if cfg.has_option(section, 'allow reviving expired line by rRep'):
+            answer = cfg.get(section, 'allow reviving expired line by rRep')
+            if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
+                ret.append(1)
+            else:
+                ret.append(0)
+        else:
+            ret.append(0)
+        if cfg.has_option(section, 'skip renewal if network not ready'):
+            answer = cfg.get(section, 'skip renewal if network not ready')
+            if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
+                ret.append(1)
+            else:
+                ret.append(0)
+        else:
+            ret.append(0)
+        if cfg.has_option(section, 'use valid rRep for tReq'):
+            answer = cfg.get(section, 'use valid rRep for tReq')
+            if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
+                ret.append(1)
+            else:
+                ret.append(0)
+        else:
+            ret.append(0)
+        rRep_type_id = {'always':0, 'selective':1, 'never':2}
+        if cfg.has_option(section, 'send rRep with block'):
+            answer = cfg.get(section, 'send rRep with block')
+            if answer not in rRep_type_id.keys():
+                raise Err('rRep type %s not supported (must be one of %s)' % (answer, str(rRep_type_id.keys())))
+            else:
+                ret.append(rRep_type_id[answer])
+        else:
+            ret.append(rRep_type_id['never'])
+
+        if cfg.has_option(section, 'L1 work table size'):
+            ret.append(int(cfg.get(section, 'L1 work table size')))
+        else:
+            ret.append(4)
+        if cfg.has_option(section, 'shared L2 work table size'):
+            ret.append(int(cfg.get(section, 'shared L2 work table size')))
+        else:
+            ret.append(4)
+        if cfg.has_option(section, 'reserved L2 work table size for cache replies'):
+            ret.append(int(cfg.get(section, 'reserved L2 work table size for cache replies')))
+        else:
+            ret.append(1)
+        if cfg.has_option(section, 'reserved L2 work table size for line eviction'):
+            ret.append(int(cfg.get(section, 'reserved L2 work table size for line eviction')))
+        else:
+            ret.append(1)
+        for cache_name in ['L1', 'L2']:
+            option_id = {
+                'LRU':0,
+                'random':1}
+            if cfg.has_option(section, 'replacement policy in ' + cache_name):
+                option = cfg.get(section, 'replacement policy in ' + cache_name)
+                if (option_id.has_key(option)):
+                    ret.append(option_id[option])
+                else:
+                    raise Err('bad cache replacement policy name : %s (must be one of %s)' % (option, str(option_id.keys())))
+            else:
+                ret.append(option_id['LRU'])
+
     # cache configuration (L1L2)
     if memory_arch in ['private-shared MSI/MESI', \
                        'private-shared LCC', \
                        'private-shared EMRA', \
                        'shared-shared EMRA', \
-                       'shared-shared LCC']:
+                       'shared-shared LCC', \
+                       'private-shared PTI']:
         section = 'memory::' + memory_arch
         if cfg.has_option(section, 'words per cache line'):
             ret.append(int(cfg.get(section, 'words per cache line')))

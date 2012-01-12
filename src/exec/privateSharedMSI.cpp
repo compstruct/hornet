@@ -410,7 +410,7 @@ void privateSharedMSI::update_cache_table() {
                 home = l1_line_info->home;
                 cat_req = shared_ptr<catRequest>();
 
-                /* could migrate out here */
+                /* TODO could migrate out here */
 
                 cache_req = shared_ptr<coherenceMsg>(new coherenceMsg);
                 cache_req->sender = m_id;
@@ -872,14 +872,14 @@ void privateSharedMSI::update_dir_table() {
         maddr_t start_maddr = it_addr->first;
         shared_ptr<dirTableEntry>& entry = it_addr->second;
 
-        shared_ptr<coherenceMsg> __attribute__ ((unused)) & cache_req = entry->cache_req;
-        shared_ptr<cacheRequest> __attribute__ ((unused)) & l2_req = entry->l2_req;
-        shared_ptr<coherenceMsg> __attribute__ ((unused)) & cache_rep = entry->cache_rep;
-        vector<shared_ptr<coherenceMsg> > __attribute__ ((unused)) & dir_reqs = entry->dir_reqs;
-        shared_ptr<coherenceMsg> __attribute__ ((unused)) & dir_rep = entry->dir_rep;
-        shared_ptr<coherenceMsg> __attribute__ ((unused)) & empty_req = entry->empty_req;
-        shared_ptr<dramctrlMsg> __attribute__ ((unused)) & dramctrl_req = entry->dramctrl_req;
-        shared_ptr<dramctrlMsg> __attribute__ ((unused)) & dramctrl_rep = entry->dramctrl_rep;
+        shared_ptr<coherenceMsg>& cache_req = entry->cache_req;
+        shared_ptr<cacheRequest>& l2_req = entry->l2_req;
+        shared_ptr<coherenceMsg>& cache_rep = entry->cache_rep;
+        vector<shared_ptr<coherenceMsg> >& dir_reqs = entry->dir_reqs;
+        shared_ptr<coherenceMsg>& dir_rep = entry->dir_rep;
+        shared_ptr<coherenceMsg>& empty_req = entry->empty_req;
+        shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
+        shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
 
         shared_ptr<cacheLine> l2_line = (l2_req)? l2_req->line_copy() : shared_ptr<cacheLine>();
         shared_ptr<cacheLine> l2_victim = (l2_req)? l2_req->line_to_evict_copy() : shared_ptr<cacheLine>();
@@ -2735,7 +2735,11 @@ void privateSharedMSI::schedule_requests() {
                 msg->src = m_id;
                 msg->dst = m_dramctrl_location;
                 msg->type = MSG_DRAMCTRL_REQ;
-                msg->flit_count = get_flit_count(1 + m_cfg.address_size_in_bytes);
+                uint32_t bytes = 1 + m_cfg.address_size_in_bytes;
+                if (!dramctrl_msg->dram_req->is_read()) {
+                    bytes += m_cfg.words_per_cache_line * 4;
+                }
+                msg->flit_count = get_flit_count(bytes);
                 msg->content = dramctrl_msg;
 
                 m_core_send_queues[MSG_DRAMCTRL_REQ]->push_back(msg);
@@ -2799,16 +2803,11 @@ void privateSharedMSI::schedule_requests() {
                 entry->per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_srz(system_time - l1_req->serialization_begin_time());
             }
         }
-        if (stats_enabled()) {
-            stats()->add_l1_action();
-        }
-        
         m_l1->request(l1_req);
-
+        m_l1_read_req_schedule_q.erase(m_l1_read_req_schedule_q.begin());
         if (stats_enabled()) {
             stats()->add_l1_action();
         }
-        m_l1_read_req_schedule_q.erase(m_l1_read_req_schedule_q.begin());
     }
     m_l1_read_req_schedule_q.clear();
 
@@ -2825,16 +2824,11 @@ void privateSharedMSI::schedule_requests() {
                 entry->per_mem_instr_stats->get_tentative_data(T_IDX_L1)->add_l1_srz(system_time - l1_req->serialization_begin_time());
             }
         }
-        if (stats_enabled()) {
-            stats()->add_l1_action();
-        }
-        
         m_l1->request(l1_req);
-
+        m_l1_write_req_schedule_q.erase(m_l1_write_req_schedule_q.begin());
         if (stats_enabled()) {
             stats()->add_l1_action();
         }
-        m_l1_write_req_schedule_q.erase(m_l1_write_req_schedule_q.begin());
     }
     m_l1_write_req_schedule_q.clear();
    
@@ -2860,16 +2854,11 @@ void privateSharedMSI::schedule_requests() {
                 entry->per_mem_instr_stats->get_tentative_data(T_IDX_L2)->add_l2_srz(system_time - l2_req->serialization_begin_time());
             }
         }
-        if (stats_enabled()) {
-            stats()->add_l2_action();
-        }
-        
         m_l2->request(l2_req);
-
+        m_l2_read_req_schedule_q.erase(m_l2_read_req_schedule_q.begin());
         if (stats_enabled()) {
             stats()->add_l2_action();
         }
-        m_l2_read_req_schedule_q.erase(m_l2_read_req_schedule_q.begin());
     }
     m_l2_read_req_schedule_q.clear();
 
@@ -2893,16 +2882,11 @@ void privateSharedMSI::schedule_requests() {
                 entry->per_mem_instr_stats->get_tentative_data(T_IDX_L2)->add_l2_srz(system_time - l2_req->serialization_begin_time());
             }
         }
-        if (stats_enabled()) {
-            stats()->add_l2_action();
-        }
-        
         m_l2->request(l2_req);
-
+        m_l2_write_req_schedule_q.erase(m_l2_write_req_schedule_q.begin());
         if (stats_enabled()) {
             stats()->add_l2_action();
         }
-        m_l2_write_req_schedule_q.erase(m_l2_write_req_schedule_q.begin());
     }
     m_l2_write_req_schedule_q.clear();
 

@@ -14,10 +14,11 @@ using namespace boost;
 
 typedef enum {
     MEM_PRIVATE_SHARED_MSI_MESI = 0,
-    MEM_PRIVATE_SHARED_LCC = 1,
-    MEM_PRIVATE_SHARED_EMRA = 2,
+    MEM_PRIVATE_SHARED_LCC = 1, /* obsolete */
+    MEM_PRIVATE_SHARED_EMRA = 2, /* obsolete */
     MEM_SHARED_SHARED_EMRA = 3,
-    MEM_SHARED_SHARED_LCC = 4
+    MEM_SHARED_SHARED_LCC = 4,
+    MEM_PRIVATE_SHARED_PTI = 5
 } memoryType_t;
 
 typedef enum {

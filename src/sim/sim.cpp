@@ -9,9 +9,9 @@
 #include <boost/task/detail/bind_processor.hpp>
 #include "sim.hpp"
 
-/* ad-hoc progressive statistic report for ISCA 2011 submission */
+/* ad-hoc progressive statistic report for ISCA */
 #ifdef PROGRESSIVE_STATISTICS_REPORT
-#define REPORT_PERIOD 100000
+#define REPORT_PERIOD 1000000
 static uint64_t last_report = 0;
 #endif
 

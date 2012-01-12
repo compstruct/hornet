@@ -12,7 +12,7 @@
 #undef DEBUG
 
 #ifdef DEBUG
-#define mh_log(X) if(m_id==27) cout
+#define mh_log(X) cout
 #define mh_assert(X) assert(X)
 #else
 #define mh_assert(X)
@@ -244,9 +244,9 @@ void cache::tick_positive_edge() {
                                 line.coherence_info_dirty = true; 
                             }
                         }
-                        if (m_write_hook) { (*m_write_hook)(line, system_time); }
+                        if (m_write_hook) { (*m_write_hook)(req, line, system_time); }
                     } else {
-                        if (m_read_hook) { (*m_read_hook)(line, system_time); }
+                        if (m_read_hook) { (*m_read_hook)(req, line, system_time); }
                     }
                 } else {
                     mh_log(4) << "[cache " << m_id << " L" << m_level << " @ " << system_time << " ] "
@@ -271,8 +271,6 @@ void cache::tick_positive_edge() {
                               << " on " << req->m_maddr << " gets a HIT." << endl;
 
                     line.ready = true;
-                    line.data_dirty = false;
-                    line.coherence_info_dirty = false;
 
                     req->m_status = CACHE_REQ_HIT; 
                     if (req->m_word_count > 0) {
@@ -294,7 +292,7 @@ void cache::tick_positive_edge() {
                             line.coherence_info_dirty = true; 
                         }
                     }
-                    if (m_update_hook) { (*m_update_hook)(line, system_time); }
+                    if (m_update_hook) { (*m_update_hook)(req, line, system_time); }
                 } else {
 
                     mh_log(4) << "[cache " << m_id << " L" << m_level << " @ " << system_time << " ] "
@@ -362,7 +360,7 @@ void cache::tick_positive_edge() {
                 line.start_maddr = start_maddr;
 
                 if (m_claim_hook) {
-                    (*m_claim_hook)(line, system_time);
+                    (*m_claim_hook)(req, line, system_time);
                 }
 
                 if (req->m_request_type == CACHE_REQ_UPDATE) {
@@ -391,7 +389,7 @@ void cache::tick_positive_edge() {
                     }
 
                     if (m_update_hook) { 
-                        (*m_update_hook)(line, system_time); 
+                        (*m_update_hook)(req, line, system_time); 
                     }
 
                     req->m_status = CACHE_REQ_HIT;
@@ -526,7 +524,7 @@ void cache::tick_negative_edge() {
         cacheLine &line = m_cache[idx][way];
         line.claimed = false;
         if (m_invalidate_hook) {
-            (*m_invalidate_hook)(line, system_time);
+            (*m_invalidate_hook)(req, line, system_time);
         }
 
         if (req->m_do_claim) {
@@ -534,7 +532,7 @@ void cache::tick_negative_edge() {
             line.ready = false;
             line.start_maddr = entry->start_maddr;
             if (m_claim_hook) {
-                (*m_claim_hook)(line, system_time);
+                (*m_claim_hook)(req, line, system_time);
             }
         }
 
@@ -555,7 +553,7 @@ void cache::tick_negative_edge() {
         cacheLine &line = m_cache[idx][way];
         line.claimed = false;
         if (m_invalidate_hook) {
-            (*m_invalidate_hook)(line, system_time);
+            (*m_invalidate_hook)(req, line, system_time);
         }
         req->m_line_to_evict_copy = copy_cache_line(line);
 
@@ -564,7 +562,7 @@ void cache::tick_negative_edge() {
             line.ready = false;
             line.start_maddr = entry->start_maddr;
             if (m_claim_hook) {
-                (*m_claim_hook)(line, system_time);
+                (*m_claim_hook)(req, line, system_time);
             }
 
             if (req->m_request_type == CACHE_REQ_UPDATE) {
@@ -592,7 +590,7 @@ void cache::tick_negative_edge() {
                     }
                 }
 
-                if (m_update_hook) { (*m_update_hook)(line, system_time); }
+                if (m_update_hook) { (*m_update_hook)(req, line, system_time); }
 
                 req->m_status = CACHE_REQ_HIT;
             } else {

@@ -14,6 +14,8 @@
 #include "messages.hpp"
 #include "privateSharedMSI.hpp"
 #include "privateSharedMSIStats.hpp"
+#include "privateSharedPTI.hpp"
+#include "privateSharedPTIStats.hpp"
 #include "sharedMemory.hpp"
 #include "sharedSharedEMRA.hpp"
 #include "sharedSharedEMRAStats.hpp"

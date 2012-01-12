@@ -64,6 +64,7 @@ public:
     inline maddr_t maddr() { return m_maddr; }
     inline uint32_t word_count() { return m_word_count; }
     inline shared_array<uint32_t> data_to_write() { return m_data_to_write; }
+    inline shared_ptr<void> coherence_info_to_write() { return m_coherence_info_to_write; }
 
     /* lines to return */
     inline shared_ptr<cacheLine> line_copy() { return m_line_copy; }
@@ -120,7 +121,7 @@ public:
     typedef bool (*helperIsCoherenceHit) (shared_ptr<cacheRequest>, cacheLine&, const uint64_t& /* system_time */);
     typedef bool (*helperTestLineToEvict) (cacheLine&, const uint64_t& /* system_time */);
     typedef uint32_t (*helperReplacementPolicy) (vector<uint32_t>&, cacheLine const*, const uint64_t&, shared_ptr<random_gen> ran);
-    typedef void (*helperHook) (cacheLine&, const uint64_t& /* system_time */);
+    typedef void (*helperHook) (shared_ptr<cacheRequest>, cacheLine&, const uint64_t& /* system_time */);
 
     cache(uint32_t cache_level, uint32_t numeric_id, const uint64_t &system_time, 
           shared_ptr<tile_statistics> stats, logger &log, shared_ptr<random_gen> ran, 

@@ -22,10 +22,12 @@ libdarexec_la_SOURCES = sharedMemory.hpp \
                         threadStats.hpp threadStats.cpp \
                         memtraceThreadStats.hpp memtraceThreadStats.cpp \
                         privateSharedMSI.hpp privateSharedMSI.cpp \
+                        privateSharedPTI.hpp privateSharedPTI.cpp \
                         sharedSharedEMRA.hpp sharedSharedEMRA.cpp \
                         sharedSharedLCC.hpp sharedSharedLCC.cpp \
                         memStats.hpp memStats.cpp \
 					    mcpu.hpp mcpu.cpp \
                         privateSharedMSIStats.hpp privateSharedMSIStats.cpp \
+                        privateSharedPTIStats.hpp privateSharedPTIStats.cpp \
                         sharedSharedEMRAStats.hpp sharedSharedEMRAStats.cpp \
                         sharedSharedLCCStats.hpp sharedSharedLCCStats.cpp
