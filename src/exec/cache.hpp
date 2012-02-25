@@ -224,6 +224,8 @@ private:
     vector<tuple<uint32_t/*idx*/, uint32_t/*ways*/, shared_ptr<reqEntry> > > m_lines_to_invalidate; 
     vector<tuple<uint32_t/*idx*/, uint32_t/*ways*/, shared_ptr<reqEntry> > > m_lines_to_evict; 
 
+public:
+    cacheTable& get_cache_table() { return m_cache; }
 };
 
 #endif

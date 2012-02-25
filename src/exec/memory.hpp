@@ -75,6 +75,9 @@ public:
     inline void set_core_send_queues(map<uint32_t, shared_ptr<messageQueue> > queues) { m_core_send_queues = queues; }
     inline void set_core_receive_queues(map<uint32_t, shared_ptr<messageQueue> > queues) { m_core_receive_queues = queues; }
 
+    /* force quit background working as the simulation ends */
+    inline void turn_off() { m_power = false; }
+
 protected:
     inline void set_req_status(shared_ptr<memoryRequest> req, memReqStatus_t status) { req->m_status = status; }
     inline void set_req_data(shared_ptr<memoryRequest> req, shared_array<uint32_t> data) { req->m_data = data; }
@@ -91,6 +94,8 @@ protected:
 
     map<uint32_t/*msg type*/, shared_ptr<messageQueue> > m_core_send_queues;
     map<uint32_t/*msg type*/, shared_ptr<messageQueue> > m_core_receive_queues;
+
+    bool m_power;
 
 };
 

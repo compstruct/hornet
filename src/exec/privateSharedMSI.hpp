@@ -82,6 +82,13 @@ public:
     typedef struct {
         coherenceStatus_t status;
         uint32_t home;
+
+        /* additional instrumentation */
+        shared_ptr<uint64_t> birth_time;
+        shared_ptr<uint64_t> last_hit;
+        shared_ptr<uint32_t> num_hits;
+        shared_ptr<uint32_t> max_interval;
+
     } cacheCoherenceInfo;
 
     typedef enum {
@@ -286,6 +293,8 @@ private:
     void update_dir_table();
     void update_dramctrl_work_table();
     void accept_incoming_messages();
+
+    void print_size_directory();
 
     /* instance variables */
     

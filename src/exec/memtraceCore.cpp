@@ -257,6 +257,7 @@ void memtraceCore::update_from_memory_requests() {
 
 uint64_t memtraceCore::next_pkt_time() throw(err) { 
     if (is_drained()) {
+        m_memory->turn_off();
         return UINT64_MAX;
     } else {
         return system_time;

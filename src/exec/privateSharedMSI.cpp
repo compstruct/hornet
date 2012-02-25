@@ -20,6 +20,12 @@
 #define mh_log(X) LOG(log,X)
 #endif
 
+#define INSTRUMENT_DIR_PERIOD 100000
+//#undef INSTRUMENT_DIR_PERIOD
+
+#define INSTRUMENT_SHARED_LINE
+#undef INSTRUMENT_SHARED_LINE
+
 /* Used for tentative stats per memory instruction (outstanding costs survive) */
 #define T_IDX_CAT 0
 #define T_IDX_L1 1
@@ -297,6 +303,12 @@ void privateSharedMSI::tick_positive_edge() {
     }
 #endif
 
+#ifdef INSTRUMENT_DIR_PERIOD
+    if (system_time % INSTRUMENT_DIR_PERIOD == 0) {
+        print_size_directory();
+    }
+#endif
+
     schedule_requests();
 
     m_l1->tick_positive_edge();
@@ -362,6 +374,16 @@ void privateSharedMSI::update_cache_table() {
                 mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a local L1 HIT and finish serving address "
                           << core_req->maddr() << endl;
 
+#ifdef INSTRUMENT_SHARED_LINE
+                if (l1_line_info->status == SHARED) {
+                    if (system_time - *(l1_line_info->last_hit) > *(l1_line_info->max_interval)) {
+                        *(l1_line_info->max_interval) = system_time - *(l1_line_info->last_hit);
+                    }
+                    *(l1_line_info->last_hit) = system_time;
+                    *(l1_line_info->num_hits) += 1;
+                }
+#endif
+
                 home = l1_line_info->home;
                 cat_req = shared_ptr<catRequest>();
 
@@ -404,6 +426,11 @@ void privateSharedMSI::update_cache_table() {
                 mh_assert(!core_req->is_read());
                 mh_assert(l1_line_info->status == SHARED);
 
+#ifdef INSTRUMENT_SHARED_LINE
+                cout << start_maddr << " " << *(l1_line_info->last_hit) - *(l1_line_info->birth_time) << " "
+                     << *(l1_line_info->num_hits) << " " << *(l1_line_info->max_interval) << " for switch " << endl;
+#endif
+                     
                 mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a write-on-shared miss on address "
                           << core_req->maddr() << endl;
 
@@ -570,6 +597,12 @@ void privateSharedMSI::update_cache_table() {
 
             if (l1_req->status() == CACHE_REQ_HIT) {
 
+#ifdef INSTRUMENT_SHARED_LINE
+                if (dir_req->type == INV_REQ) {
+                    cout << start_maddr << " " << *(l1_line_info->last_hit) - *(l1_line_info->birth_time) << " "
+                         << *(l1_line_info->num_hits) << " " << *(l1_line_info->max_interval) << " for invReq " << endl;
+                }
+#endif
                 uint32_t home = l1_line_info->home;
                 cache_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
                 cache_rep->sender = m_id;
@@ -684,6 +717,16 @@ void privateSharedMSI::update_cache_table() {
             new_info->home = dir_rep->sender;
             new_info->status = dir_rep->type == SH_REP? SHARED : EXCLUSIVE;
 
+            /* additional instrumentation */
+#ifdef INSTRUMENT_SHARED_LINE
+            if (dir_rep->type == SH_REP) {
+                new_info->birth_time = shared_ptr<uint64_t>(new uint64_t(system_time));
+                new_info->last_hit = shared_ptr<uint64_t>(new uint64_t(system_time));
+                new_info->num_hits = shared_ptr<uint32_t>(new uint32_t(1));
+                new_info->max_interval = shared_ptr<uint32_t>(new uint32_t(0));
+            }
+#endif
+
             l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                m_cfg.words_per_cache_line, 
                                                                dir_rep->data, new_info));
@@ -758,9 +801,15 @@ void privateSharedMSI::update_cache_table() {
 
                 /* we have a victim */
 
-                mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] is trying to evict a cache line " << l1_victim->start_maddr
-                          << endl;
+                mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] is trying to evict a cache line " 
+                          << l1_victim->start_maddr << endl;
 
+#ifdef INSTRUMENT_SHARED_LINE
+                if (l1_victim_info->status == SHARED) {
+                    cout << start_maddr << " " << *(l1_victim_info->last_hit) - *(l1_victim_info->birth_time) << " "
+                         << *(l1_victim_info->num_hits) << " " << *(l1_victim_info->max_interval) << " for evict " << endl;
+                }
+#endif
                 if (stats_enabled()) {
                     stats()->evict_at_l1();
                 }
@@ -2340,6 +2389,10 @@ void privateSharedMSI::schedule_requests() {
                 shared_ptr<cacheCoherenceInfo> new_info(new cacheCoherenceInfo);
                 new_info->status = SHARED;
                 new_info->home = dir_req->sender;
+                new_info->birth_time = shared_ptr<uint64_t>(new uint64_t(system_time));
+                new_info->last_hit = shared_ptr<uint64_t>(new uint64_t(system_time));
+                new_info->num_hits = shared_ptr<uint32_t>(new uint32_t(0));
+                new_info->max_interval = shared_ptr<uint32_t>(new uint32_t(0));
                 l1_req = shared_ptr<cacheRequest>(new cacheRequest(dir_req->maddr, CACHE_REQ_UPDATE,
                                                                    0, shared_array<uint32_t>(), new_info));
                 l1_req->set_aux_info_for_coherence
@@ -2515,8 +2568,6 @@ void privateSharedMSI::schedule_requests() {
         if (m_dir_table.count(req->maddr)) {
             /* need to finish the previous entry first */
             m_new_dir_table_entry_for_req_schedule_q.erase(m_new_dir_table_entry_for_req_schedule_q.begin());
-            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache request (" << req->type 
-                      << ") from " << req->sender << " for address " << req->maddr << " but has an existing entry " << endl;
             continue;
         }
 
@@ -2524,8 +2575,6 @@ void privateSharedMSI::schedule_requests() {
         if (m_dir_table_vacancy_shared == 0 && !use_exclusive) {
             /* no space */
             m_new_dir_table_entry_for_req_schedule_q.erase(m_new_dir_table_entry_for_req_schedule_q.begin());
-            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache request (" << req->type 
-                      << ") from " << req->sender << " for address " << req->maddr << " but has no space " << endl;
             continue;
         }
 
@@ -2931,3 +2980,36 @@ void privateSharedMSI::schedule_requests() {
 
 }
 
+void privateSharedMSI::print_size_directory() {
+
+    map<uint32_t/*index*/, cacheLine*> &c = m_l2->get_cache_table();
+    map<uint32_t, uint32_t> count;
+
+    map<uint32_t, cacheLine*>::iterator it;
+    for (it = c.begin(); it != c.end(); ++it) {
+        if (!it->second) {
+            continue;
+        }
+        for (uint32_t it_way = 0; it_way < m_cfg.l2_associativity; ++it_way) {
+            cacheLine& line = it->second[it_way];
+            if (line.claimed) {
+                shared_ptr<dirCoherenceInfo> info = static_pointer_cast<dirCoherenceInfo>(line.coherence_info);
+                if (count.count(info->dir.size()) == 0) {
+                    count[info->dir.size()] = 1;
+                } else {
+                    count[info->dir.size()] += 1;
+                }
+            }
+        }
+    }
+
+    cout << "[ " << m_id << " @ " << system_time << " ] ";
+    for (uint32_t i = 0; i < 65; ++i) {
+        if (count.count(i) == 0) {
+            cout << "0 ";
+        } else {
+            cout << count[i] << " ";
+        }
+    }
+    cout << endl;
+}

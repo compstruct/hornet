@@ -37,7 +37,7 @@ memoryRequest::~memoryRequest() {}
 /*****************/
 
 memory::memory(uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, logger &l, shared_ptr<random_gen> r) :
-    m_id(id), system_time(t), stats(st), log(l), ran(r), m_dramctrl(NULL), m_dramctrl_location(id) 
+    m_id(id), system_time(t), stats(st), log(l), ran(r), m_dramctrl(NULL), m_dramctrl_location(id), m_power(true)
 { }
 
 memory::~memory() { 

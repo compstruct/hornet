@@ -10,6 +10,9 @@
 #include "cat.hpp"
 #include "privateSharedPTIStats.hpp"
 
+#define ADDITIONAL_INSTRUMENT
+//#undef ADDITIONAL_INSTRUMENT
+
 class privateSharedPTI : public memory {
 public:
     typedef enum {
@@ -34,10 +37,12 @@ public:
         _renewalType_t renewal_type;
         uint32_t delta;
         uint32_t renewal_threshold;
-        uint32_t renewal_schedule_queue_size;
         bool allow_revive;
         bool retry_rReq;
         bool use_rRep_for_tReq;
+        bool use_exclusive_vc_for_pReq;
+        bool use_exclusive_vc_for_rReq;
+        bool use_exclusive_vc_for_rRep;
         _rRepType_t rRep_type;
         uint32_t num_nodes;
         uint32_t bytes_per_flit;
@@ -48,6 +53,8 @@ public:
         uint32_t dir_table_size_shared;
         uint32_t dir_table_size_cache_rep_exclusive;
         uint32_t dir_table_size_empty_req_exclusive;
+        uint32_t cache_renewal_table_size;
+        uint32_t dir_renewal_table_size;
         /* L1 */
         uint32_t lines_in_l1;
         uint32_t l1_associativity;
@@ -88,8 +95,11 @@ public:
         MSG_DRAMCTRL_REQ = 0,
         MSG_DRAMCTRL_REP,
         MSG_CACHE_REQ,
+        MSG_CACHE_PREQ,
+        MSG_CACHE_RREQ,
         MSG_CACHE_REP,
         MSG_DIR_REQ_REP,
+        MSG_DIR_RREP,
         NUM_MSG_TYPES
     } privateSharedPTIMsgType_t;
 
@@ -134,6 +144,7 @@ public:
         uint64_t birthtime;
 
         /* to identify tReq-tRep pairs */
+        /* or to schedule a future rReq */
         uint64_t requested_time;
 
     } coherenceMsg;
@@ -146,6 +157,7 @@ public:
         /* aux stat */
         uint64_t in_time;
         uint64_t last_access;
+
     } cacheCoherenceInfo;
 
     typedef enum {
@@ -270,6 +282,8 @@ private:
         _DIR_SEND_DIR_REQ__EMPTY_REQ, 
         _DIR_L2_UPDATE__DRAM_REP,
         _DIR_L2_UPDATE__CACHE_REP,
+        _DIR_SEND_DIR_REP__RREP, 
+        _DIR_SEND_DIR_REP__TREP_PREP, 
         _DIR_SEND_DRAMCTRL_WRITEBACK__FEED,
         _DIR_SEND_DRAMCTRL_WRITEBACK__EVICTION,
     } dirEntrySubstatus;
@@ -350,10 +364,15 @@ private:
     dirTable m_dir_table;
     dramctrlTable m_dramctrl_work_table;
 
+
     uint32_t m_cache_table_vacancy;
     uint32_t m_dir_table_vacancy_shared;
     uint32_t m_dir_table_vacancy_cache_rep_exclusive;
     uint32_t m_dir_table_vacancy_empty_req_exclusive;
+
+    uint32_t m_cache_renewal_table_vacancy;
+    uint32_t m_dir_renewal_table_vacancy;
+
     uint32_t m_available_core_ports;
 
     /* keep track of writeback requests to priortize it. must hold other reads and writes until writeback finishes */
@@ -368,28 +387,68 @@ private:
     typedef enum {
         FROM_LOCAL_CORE_REQ = 0,
         FROM_LOCAL_DIR,
-        FROM_REMOTE_DIR
+        FROM_LOCAL_SCHEDULED_RREQ,
+        FROM_REMOTE_DIR,
+        FROM_REMOTE_DIR_RREP
     } cacheTableEntrySrc_t;
 
     vector<tuple<cacheTableEntrySrc_t, shared_ptr<void> > > m_new_cache_table_entry_schedule_q;
 
+    typedef enum {
+        FROM_LOCAL_CACHE,
+        FROM_REMOTE_CACHE_REQ,
+        FROM_REMOTE_CACHE_PREQ,
+        FROM_REMOTE_CACHE_RREQ
+    } dirTableEntrySrc_t;
+
     vector<tuple<bool/* is remote */, shared_ptr<coherenceMsg> > > m_new_dir_table_entry_for_cache_rep_schedule_q;
-    vector<tuple<bool/* is remote */, shared_ptr<coherenceMsg> > > m_new_dir_table_entry_for_req_schedule_q;
+    vector<tuple<dirTableEntrySrc_t, shared_ptr<coherenceMsg> > > m_new_dir_table_entry_for_req_schedule_q;
+    vector<tuple<dirTableEntrySrc_t, shared_ptr<coherenceMsg> > > m_new_dir_table_entry_for_renewal_schedule_q;
 
     vector<shared_ptr<cacheTableEntry> > m_cat_req_schedule_q;
+
     vector<shared_ptr<cacheTableEntry> > m_l1_read_req_schedule_q;
     vector<shared_ptr<cacheTableEntry> > m_l1_write_req_schedule_q;
+    vector<shared_ptr<cacheTableEntry> > m_l1_read_req_schedule_q_for_renewal;
+    vector<shared_ptr<cacheTableEntry> > m_l1_write_req_schedule_q_for_renewal;
+
     vector<shared_ptr<cacheTableEntry> > m_cache_req_schedule_q;
     vector<shared_ptr<cacheTableEntry> > m_cache_rep_schedule_q;
 
     vector<shared_ptr<dirTableEntry> > m_l2_read_req_schedule_q;
     vector<shared_ptr<dirTableEntry> > m_l2_write_req_schedule_q;
+    vector<shared_ptr<dirTableEntry> > m_l2_read_req_schedule_q_for_renewal;
+    vector<shared_ptr<dirTableEntry> > m_l2_write_req_schedule_q_for_renewal;
+
     vector<shared_ptr<dirTableEntry> > m_dir_req_schedule_q;
     vector<shared_ptr<dirTableEntry> > m_dir_rep_schedule_q;
 
     vector<tuple<bool/* is remote */, shared_ptr<void> > > m_dramctrl_req_schedule_q;
     vector<shared_ptr<dramctrlTableEntry> > m_dramctrl_rep_schedule_q;
 
+    /* scheduled rReq */
+    class rReqScheduleQueue{
+    public:
+        rReqScheduleQueue(bool do_retry, const uint64_t& t);
+        ~rReqScheduleQueue();
+
+        void set(shared_ptr<coherenceMsg> rReq);
+        void remove(maddr_t addr);
+        vector<shared_ptr<coherenceMsg> > on_due();
+
+    private:
+        const uint64_t& system_time;
+        bool m_do_retry;
+
+        vector<shared_ptr<coherenceMsg> > m_schedule;
+        map<maddr_t, shared_ptr<coherenceMsg> > m_book;
+    };
+
+    rReqScheduleQueue m_rReq_schedule_q;
+
+#ifdef ADDITIONAL_INSTRUMENT
+    map<maddr_t, uint32_t> m_renewal_count;
+#endif
 };
 
 #endif

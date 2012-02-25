@@ -390,10 +390,12 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     cfg.renewal_type = (privateSharedPTI::_renewalType_t)read_word(img);
                     cfg.delta = read_word(img);
                     cfg.renewal_threshold = read_word(img);
-                    cfg.renewal_schedule_queue_size = read_word(img);
                     cfg.allow_revive = read_word(img);
                     cfg.retry_rReq = !((bool)read_word(img));
                     cfg.use_rRep_for_tReq = read_word(img);
+                    cfg.use_exclusive_vc_for_pReq = read_word(img);
+                    cfg.use_exclusive_vc_for_rReq = read_word(img);
+                    cfg.use_exclusive_vc_for_rRep = read_word(img);
                     cfg.rRep_type = (privateSharedPTI::_rRepType_t)read_word(img);
                     cfg.num_nodes = num_nodes;
                     cfg.bytes_per_flit = bytes_per_flit;
@@ -402,6 +404,8 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     cfg.dir_table_size_shared = read_word(img);
                     cfg.dir_table_size_cache_rep_exclusive = read_word(img);
                     cfg.dir_table_size_empty_req_exclusive = read_word(img);
+                    cfg.cache_renewal_table_size = read_word(img);
+                    cfg.dir_renewal_table_size = read_word(img);
                     cfg.l1_replacement_policy = (privateSharedPTI::_replacementPolicy_t)read_word(img);
                     cfg.l2_replacement_policy = (privateSharedPTI::_replacementPolicy_t)read_word(img);
                     cfg.words_per_cache_line = read_word(img);

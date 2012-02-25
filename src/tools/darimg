@@ -637,10 +637,6 @@ def get_memory_cfgs(cfg, core):
             ret.append(int(cfg.get(section, 'renewal threshold')))
         else:
             ret.append(0)
-        if cfg.has_option(section, 'scheduled renewal queue size'):
-            ret.append(int(cfg.get(section, 'scheduled renewal queue size')))
-        else:
-            ret.append(0)
         if cfg.has_option(section, 'allow reviving expired line by rRep'):
             answer = cfg.get(section, 'allow reviving expired line by rRep')
             if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
@@ -659,6 +655,30 @@ def get_memory_cfgs(cfg, core):
             ret.append(0)
         if cfg.has_option(section, 'use valid rRep for tReq'):
             answer = cfg.get(section, 'use valid rRep for tReq')
+            if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
+                ret.append(1)
+            else:
+                ret.append(0)
+        else:
+            ret.append(0)
+        if cfg.has_option(section, 'use exclusive virtual channel for pReq'):
+            answer = cfg.get(section, 'use exclusive virtual channel for pReq')
+            if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
+                ret.append(1)
+            else:
+                ret.append(0)
+        else:
+            ret.append(0)
+        if cfg.has_option(section, 'use exclusive virtual channel for rReq'):
+            answer = cfg.get(section, 'use exclusive virtual channel for rReq')
+            if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
+                ret.append(1)
+            else:
+                ret.append(0)
+        else:
+            ret.append(0)
+        if cfg.has_option(section, 'use exclusive virtual channel for rRep'):
+            answer = cfg.get(section, 'use exclusive virtual channel for rRep')
             if answer in ['YES', 'yes', 'Y', 'y', '1', 'Yes', 'true', 'True', 'TRUE']:
                 ret.append(1)
             else:
@@ -691,6 +711,14 @@ def get_memory_cfgs(cfg, core):
             ret.append(int(cfg.get(section, 'reserved L2 work table size for line eviction')))
         else:
             ret.append(1)
+        if cfg.has_option(section, 'cache renewal work table size'):
+            ret.append(int(cfg.get(section, 'cache renewal work table size')))
+        else:
+            ret.append(0)
+        if cfg.has_option(section, 'directory renewal work table size'):
+            ret.append(int(cfg.get(section, 'directory renewal work table size')))
+        else:
+            ret.append(0)
         for cache_name in ['L1', 'L2']:
             option_id = {
                 'LRU':0,

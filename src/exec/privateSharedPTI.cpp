@@ -12,9 +12,6 @@
 #define DEBUG
 #undef DEBUG
 
-#define PRINT_ENTRY_FAIL
-#undef PRINT_ENTRY_FAIL
-
 #ifdef DEBUG
 #define mh_log(X) cout
 #define mh_assert(X) assert(X)
@@ -291,7 +288,10 @@ privateSharedPTI::privateSharedPTI(uint32_t id,
     m_dir_table_vacancy_shared(cfg.dir_table_size_shared),
     m_dir_table_vacancy_cache_rep_exclusive(cfg.dir_table_size_cache_rep_exclusive),
     m_dir_table_vacancy_empty_req_exclusive(cfg.dir_table_size_empty_req_exclusive),
-    m_available_core_ports(cfg.num_local_core_ports)
+    m_cache_renewal_table_vacancy(m_cfg.cache_renewal_table_size),
+    m_dir_renewal_table_vacancy(m_cfg.dir_renewal_table_size),
+    m_available_core_ports(cfg.num_local_core_ports),
+    m_rReq_schedule_q(m_cfg.retry_rReq, t)
 {
     /* sanity checks */
     if (m_cfg.bytes_per_flit == 0) throw err_bad_shmem_cfg("flit size must be non-zero.");
@@ -306,6 +306,13 @@ privateSharedPTI::privateSharedPTI(uint32_t id,
         throw err_bad_shmem_cfg("privateSharedPTI : cache reply exclusive work table size must be non-zero.");
     if (m_cfg.dir_table_size_empty_req_exclusive == 0) 
         throw err_bad_shmem_cfg("privateSharedPTI : empty request exclusive work table size must be non-zero.");
+    if ((m_cfg.renewal_type == _RENEWAL_SYNCHED ||
+         m_cfg.renewal_type == _RENEWAL_SCHEDULED) &&
+        (m_cfg.cache_renewal_table_size == 0 ||
+         m_cfg.dir_renewal_table_size == 0))
+    {
+        throw err_bad_shmem_cfg("privateSharedPTI : renewal table size must be nonzero for cache and difrectory for renewal.");
+    }
     
     replacementPolicy_t l1_policy, l2_policy;
 
@@ -483,20 +490,30 @@ void privateSharedPTI::schedule_requests() {
     /*****************************************/
 
     random_shuffle(m_cache_req_schedule_q.begin(), m_cache_req_schedule_q.end(), rr_fn);
-    while (m_cache_req_schedule_q.size()) {
+    while (m_power && m_cache_req_schedule_q.size()) {
         shared_ptr<cacheTableEntry>& entry = m_cache_req_schedule_q.front();
         shared_ptr<coherenceMsg>& cache_req = entry->cache_req;
 
         if (m_id == cache_req->receiver) {
-            m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(false, cache_req));
+            if (cache_req->type == RREQ) {
+                m_new_dir_table_entry_for_renewal_schedule_q.push_back(make_tuple(FROM_LOCAL_CACHE, cache_req));
+            } else {
+                m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(FROM_LOCAL_CACHE, cache_req));
+            }
         } else if (m_core_send_queues[MSG_CACHE_REQ]->available()) {
             shared_ptr<message_t> msg(new message_t);
             msg->src = m_id;
             msg->dst = cache_req->receiver;
-            msg->type = MSG_CACHE_REQ;
+            if (m_cfg.use_exclusive_vc_for_pReq && cache_req->type == PREQ) {
+                msg->type = MSG_CACHE_PREQ;
+            } else if (m_cfg.use_exclusive_vc_for_rReq && cache_req->type == RREQ) {
+                msg->type = MSG_CACHE_RREQ;
+            } else {
+                msg->type = MSG_CACHE_REQ;
+            }
             msg->flit_count = get_flit_count(get_header_bytes(cache_req->type));
             msg->content = cache_req;
-            m_core_send_queues[MSG_CACHE_REQ]->push_back(msg);
+            m_core_send_queues[msg->type]->push_back(msg);
             cache_req->sent = true;
 
             mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] ";
@@ -586,25 +603,33 @@ void privateSharedPTI::schedule_requests() {
         shared_ptr<coherenceMsg>& dir_rep = entry->dir_rep;
         if (m_id == dir_rep->receiver) {
             m_new_cache_table_entry_schedule_q.push_back(make_tuple(FROM_LOCAL_DIR, dir_rep));
-        } else if (m_core_send_queues[MSG_DIR_REQ_REP]->available()) {
-            shared_ptr<message_t> msg(new message_t);
-            msg->src = m_id;
-            msg->dst = dir_rep->receiver;
-            msg->type = MSG_DIR_REQ_REP;
-            msg->flit_count = get_flit_count(get_header_bytes(dir_rep->type) + dir_rep->word_count * 4);
-            msg->content = dir_rep;
-            m_core_send_queues[MSG_DIR_REQ_REP]->push_back(msg);
-            dir_rep->sent = true;
-
-            mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] ";
-            if (dir_rep->type == TREP) {
-                mh_log(4) << "tRep ";
-            } else if (dir_rep->type == PREP) {
-                mh_log(4) << "pRep ";
-            } else if (dir_rep->type == RREP) {
-                mh_log(4) << "rRep ";
+        } else {
+            privateSharedPTIMsgType_t msg_type;
+            if (m_cfg.use_exclusive_vc_for_rRep && dir_rep->type == RREP) {
+                msg_type = MSG_DIR_RREP;
+            } else {
+                msg_type = MSG_DIR_REQ_REP;
             }
-            mh_log(4) << " sent " << m_id << " -> " << msg->dst << " num flits " << msg->flit_count << endl;
+            if (m_core_send_queues[msg_type]->available()) {
+                shared_ptr<message_t> msg(new message_t);
+                msg->src = m_id;
+                msg->dst = dir_rep->receiver;
+                msg->type = msg_type;
+                msg->flit_count = get_flit_count(get_header_bytes(dir_rep->type) + dir_rep->word_count * 4);
+                msg->content = dir_rep;
+                m_core_send_queues[msg_type]->push_back(msg);
+                dir_rep->sent = true;
+
+                mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] ";
+                if (dir_rep->type == TREP) {
+                    mh_log(4) << "tRep ";
+                } else if (dir_rep->type == PREP) {
+                    mh_log(4) << "pRep ";
+                } else if (dir_rep->type == RREP) {
+                    mh_log(4) << "rRep ";
+                }
+                mh_log(4) << " sent " << m_id << " -> " << msg->dst << " num flits " << msg->flit_count << endl;
+            }
         }
         m_dir_rep_schedule_q.erase(m_dir_rep_schedule_q.begin());
     }
@@ -625,6 +650,17 @@ void privateSharedPTI::schedule_requests() {
         m_core_port_schedule_q.erase(m_core_port_schedule_q.begin());
     }
 
+    /*********************************/
+    /* scheduling for scheduled rReq */
+    /*********************************/
+    if (m_cfg.renewal_type == _RENEWAL_SCHEDULED) {
+        vector<shared_ptr<coherenceMsg> > on_due = m_rReq_schedule_q.on_due();
+        while (on_due.size()) {
+            m_new_cache_table_entry_schedule_q.push_back(make_tuple(FROM_LOCAL_SCHEDULED_RREQ, on_due.front()));
+            on_due.erase(on_due.begin());
+        }
+    }
+
     /**********************************/
     /* schedule for cache table space */
     /**********************************/
@@ -633,14 +669,28 @@ void privateSharedPTI::schedule_requests() {
         cacheTableEntrySrc_t source = m_new_cache_table_entry_schedule_q.front().get<0>();
         if (source == FROM_LOCAL_CORE_REQ) {
             /* Requests from core */
-            shared_ptr<memoryRequest> core_req = static_pointer_cast<memoryRequest>(m_new_cache_table_entry_schedule_q.front().get<1>());
+            shared_ptr<memoryRequest> core_req = 
+                static_pointer_cast<memoryRequest>(m_new_cache_table_entry_schedule_q.front().get<1>());
             shared_ptr<privateSharedPTIStatsPerMemInstr> per_mem_instr_stats = 
                 (core_req->per_mem_instr_runtime_info())?
                     static_pointer_cast<privateSharedPTIStatsPerMemInstr>(*(core_req->per_mem_instr_runtime_info()))
                 :
                     shared_ptr<privateSharedPTIStatsPerMemInstr>();
             maddr_t start_maddr = get_start_maddr_in_line(core_req->maddr());
-            if (m_cache_table.count(start_maddr) || m_cache_table_vacancy == 0 || m_available_core_ports == 0) {
+
+            bool retry = false;
+            if (m_cache_table_vacancy == 0 || m_available_core_ports == 0) {
+                retry = true;
+            } else if (m_cache_table.count(start_maddr)) {
+                if (m_cache_table[start_maddr]->status == _CACHE_SEND_RREQ) {
+                    mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] " 
+                              << "halted sending rReq process for a new core request" << endl;
+                    ++m_cache_renewal_table_vacancy;
+                } else {
+                    retry = true;
+                }
+            }
+            if (retry) {
                 set_req_status(core_req, REQ_RETRY);
                 m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
                 continue;
@@ -703,46 +753,114 @@ void privateSharedPTI::schedule_requests() {
             }
             mh_log(4) << "request on " << core_req->maddr() << " got into the table " << endl;
 
+        } else if (source == FROM_LOCAL_SCHEDULED_RREQ) {
+
+            shared_ptr<coherenceMsg> rReq = static_pointer_cast<coherenceMsg>(m_new_cache_table_entry_schedule_q.front().get<1>());
+
+            bool discard = false;
+            bool retry = false;
+
+            if (!m_cfg.allow_revive && *(rReq->timestamp) <= system_time) {
+                discard = true;
+            } else if (m_cache_renewal_table_vacancy == 0) {
+                retry = true;
+            } else if (m_cache_table.count(rReq->maddr)) {
+                discard = true;
+            }
+
+            if (discard) {
+                m_rReq_schedule_q.remove(rReq->maddr);
+                m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
+                continue;
+            } else if (retry) {
+                m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
+                continue;
+            }
+
+            m_rReq_schedule_q.remove(rReq->maddr);
+
+            shared_ptr<cacheTableEntry> new_entry(new cacheTableEntry);
+            new_entry->core_req =  shared_ptr<memoryRequest>();
+            new_entry->cat_req = shared_ptr<catRequest>();
+            new_entry->l1_req = shared_ptr<cacheRequest>();
+            new_entry->dir_req = shared_ptr<coherenceMsg>();
+            new_entry->dir_rep = shared_ptr<coherenceMsg>();
+            new_entry->cache_req = rReq;
+            new_entry->cache_rep = shared_ptr<coherenceMsg>();
+            new_entry->status = _CACHE_SEND_RREQ;
+            new_entry->per_mem_instr_stats = shared_ptr<privateSharedPTIStatsPerMemInstr>();
+
+            m_cache_table[rReq->maddr] = new_entry;
+            --m_cache_renewal_table_vacancy;
+
+            m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
+
+            mh_log(4) << "[Mem " << m_id << " @ " << system_time << " ] An rReq "
+                      << "request on " << rReq->maddr << " got into the table " << endl;
+
         } else {
             /* from directory */
             shared_ptr<coherenceMsg> dir_msg = static_pointer_cast<coherenceMsg>(m_new_cache_table_entry_schedule_q.front().get<1>());
+            maddr_t start_maddr = get_start_maddr_in_line(dir_msg->maddr);
+
             if (dir_msg->type == INV_REQ || dir_msg->type == SWITCH_REQ) {
-                mh_assert(get_start_maddr_in_line(dir_msg->maddr) == dir_msg->maddr);
+                mh_assert(start_maddr == dir_msg->maddr);
+
+                bool discard = false;
+                bool retry = false;
+
                 if (m_cache_table.count(dir_msg->maddr)) {
-                    /* A directory request must not block a directory reply for which the existing entry created by a local request */
-                    /* on the same cache line is waiting. */
-                    /* This could happen when a cache line is evicted from cache before a directory request arrives, */
-                    /* and a following local access on the cache line gets a miss and sends a cache request. */
-                    /* Therefore, if the existing entry gets a miss, then the directory request can and must be discarded. */
-                    /* If the entry's state is not _CACHE_CAT_AND_L1_FOR_LOCAL, it gets a miss. */
-                    /* And if it didn't receive a directory reply yet, it IS waiting for a directory reply that comes after */
-                    /* the current directory request */
-                    if (m_cache_table[dir_msg->maddr]->status != _CACHE_CAT_AND_L1_FOR_READ &&
-                        m_cache_table[dir_msg->maddr]->status != _CACHE_CAT_AND_L1_FOR_WRITE &&
-                        !(m_cache_table[dir_msg->maddr]->dir_rep))
-                    {
-                        /* consumed */
-                        mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] discarded a ";
-                        if (dir_msg->type == SWITCH_REQ) {
-                            mh_log(4) << "switchReq ";
-                        } else if (dir_msg->type == INV_REQ){
-                            mh_log(4) << "invReq ";
-                        }
-                        mh_log(4) << " for address " << dir_msg->maddr << " from " << dir_msg->sender
-                            << " (state: " << m_cache_table[dir_msg->maddr]->status 
-                            << " ) " << endl;
-                        if (source == FROM_REMOTE_DIR) {
-                            m_core_receive_queues[MSG_DIR_REQ_REP]->pop();
+                    if (m_cache_table[dir_msg->maddr]->dir_rep) {
+                        retry = true;
+                    } else if (m_cache_table[dir_msg->maddr]->status == _CACHE_SEND_RREQ) {
+                        if (m_cache_table_vacancy == 0) {
+                            retry = true;
                         } else {
-                            dir_msg->sent = true;
+                            ++m_cache_renewal_table_vacancy;
+                            mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] " 
+                                      << "halted sending rReq process for a new core request" << endl;
                         }
+                    } else if (m_cache_table[dir_msg->maddr]->status != _CACHE_CAT_AND_L1_FOR_READ &&
+                               m_cache_table[dir_msg->maddr]->status != _CACHE_CAT_AND_L1_FOR_WRITE &&
+                               m_cache_table[dir_msg->maddr]->status != _CACHE_SEND_RREQ)
+                    {
+                        /* A directory request must not block a directory reply for which the existing entry created by a local request */
+                        /* on the same cache line is waiting. */
+                        /* This could happen when a cache line is evicted from cache before a directory request arrives, */
+                        /* and a following local access on the cache line gets a miss and sends a cache request. */
+                        /* Therefore, if the existing entry gets a miss, then the directory request can and must be discarded. */
+                        /* If the entry's state is not _CACHE_CAT_AND_L1_FOR_LOCAL, or sending an rReq, it gets a miss. */
+                        /* And if it didn't receive a directory reply yet, it IS waiting for a directory reply that comes after */
+                        /* the current directory request */
+                        discard = true;
+                    } else {
+                        retry = true;
                     }
-                    /* If the existing entry is testing the L1, or if it alrady received a directory reply and is trying to */
-                    /* update its L1, the directory request must not be discarded and taken after the current entry finishes */
+                } else if (m_cache_table_vacancy == 0) {
+                    retry = true;
+                }
+
+                if (discard) {
+                    /* consumed */
+                    mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] discarded a ";
+                    if (dir_msg->type == SWITCH_REQ) {
+                        mh_log(4) << "switchReq ";
+                    } else if (dir_msg->type == INV_REQ){
+                        mh_log(4) << "invReq ";
+                    }
+                    mh_log(4) << " for address " << dir_msg->maddr << " from " << dir_msg->sender
+                        << " (state: " << m_cache_table[dir_msg->maddr]->status 
+                        << " ) " << endl;
+                    if (source == FROM_REMOTE_DIR) {
+                        m_core_receive_queues[MSG_DIR_REQ_REP]->pop();
+                    } else if (source == FROM_REMOTE_DIR_RREP) {
+                        m_core_receive_queues[MSG_DIR_RREP]->pop();
+                    } else {
+                        dir_msg->sent = true;
+                    }
                     m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
                     continue;
-
-                } else if (m_cache_table_vacancy == 0) {
+                } else if (retry) {
                     m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
                     continue;
                 }
@@ -762,6 +880,7 @@ void privateSharedPTI::schedule_requests() {
                     new_info->status = TIMESTAMPED;
                     new_info->home = dir_msg->sender;
                     new_info->timestamp = dir_msg->timestamp;
+
                     l1_req = shared_ptr<cacheRequest>(new cacheRequest(dir_msg->maddr, CACHE_REQ_UPDATE,
                                                                        0, shared_array<uint32_t>(), new_info));
                     l1_req->set_aux_info_for_coherence
@@ -797,147 +916,204 @@ void privateSharedPTI::schedule_requests() {
                 m_cache_table[dir_msg->maddr] = new_entry;
                 --m_cache_table_vacancy;
 
-                if (source == FROM_LOCAL_DIR) {
-                    dir_msg->sent = true;
-                } else {
+                if (source == FROM_REMOTE_DIR) {
                     m_core_receive_queues[MSG_DIR_REQ_REP]->pop();
+                } else if (source == FROM_REMOTE_DIR_RREP) {
+                    m_core_receive_queues[MSG_DIR_RREP]->pop();
+                } else {
+                    dir_msg->sent = true;
+                }
+                m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
+                continue;
+
+            } else if (dir_msg->type == PREP) {
+                /* PREP */
+                mh_assert(m_cache_table.count(start_maddr) &&
+                          (m_cache_table[start_maddr]->status == _CACHE_WAIT_PREP ||
+                           m_cache_table[start_maddr]->status == _CACHE_WAIT_TREP_OR_RREP));
+                m_cache_table[start_maddr]->dir_rep = dir_msg;
+                if (source == FROM_REMOTE_DIR) {
+                    m_core_receive_queues[MSG_DIR_REQ_REP]->pop();
+                } else if (source == FROM_REMOTE_DIR_RREP) {
+                    m_core_receive_queues[MSG_DIR_RREP]->pop();
+                } else {
+                    dir_msg->sent = true;
+                }
+                m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
+                continue;
+
+            } else if (!m_cache_table.count(start_maddr)) {
+
+                /* TREP or RREP, as a renewal */
+                bool discard = false;
+                bool retry = false;
+
+                if (*(dir_msg->timestamp) <= system_time) {
+                    /* cannot use rRep with expired timestamp */
+                    discard = true;
+                    mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] an expired ";
+                    if (dir_msg->type == TREP) {
+                        mh_log(4) << "tRep ";
+                    } else {
+                        mh_assert(dir_msg->type == RREP);
+                        mh_log(4) << "rRep ";
+                    }
+                    mh_log(4) << "from " << dir_msg->sender << " on " << dir_msg->maddr << " is discarded" << endl;
+                } else if (m_cache_renewal_table_vacancy == 0) {
+                    /* no space for renewal */
+                    retry = true;
+                }
+
+                if (discard) {
+                    if (source == FROM_REMOTE_DIR) {
+                        m_core_receive_queues[MSG_DIR_REQ_REP]->pop();
+                    } else if (source == FROM_REMOTE_DIR_RREP) {
+                        m_core_receive_queues[MSG_DIR_RREP]->pop();
+                    } else {
+                        dir_msg->sent = true;
+                    }
+                    m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
+                    continue;
+                } else if (retry) {
+                    m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
+                    continue;
+                }
+
+                /* accepted as a renewal */
+
+
+                mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] received a ";
+                if (dir_msg->type == TREP) {
+                    mh_log(4) << "tRep ";
+                } else if (dir_msg->type == RREP){
+                    mh_log(4) << "rRep ";
+                }
+                mh_log(4) << "as a renewal for address " << dir_msg->maddr << " from " << dir_msg->sender << endl;
+
+                /* Create a new entry */
+                shared_ptr<cacheRequest> l1_req;
+                shared_ptr<cacheCoherenceInfo> new_info(new cacheCoherenceInfo);
+                new_info->status = TIMESTAMPED;
+                new_info->home = dir_msg->sender;
+                new_info->timestamp = dir_msg->timestamp;
+                l1_req = shared_ptr<cacheRequest>(new cacheRequest(dir_msg->maddr, CACHE_REQ_UPDATE,
+                                                                   dir_msg->word_count,
+                                                                   dir_msg->data, 
+                                                                   new_info));
+                l1_req->set_aux_info_for_coherence
+                    (shared_ptr<cacheAuxInfoForCoherence>(new cacheAuxInfoForCoherence(UPDATE_FOR_RENEWAL)));
+                l1_req->set_serialization_begin_time(system_time);
+                l1_req->set_unset_dirty_on_write(true);
+                l1_req->set_claim(false);
+                l1_req->set_evict(false);
+                shared_ptr<cacheTableEntry> new_entry(new cacheTableEntry);
+                new_entry->core_req =  shared_ptr<memoryRequest>();
+                new_entry->cat_req = shared_ptr<catRequest>();
+                new_entry->l1_req = l1_req;
+                new_entry->dir_req = dir_msg;
+                new_entry->dir_rep = shared_ptr<coherenceMsg>();
+                new_entry->cache_req = shared_ptr<coherenceMsg>();
+                new_entry->cache_rep = shared_ptr<coherenceMsg>();
+                new_entry->per_mem_instr_stats = shared_ptr<privateSharedPTIStatsPerMemInstr>();
+                new_entry->status = _CACHE_L1_FOR_RENEWAL;
+
+                --m_cache_renewal_table_vacancy;
+                m_cache_table[dir_msg->maddr] = new_entry;
+
+                if (l1_req->use_read_ports()) {
+                    m_l1_read_req_schedule_q_for_renewal.push_back(new_entry);
+                } else {
+                    m_l1_write_req_schedule_q_for_renewal.push_back(new_entry);
+                }
+                if (source == FROM_REMOTE_DIR) {
+                    m_core_receive_queues[MSG_DIR_REQ_REP]->pop();
+                } else if (source == FROM_REMOTE_DIR_RREP) {
+                    m_core_receive_queues[MSG_DIR_RREP]->pop();
+                } else {
+                    dir_msg->sent = true;
                 }
                 m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
                 continue;
 
             } else {
-                /* directory replies */
-                bool discard_message = false;
+                /* TREP or RREP, as a reply */
 
-                maddr_t start_maddr = get_start_maddr_in_line(dir_msg->maddr);
-
-                if (dir_msg->type == PREP) {
-                    /* PREP - must have requested */
-                    mh_assert(m_cache_table.count(start_maddr) &&
-                              (m_cache_table[start_maddr]->status == _CACHE_WAIT_PREP ||
-                               m_cache_table[start_maddr]->status == _CACHE_WAIT_TREP_OR_RREP));
-                    m_cache_table[start_maddr]->dir_rep = dir_msg;
-                    discard_message = true;
+                bool discard = false;
+                bool retry = false;
+                if (dir_msg->type == RREP && *(dir_msg->timestamp) <= system_time) {
+                    /* cannot use rRep with expired timestamp */
+                    discard = true;
+                    mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] an expired rRep from " << dir_msg->sender 
+                              << " on " << dir_msg->maddr << " is discarded" << endl;
+                } else if (m_cache_table[start_maddr]->status == _CACHE_WAIT_PREP) {
+                    /* pReq already sent. tRep and rRep must get discarded */
+                    discard = true;
+                    mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] waiting for a pRep and discarded a ";
+                    if (dir_msg->type == TREP) {
+                        mh_log(4) << "tRep ";
+                    } else {
+                        mh_log(4) << "rRep ";
+                    }
+                    mh_log(4) << "from " << dir_msg->sender << " on " << dir_msg->maddr << endl;
+                } else if (!m_cfg.use_rRep_for_tReq) {
+                    if (dir_msg->type == RREP) {
+                        discard = true;
+                        mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] waiting for a tRep and discarded a rRep"
+                                  << "from " << dir_msg->sender << " on " << dir_msg->maddr << endl;
+                    } else {
+                        mh_assert(m_cache_table[start_maddr]->status == _CACHE_WAIT_TREP_OR_RREP);
+                    }
                 } else {
-                    /* TREP or RREP */
-                    mh_assert (dir_msg->type == TREP || dir_msg->type == RREP);
-
-                    if (!(m_cache_table.count(start_maddr))) {
-                        /* new entry */
-                        if (*(dir_msg->timestamp) <= system_time) {
-                            /* cannot use rRep with expired timestamp */
-                            discard_message = true;
-                            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] an expired ";
-                            if (dir_msg->type == TREP) {
-                                mh_log(4) << "tRep ";
-                            } else {
-                                mh_assert(dir_msg->type == RREP);
-                                mh_log(4) << "rRep ";
-                            }
-                            mh_log(4) << "from " << dir_msg->sender << " on " << dir_msg->maddr << " is discarded" << endl;
-                        } else if (m_cache_table_vacancy > 0) {
-                            /* accepted as a renewal */
-                            discard_message = true;
-                            mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] received a ";
-                            if (dir_msg->type == TREP) {
-                                mh_log(4) << "tRep ";
-                            } else if (dir_msg->type == RREP){
-                                mh_log(4) << "rRep ";
-                            }
-                            mh_log(4) << " for address " << dir_msg->maddr << " from " << dir_msg->sender << endl;
-
-                            /* Create a new entry */
-                            shared_ptr<cacheRequest> l1_req;
-                            shared_ptr<cacheCoherenceInfo> new_info(new cacheCoherenceInfo);
-                            new_info->status = TIMESTAMPED;
-                            new_info->home = dir_msg->sender;
-                            new_info->timestamp = dir_msg->timestamp;
-                            l1_req = shared_ptr<cacheRequest>(new cacheRequest(dir_msg->maddr, CACHE_REQ_UPDATE,
-                                                                               dir_msg->word_count,
-                                                                               dir_msg->data, 
-                                                                               new_info));
-                            l1_req->set_aux_info_for_coherence
-                                (shared_ptr<cacheAuxInfoForCoherence>(new cacheAuxInfoForCoherence(UPDATE_FOR_RENEWAL)));
-                            l1_req->set_serialization_begin_time(system_time);
-                            l1_req->set_unset_dirty_on_write(true);
-                            l1_req->set_claim(false);
-                            l1_req->set_evict(false);
-                            shared_ptr<cacheTableEntry> new_entry(new cacheTableEntry);
-                            new_entry->core_req =  shared_ptr<memoryRequest>();
-                            new_entry->cat_req = shared_ptr<catRequest>();
-                            new_entry->l1_req = l1_req;
-                            new_entry->dir_req = dir_msg;
-                            new_entry->dir_rep = shared_ptr<coherenceMsg>();
-                            new_entry->cache_req = shared_ptr<coherenceMsg>();
-                            new_entry->cache_rep = shared_ptr<coherenceMsg>();
-                            new_entry->per_mem_instr_stats = shared_ptr<privateSharedPTIStatsPerMemInstr>();
-                            new_entry->status = _CACHE_L1_FOR_RENEWAL;
-                            m_cache_table[dir_msg->maddr] = new_entry;
-
-                            if (l1_req->use_read_ports()) {
-                                m_l1_read_req_schedule_q.push_back(new_entry);
-                            } else {
-                                m_l1_write_req_schedule_q.push_back(new_entry);
-                            }
-                            --m_cache_table_vacancy;
-                        }
-                    } else if (dir_msg->type == RREP && *(dir_msg->timestamp) <= system_time) {
-                        /* cannot use rRep with expired timestamp */
-                        discard_message = true;
-                        mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] an expired rRep from " << dir_msg->sender 
-                                  << " on " << dir_msg->maddr << " is discarded" << endl;
-                    
+                    if (*(dir_msg->timestamp) <= system_time && 
+                        m_cache_table[start_maddr]->cache_req->requested_time != dir_msg->requested_time)
+                    {
+                        /* invalid tRep (tRep for previous tReq, that is answered early by a rRep */
+                        mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] discarded an obsolete tRep from "
+                                  << dir_msg->sender << " on " << dir_msg->maddr << endl;
+                        discard = true;
                     } else if (m_cache_table[start_maddr]->dir_rep ||
-                               (m_cache_table[start_maddr]->status != _CACHE_CAT_AND_L1_FOR_READ &&
-                                m_cache_table[start_maddr]->status != _CACHE_SEND_TREQ &&
+                               (m_cache_table[start_maddr]->status != _CACHE_SEND_TREQ &&
                                 m_cache_table[start_maddr]->status != _CACHE_WAIT_TREP_OR_RREP))
                     {
-                        if (m_cache_table[start_maddr]->status == _CACHE_WAIT_PREP) {
-                            /* pReq already sent. tRep and rRep must get discarded */
-                            discard_message = true;
-                            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] waiting for a pRep and discarded a ";
-                            if (dir_msg->type == TREP) {
-                                mh_log(4) << "tRep ";
-                            } else {
-                                mh_log(4) << "rRep ";
-                            }
-                            mh_log(4) << "from " << dir_msg->sender << " on " << dir_msg->maddr << endl;
-                        }
-                    } else if (m_cfg.use_rRep_for_tReq) {
-                        /* discard invalid tRep */
-                        discard_message = true;
-                        if (*(dir_msg->timestamp) <= system_time) {
-                            mh_assert(dir_msg->type == TREP);
-                            if (m_cache_table[start_maddr]->status != _CACHE_WAIT_TREP_OR_RREP ||
-                                m_cache_table[start_maddr]->cache_req->requested_time != dir_msg->requested_time) 
-                            {
-                                /* invalid tRep (tRep for previous tReq, that is answered early by a rRep */
-                                mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] discarded an obsolete tRep from "
-                                          << dir_msg->sender << " on " << dir_msg->maddr << endl;
-                            }
-                        } else {
-                            m_cache_table[start_maddr]->dir_rep = dir_msg;
-                        }
-                    } else {
-                        /* only tRep for tReq */
-                        discard_message = true;
-                        if (dir_msg->type == RREP) {
-                            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] waiting for a tRep and discarded a rRep"
-                                      << "from " << dir_msg->sender << " on " << dir_msg->maddr << endl;
-                        } else {
-                            m_cache_table[start_maddr]->dir_rep = dir_msg;
-                            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] a tRep arrived from " << dir_msg->sender 
-                                      << " on " << dir_msg->maddr << endl;
-                        }
+                        /* wait for the current entry to proceed */
+                        retry = true;
                     }
                 }
-                if (discard_message) {
-                    if (source == FROM_LOCAL_DIR) {
-                        dir_msg->sent = true;
-                    } else {
+
+                if (discard) {
+
+                    if (source == FROM_REMOTE_DIR) {
                         m_core_receive_queues[MSG_DIR_REQ_REP]->pop();
+                    } else if (source == FROM_REMOTE_DIR_RREP) {
+                        m_core_receive_queues[MSG_DIR_RREP]->pop();
+                    } else {
+                        dir_msg->sent = true;
                     }
+                    m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
+                    continue;
+                } else if (retry) {
+                    m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
+                    continue;
                 }
+
+                /* accepted as a reply */
+                m_cache_table[start_maddr]->dir_rep = dir_msg;
+                mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] a ";
+                if (dir_msg->type == TREP) {
+                    mh_log(4) << "tRep ";
+                } else {
+                    mh_log(4) << "rRep ";
+                }
+                mh_log(4) << "arrived from " << dir_msg->sender << " on " << dir_msg->maddr << endl;
+
+                if (source == FROM_REMOTE_DIR) {
+                    m_core_receive_queues[MSG_DIR_REQ_REP]->pop();
+                } else if (source == FROM_REMOTE_DIR_RREP) {
+                    m_core_receive_queues[MSG_DIR_RREP]->pop();
+                } else {
+                    dir_msg->sent = true;
+                }
+
                 m_new_cache_table_entry_schedule_q.erase(m_new_cache_table_entry_schedule_q.begin());
                 continue;
             }
@@ -1038,8 +1214,9 @@ void privateSharedPTI::schedule_requests() {
     /* 2. cache requests/empty requests scheuling */
     random_shuffle(m_new_dir_table_entry_for_req_schedule_q.begin(), m_new_dir_table_entry_for_req_schedule_q.end(), rr_fn);
     while (m_new_dir_table_entry_for_req_schedule_q.size()) {
-        bool is_remote = m_new_dir_table_entry_for_req_schedule_q.front().get<0>();
+        dirTableEntrySrc_t source = m_new_dir_table_entry_for_req_schedule_q.front().get<0>();
         shared_ptr<coherenceMsg> req = static_pointer_cast<coherenceMsg>(m_new_dir_table_entry_for_req_schedule_q.front().get<1>());
+        mh_assert(req->type != RREQ);
         mh_assert(get_start_maddr_in_line(req->maddr) == req->maddr);
         if (m_dir_table.count(req->maddr)) {
             /* can bypass tReq while a pReq is being blocked */
@@ -1050,20 +1227,25 @@ void privateSharedPTI::schedule_requests() {
                 m_dir_table[req->maddr]->bypass_begin_time = system_time;
                 mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a bypassable tReq on " 
                           << req->maddr << " for core " << req->sender << " from " << req->sender << endl;
-                if (is_remote) {
-                    m_core_receive_queues[MSG_CACHE_REQ]->pop();
-                } else {
+                if (source == FROM_LOCAL_CACHE) {
                     req->sent = true;
+                } else if (source == FROM_REMOTE_CACHE_REQ) {
+                    m_core_receive_queues[MSG_CACHE_REQ]->pop();
+                } else if (source == FROM_REMOTE_CACHE_PREQ) {
+                    m_core_receive_queues[MSG_CACHE_PREQ]->pop();
+                } else {
+                    mh_assert(false);
                 }
+
                 m_new_dir_table_entry_for_req_schedule_q.erase(m_new_dir_table_entry_for_req_schedule_q.begin());
                 if (stats_enabled() && req->per_mem_instr_stats) {
                     req->per_mem_instr_stats->get_tentative_data(T_IDX_DIR)->
                         add_req_nas(system_time - req->birthtime, PTI_STAT_TREQ, 
                                     (req->sender == m_id)? PTI_STAT_LOCAL : PTI_STAT_REMOTE);
                     if (req->per_mem_instr_stats->is_read()) {
-                        stats()->new_read_instr_at_l2(is_remote? PTI_STAT_REMOTE : PTI_STAT_LOCAL);
+                        stats()->new_read_instr_at_l2((source == FROM_LOCAL_CACHE)? PTI_STAT_LOCAL : PTI_STAT_REMOTE);
                     } else {
-                        stats()->new_write_instr_at_l2(is_remote? PTI_STAT_REMOTE : PTI_STAT_LOCAL);
+                        stats()->new_write_instr_at_l2((source == FROM_LOCAL_CACHE)? PTI_STAT_LOCAL : PTI_STAT_REMOTE);
                     }
                 }
                 continue;
@@ -1077,39 +1259,28 @@ void privateSharedPTI::schedule_requests() {
         if (m_dir_table_vacancy_shared == 0 && !use_exclusive) {
             /* no space */
             m_new_dir_table_entry_for_req_schedule_q.erase(m_new_dir_table_entry_for_req_schedule_q.begin());
-#ifdef PRINT_ENTRY_FAIL
-            mh_log(5) << "[MEM " << m_id << " @ " << system_time << " ] received a ";
-            if (req->type == TREQ) {
-                mh_log(5) << "tReq ";
-            } else if (req->type == PREQ) {
-                mh_log(5) << "pReq ";
-            } else if (req->type == RREQ) {
-                mh_log(5) << "rReq ";
-            } else if (req->type == EMPTY_REQ) {
-                mh_log(5) << "emptyReq ";
-            } else {
-                mh_log(5) << "[ " << req->type << " ] ";
-            }
-            mh_log(5) << "from " << req->sender << " for address " << req->maddr << " but has no space " << endl;
-#endif
             continue;
         }
         /* got a space */
-        if (is_remote) {
-            m_core_receive_queues[MSG_CACHE_REQ]->pop();
-        } else {
+        if (source == FROM_LOCAL_CACHE) {
             req->sent = true;
+        } else if (source == FROM_REMOTE_CACHE_REQ) {
+            m_core_receive_queues[MSG_CACHE_REQ]->pop();
+        } else if (source == FROM_REMOTE_CACHE_PREQ) {
+            m_core_receive_queues[MSG_CACHE_PREQ]->pop();
+        } else {
+            mh_assert(false);
         }
         mh_log(5) << "[MEM " << m_id << " @ " << system_time << " ] received a ";
         if (req->type == TREQ) {
             mh_log(5) << "tReq ";
         } else if (req->type == PREQ) {
             mh_log(5) << "pReq ";
-        } else if (req->type == RREQ) {
-            mh_log(5) << "rReq ";
         } else if (req->type == EMPTY_REQ) {
             mh_log(5) << "emptyReq ";
-        } 
+        } else {
+            mh_assert(false);
+        }
         mh_log(5) << "from " << req->sender << " for address " << req->maddr << " (new entry) " << endl;
 
         /* create a new entry */
@@ -1158,15 +1329,12 @@ void privateSharedPTI::schedule_requests() {
             } else if (req->type == PREQ) {
                 aux_info->req_type = READ_FOR_PREQ;
             } else {
-                mh_assert(req->type == RREQ);
-                aux_info->req_type = READ_FOR_RREQ;
-                aux_info->requester_timestamp = *(req->timestamp);
-                aux_info->need_to_send_block = false;
+                mh_assert(false);
             }
             l2_req->set_aux_info_for_coherence(aux_info);
             new_entry->cache_req = req;
             new_entry->empty_req = shared_ptr<coherenceMsg>();
-            new_entry->status = (req->type == RREQ)? _DIR_L2_FOR_RREQ : _DIR_L2_FOR_PREQ_OR_TREQ;
+            new_entry->status = _DIR_L2_FOR_PREQ_OR_TREQ;
             new_entry->per_mem_instr_stats = req->per_mem_instr_stats;
             if (l2_req->use_read_ports()) {
                 m_l2_read_req_schedule_q.push_back(new_entry);
@@ -1177,19 +1345,19 @@ void privateSharedPTI::schedule_requests() {
                 if (req->per_mem_instr_stats) {
                     if (req->type == TREQ) {
                         req->per_mem_instr_stats->get_tentative_data(T_IDX_DIR)->
-                            add_req_nas(system_time - req->birthtime, PTI_STAT_TREQ, is_remote? PTI_STAT_REMOTE : PTI_STAT_LOCAL);
+                            add_req_nas(system_time - req->birthtime, PTI_STAT_TREQ, 
+                                        (source == FROM_LOCAL_CACHE)? PTI_STAT_LOCAL : PTI_STAT_REMOTE);
                     } else if (req->type == PREQ) {
                         req->per_mem_instr_stats->get_tentative_data(T_IDX_DIR)->
-                            add_req_nas(system_time - req->birthtime, PTI_STAT_PREQ, is_remote? PTI_STAT_REMOTE : PTI_STAT_LOCAL);
+                            add_req_nas(system_time - req->birthtime, PTI_STAT_PREQ, 
+                                        (source == FROM_LOCAL_CACHE)? PTI_STAT_LOCAL : PTI_STAT_REMOTE);
                     } else {
-                        mh_assert(req->type == RREQ);
-                        req->per_mem_instr_stats->get_tentative_data(T_IDX_DIR)->
-                            add_req_nas(system_time - req->birthtime, PTI_STAT_RREQ, is_remote? PTI_STAT_REMOTE : PTI_STAT_LOCAL);
+                        mh_assert(false);
                     }
                     if (req->per_mem_instr_stats->is_read()) {
-                        stats()->new_read_instr_at_l2(is_remote? PTI_STAT_REMOTE : PTI_STAT_LOCAL);
+                        stats()->new_read_instr_at_l2((source == FROM_LOCAL_CACHE)? PTI_STAT_LOCAL : PTI_STAT_REMOTE);
                     } else {
-                        stats()->new_write_instr_at_l2(is_remote? PTI_STAT_REMOTE : PTI_STAT_LOCAL);
+                        stats()->new_write_instr_at_l2((source == FROM_LOCAL_CACHE)? PTI_STAT_LOCAL : PTI_STAT_REMOTE);
                     }
 
                 }
@@ -1225,6 +1393,107 @@ void privateSharedPTI::schedule_requests() {
         m_new_dir_table_entry_for_req_schedule_q.erase(m_new_dir_table_entry_for_req_schedule_q.begin());
         continue;
     }
+
+    while (m_new_dir_table_entry_for_renewal_schedule_q.size()) {
+        dirTableEntrySrc_t source = m_new_dir_table_entry_for_renewal_schedule_q.front().get<0>();
+        shared_ptr<coherenceMsg> req = 
+            static_pointer_cast<coherenceMsg>(m_new_dir_table_entry_for_renewal_schedule_q.front().get<1>());
+        mh_assert(req->type == RREQ);
+        mh_assert(get_start_maddr_in_line(req->maddr) == req->maddr);
+        bool discard = false;
+        bool wait = false;
+
+        if (!m_cfg.allow_revive && *(req->timestamp) <= system_time) {
+            /* the line is already expired */
+            discard = true;
+        } else if (m_dir_table.count(req->maddr)) {
+            if (m_dir_table[req->maddr]->cache_req && m_dir_table[req->maddr]->cache_req->type == PREQ) {
+                /* discard rReq when a write req is waiting */
+                discard = true;
+            } else {
+                wait = true;
+            }
+        } else if (m_dir_renewal_table_vacancy == 0) {
+            wait = true;
+        }
+
+        if (discard) {
+            mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] discarded an rReq on " 
+                << req->maddr << " for core " << req->sender << " from " << req->sender << endl;
+            if (source == FROM_LOCAL_CACHE) {
+                req->sent = true;
+            } else if (source == FROM_REMOTE_CACHE_REQ) {
+                m_core_receive_queues[MSG_CACHE_REQ]->pop();
+            } else if (source == FROM_REMOTE_CACHE_RREQ) {
+                m_core_receive_queues[MSG_CACHE_RREQ]->pop();
+            } else {
+                mh_assert(false);
+            }
+            m_new_dir_table_entry_for_renewal_schedule_q.erase(m_new_dir_table_entry_for_renewal_schedule_q.begin());
+            continue;
+        } else if (wait) {
+            m_new_dir_table_entry_for_renewal_schedule_q.erase(m_new_dir_table_entry_for_renewal_schedule_q.begin());
+            continue;
+        }
+
+        /* create an entry to serve an rReq */
+        if (source == FROM_LOCAL_CACHE) {
+            req->sent = true;
+        } else if (source == FROM_REMOTE_CACHE_REQ) {
+            m_core_receive_queues[MSG_CACHE_REQ]->pop();
+        } else if (source == FROM_REMOTE_CACHE_RREQ) {
+            m_core_receive_queues[MSG_CACHE_RREQ]->pop();
+        } else {
+            mh_assert(false);
+        }
+        mh_log(5) << "[MEM " << m_id << " @ " << system_time << " ] received an rReq from "
+                  << req->sender << " for address " << req->maddr << " (new entry) " << endl;
+
+        /* create a new entry */
+        shared_ptr<cacheRequest> l2_req;
+        l2_req = shared_ptr<cacheRequest>(new cacheRequest(req->maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
+        l2_req->set_serialization_begin_time(system_time);
+        l2_req->set_unset_dirty_on_write(false); /* don't care */
+        l2_req->set_claim(false);
+        l2_req->set_evict(false);
+        shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence(m_cfg));
+        aux_info->core_id = req->sender;
+        aux_info->req_type = READ_FOR_RREQ;
+        aux_info->requester_timestamp = *(req->timestamp);
+        aux_info->need_to_send_block = false;
+        l2_req->set_aux_info_for_coherence(aux_info);
+
+        shared_ptr<dirTableEntry> new_entry(new dirTableEntry);
+        new_entry->cache_req = req;
+        new_entry->empty_req = shared_ptr<coherenceMsg>();
+        new_entry->status = _DIR_L2_FOR_RREQ;
+        new_entry->per_mem_instr_stats = req->per_mem_instr_stats;
+        mh_assert(!req->per_mem_instr_stats);
+        new_entry->l2_req = l2_req;
+        new_entry->bypassed_tReq = shared_ptr<coherenceMsg>();
+        new_entry->cache_rep = shared_ptr<coherenceMsg>();
+        new_entry->dir_rep = shared_ptr<coherenceMsg>();
+        new_entry->dramctrl_req = shared_ptr<dramctrlMsg>();
+        new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
+        new_entry->is_written_back = false;
+        new_entry->need_to_writeback_dir = false;
+
+        --m_dir_renewal_table_vacancy;
+        new_entry->using_cache_rep_exclusive_space = false;
+        new_entry->using_empty_req_exclusive_space = false;
+
+        if (l2_req->use_read_ports()) {
+            m_l2_read_req_schedule_q_for_renewal.push_back(new_entry);
+        } else {
+            m_l2_write_req_schedule_q_for_renewal.push_back(new_entry);
+        }
+
+        m_dir_table[req->maddr] = new_entry;
+
+        m_new_dir_table_entry_for_renewal_schedule_q.erase(m_new_dir_table_entry_for_renewal_schedule_q.begin());
+        continue;
+    }
+
 
     /************************************/
     /* scheduling for dramctrl requests */
@@ -1400,7 +1669,54 @@ void privateSharedPTI::schedule_requests() {
         }
     }
     m_l1_write_req_schedule_q.clear();
-   
+
+    /******************************/
+    /* scheduling for L1, renewal */
+    /******************************/
+    random_shuffle(m_l1_read_req_schedule_q_for_renewal.begin(), m_l1_read_req_schedule_q_for_renewal.end(), rr_fn);
+    while (m_l1->read_port_available() && m_l1_read_req_schedule_q_for_renewal.size()) {
+        shared_ptr<cacheTableEntry>& entry = m_l1_read_req_schedule_q_for_renewal.front();
+        shared_ptr<cacheRequest>& l1_req = entry->l1_req;
+
+        if (l1_req->serialization_begin_time() == UINT64_MAX) {
+            l1_req->set_operation_begin_time(UINT64_MAX);
+        } else {
+            l1_req->set_operation_begin_time(system_time);
+            if (stats_enabled() && entry->per_mem_instr_stats) {
+                entry->per_mem_instr_stats->get_tentative_data(T_IDX_L1)->
+                    add_l1_srz(system_time - l1_req->serialization_begin_time());
+            }
+        }
+        m_l1->request(l1_req);
+        m_l1_read_req_schedule_q_for_renewal.erase(m_l1_read_req_schedule_q_for_renewal.begin());
+        if (stats_enabled()) {
+            stats()->add_l1_action();
+        }
+    }
+    m_l1_read_req_schedule_q_for_renewal.clear();
+
+    random_shuffle(m_l1_write_req_schedule_q_for_renewal.begin(), m_l1_write_req_schedule_q_for_renewal.end(), rr_fn);
+    while (m_l1->write_port_available() && m_l1_write_req_schedule_q_for_renewal.size()) {
+        shared_ptr<cacheTableEntry>& entry = m_l1_write_req_schedule_q_for_renewal.front();
+        shared_ptr<cacheRequest>& l1_req = entry->l1_req;
+
+        if (l1_req->serialization_begin_time() == UINT64_MAX) {
+            l1_req->set_operation_begin_time(UINT64_MAX);
+        } else {
+            l1_req->set_operation_begin_time(system_time);
+            if (stats_enabled() && entry->per_mem_instr_stats) {
+                entry->per_mem_instr_stats->get_tentative_data(T_IDX_L1)->
+                    add_l1_srz(system_time - l1_req->serialization_begin_time());
+            }
+        }
+        m_l1->request(l1_req);
+        m_l1_write_req_schedule_q_for_renewal.erase(m_l1_write_req_schedule_q_for_renewal.begin());
+        if (stats_enabled()) {
+            stats()->add_l1_action();
+        }
+    }
+    m_l1_write_req_schedule_q_for_renewal.clear();
+
     /*********************/
     /* scheduling for L2 */
     /*********************/
@@ -1457,6 +1773,63 @@ void privateSharedPTI::schedule_requests() {
         }
     }
     m_l2_write_req_schedule_q.clear();
+
+    /******************************/
+    /* scheduling for L2, renewal */
+    /******************************/
+    random_shuffle(m_l2_read_req_schedule_q_for_renewal.begin(), m_l2_read_req_schedule_q_for_renewal.end(), rr_fn);
+    while (m_l2->read_port_available() && m_l2_read_req_schedule_q_for_renewal.size()) {
+        shared_ptr<dirTableEntry>& entry = m_l2_read_req_schedule_q_for_renewal.front();
+        shared_ptr<cacheRequest>& l2_req = entry->l2_req;
+        if (m_l2_writeback_status.count(get_start_maddr_in_line(l2_req->maddr())) > 0) {
+            m_l2_read_req_schedule_q_for_renewal.erase(m_l2_read_req_schedule_q_for_renewal.begin());
+            continue;
+        }
+        if (l2_req->serialization_begin_time() == UINT64_MAX) {
+            l2_req->set_operation_begin_time(UINT64_MAX);
+        } else {
+            l2_req->set_operation_begin_time(system_time);
+            if (stats_enabled() && entry->per_mem_instr_stats) {
+                entry->per_mem_instr_stats->get_tentative_data(T_IDX_DIR)->get_tentative_data(T_IDX_L2)->
+                    add_l2_srz(system_time - l2_req->serialization_begin_time());
+            }
+        }
+        m_l2->request(l2_req);
+        m_l2_read_req_schedule_q_for_renewal.erase(m_l2_read_req_schedule_q_for_renewal.begin());
+        if (stats_enabled()) {
+            stats()->add_l2_action();
+        }
+    }
+    m_l2_read_req_schedule_q_for_renewal.clear();
+
+    random_shuffle(m_l2_write_req_schedule_q_for_renewal.begin(), m_l2_write_req_schedule_q_for_renewal.end(), rr_fn);
+    while (m_l2->write_port_available() && m_l2_write_req_schedule_q_for_renewal.size()) {
+        shared_ptr<dirTableEntry>& entry = m_l2_write_req_schedule_q_for_renewal.front();
+        shared_ptr<cacheRequest>& l2_req = entry->l2_req;
+
+        if (m_l2_writeback_status.count(get_start_maddr_in_line(l2_req->maddr())) > 0 &&
+            m_l2_writeback_status[get_start_maddr_in_line(l2_req->maddr())] != entry)
+        {
+            m_l2_write_req_schedule_q_for_renewal.erase(m_l2_write_req_schedule_q_for_renewal.begin());
+            continue;
+        }
+
+        if (l2_req->serialization_begin_time() == UINT64_MAX) {
+            l2_req->set_operation_begin_time(UINT64_MAX);
+        } else {
+            l2_req->set_operation_begin_time(system_time);
+            if (stats_enabled() && entry->per_mem_instr_stats) {
+                entry->per_mem_instr_stats->get_tentative_data(T_IDX_DIR)->get_tentative_data(T_IDX_L2)->
+                    get_tentative_data(T_IDX_L2)->add_l2_srz(system_time - l2_req->serialization_begin_time());
+            }
+        }
+        m_l2->request(l2_req);
+        m_l2_write_req_schedule_q_for_renewal.erase(m_l2_write_req_schedule_q_for_renewal.begin());
+        if (stats_enabled()) {
+            stats()->add_l2_action();
+        }
+    }
+    m_l2_write_req_schedule_q_for_renewal.clear();
 
     /*******************************************/
     /* scheduling for sending dramctrl replies */
@@ -1562,37 +1935,24 @@ void privateSharedPTI::update_cache_table() {
                 }
                 set_req_data(core_req, ret);
 
-                if (dir_rep && *(dir_rep->timestamp) > system_time) {
-                    /* a cacheable dir rep is ready */
-                    shared_ptr<cacheCoherenceInfo> new_info(new cacheCoherenceInfo);
-                    new_info->home = dir_rep->sender;
-                    new_info->status = TIMESTAMPED;
-                    new_info->timestamp = dir_rep->timestamp;
-                    l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
-                                                                       0, shared_array<uint32_t>(), new_info));
-                    l1_req->set_serialization_begin_time(system_time);
-                    l1_req->set_unset_dirty_on_write(true);
-                    l1_req->set_claim(false);
-                    l1_req->set_evict(false);
-                    shared_ptr<cacheAuxInfoForCoherence> aux_info(new cacheAuxInfoForCoherence(UPDATE_FOR_RENEWAL));
-                    l1_req->set_aux_info_for_coherence(aux_info);
-
-                    if (l1_req->use_read_ports()) {
-                        m_l1_read_req_schedule_q.push_back(entry);
-                    } else {
-                        m_l1_write_req_schedule_q.push_back(entry);
-                    }
-
-                    entry->status = _CACHE_L1_FOR_RENEWAL;
-                    ++it_addr;
-                    continue;
-                    /* TRANSITION */
-
-                } else {
+                if (m_cfg.renewal_type == _RENEWAL_SYNCHED) {
 
                     check_to_send_rReq = true;
                     /* will continue to the last of the loop and will decide to send a rReq */
 
+                } else {
+                    mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] finishes serving a read on "
+                        << core_req->maddr() << endl;
+                    if (stats_enabled() && per_mem_instr_stats) {
+                        stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
+                    }
+                    set_req_status(core_req, REQ_DONE);
+
+                    ++m_available_core_ports;
+                    ++m_cache_table_vacancy;
+                    m_cache_table.erase(it_addr++);
+                    continue;
+                    /* FINISHED */
                 }
 
             } else if (l1_req->status() == CACHE_REQ_MISS && l1_line) {
@@ -1610,34 +1970,38 @@ void privateSharedPTI::update_cache_table() {
                 } else if (per_mem_instr_stats) {
                     per_mem_instr_stats->clear_tentative_data();
                 }
+#ifdef ADDITIONAL_INSTRUMENT
+                cout << "RC " << start_maddr << " ";
+                if (m_renewal_count.count(start_maddr) == 0) {
+                    cout << "0";
+                } else {
+                    cout << m_renewal_count[start_maddr];
+                    m_renewal_count.erase(start_maddr);
+                }
+                cout << " for expiration " << endl;
+#endif 
 
                 mh_assert(l1_line_info->status == TIMESTAMPED);
                 home = l1_line_info->home;
                 cat_req = shared_ptr<catRequest>();
 
-                if (dir_rep) {
-                    entry->short_latency_begin_time = system_time;
-                    dir_rep_ready_for_local_read = true;
-                    /* will continue to the last of the loop and process the dir rep */
-                } else {
-                    cache_req = shared_ptr<coherenceMsg>(new coherenceMsg);
-                    cache_req->sender = m_id;
-                    cache_req->receiver = home;
-                    cache_req->type = TREQ;
-                    cache_req->maddr = start_maddr;
-                    cache_req->sent = false;
-                    cache_req->per_mem_instr_stats = per_mem_instr_stats;
-                    cache_req->word_count = 0;
-                    cache_req->data = shared_array<uint32_t>();
-                    cache_req->birthtime = system_time;
-                    m_cache_req_schedule_q.push_back(entry);
+                cache_req = shared_ptr<coherenceMsg>(new coherenceMsg);
+                cache_req->sender = m_id;
+                cache_req->receiver = home;
+                cache_req->type = TREQ;
+                cache_req->maddr = start_maddr;
+                cache_req->sent = false;
+                cache_req->per_mem_instr_stats = per_mem_instr_stats;
+                cache_req->word_count = 0;
+                cache_req->data = shared_array<uint32_t>();
+                cache_req->birthtime = system_time;
+                m_cache_req_schedule_q.push_back(entry);
 
-                    entry->short_latency_begin_time = system_time;
-                    entry->status = _CACHE_SEND_TREQ;
-                    ++it_addr;
-                    continue;
-                    /* TRANSITION */
-                }
+                entry->short_latency_begin_time = system_time;
+                entry->status = _CACHE_SEND_TREQ;
+                ++it_addr;
+                continue;
+                /* TRANSITION */
 
             } else {
 
@@ -1849,8 +2213,26 @@ void privateSharedPTI::update_cache_table() {
 
                     if (l1_req->status() == CACHE_REQ_MISS) {
 
-                        mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a true write miss on address "
-                                  << core_req->maddr() << endl;
+#ifdef ADDITIONAL_INSTRUMENT
+                        if (l1_line) {
+                            cout << "RC " << start_maddr << " ";
+                            if (m_renewal_count.count(start_maddr) == 0) {
+                                cout << "0";
+                            } else {
+                                cout << m_renewal_count[start_maddr];
+                                m_renewal_count.erase(start_maddr);
+                            }
+                            cout << " for switch " << endl;
+                        }
+#endif 
+                        if (l1_line) {
+                            mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a write miss on T for address "
+                                      << core_req->maddr() << endl;
+                        } else {
+                            mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a true write miss for address "
+                                      << core_req->maddr() << endl;
+                        }
+
                         if (stats_enabled()) {
                             if (per_mem_instr_stats) {
                                 shared_ptr<privateSharedPTIStatsPerMemInstr> l1_stat = 
@@ -1876,6 +2258,11 @@ void privateSharedPTI::update_cache_table() {
                         }
 
                         /* could migrate out here */
+
+                        if (l1_line && m_cfg.renewal_type == _RENEWAL_SCHEDULED) {
+                            /* will switch to P mode - no need to send rReq any more */
+                            m_rReq_schedule_q.remove(start_maddr);
+                        }
 
                         cache_req = shared_ptr<coherenceMsg>(new coherenceMsg);
                         cache_req->sender = m_id;
@@ -1993,28 +2380,28 @@ void privateSharedPTI::update_cache_table() {
             if (cache_req->sent) {
                 mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] sent an rReq to " 
                           << cache_req->receiver << " for " << cache_req->maddr << endl;
+                if (stats_enabled()) {
+                    stats()->req_sent(PTI_STAT_RREQ, (cache_req->receiver == m_id)? PTI_STAT_LOCAL : PTI_STAT_REMOTE);
+                    if (per_mem_instr_stats) {
+                        stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
+                    }
+                }
+
                 if (core_req) {
                     mh_assert(core_req->is_read());
                     mh_log(4) << "[L1 " << m_id << " @ " << system_time 
                               << " ] finishes serving a read on " << core_req->maddr() << endl;
-                    if (stats_enabled()) {
-                        stats()->req_sent(PTI_STAT_RREQ, (cache_req->receiver == m_id)? PTI_STAT_LOCAL : PTI_STAT_REMOTE);
-                        if (per_mem_instr_stats) {
-                            stats()->commit_per_mem_instr_stats(per_mem_instr_stats);
-                        }
-                    }
-
                     set_req_status(core_req, REQ_DONE);
-                    ++m_available_core_ports;
-                    ++m_cache_table_vacancy;
+                    ++m_cache_renewal_table_vacancy;
                     m_cache_table.erase(it_addr++);
                     continue;
                     /* FINISH */
                 } else {
                     /* a scheduled sending */
-                    ++m_cache_table_vacancy;
+                    ++m_cache_renewal_table_vacancy;
                     m_cache_table.erase(it_addr++);
                     continue;
+                    /* FINISH */
                 }
 
             } else if (m_cfg.retry_rReq) {
@@ -2022,7 +2409,14 @@ void privateSharedPTI::update_cache_table() {
                 ++it_addr;
                 continue;
                 /* SPIN */
-            } 
+            } else {
+                mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] failed to send an rReq to " 
+                          << cache_req->receiver << " for " << cache_req->maddr << endl;
+                ++m_cache_renewal_table_vacancy;
+                m_cache_table.erase(it_addr++);
+                continue;
+                /* FINISH */
+            }
 
             /* CACHE_SEND_RREQ */
 
@@ -2069,7 +2463,7 @@ void privateSharedPTI::update_cache_table() {
                 }
 
                 mh_assert(core_req);
-                if (l1_line_info->status == TIMESTAMPED) {
+                if (l1_line_info->status == TIMESTAMPED && m_cfg.renewal_type == _RENEWAL_SYNCHED) {
                     check_to_send_rReq = true;
                     /* will continue to the last of the loop and will decide to send a rReq */
                 } else {
@@ -2140,6 +2534,22 @@ void privateSharedPTI::update_cache_table() {
                     cache_rep->type = SWITCH_REP;
                 }
 
+                if (m_cfg.renewal_type == _RENEWAL_SCHEDULED && dir_req->type == SWITCH_REQ) {
+                    shared_ptr<coherenceMsg> new_rReq(new coherenceMsg);
+                    new_rReq->sender = m_id;
+                    new_rReq->receiver = home;
+                    new_rReq->type = RREQ;
+                    new_rReq->maddr = start_maddr;
+                    new_rReq->data = shared_array<uint32_t>();
+                    new_rReq->sent = false;
+                    new_rReq->timestamp = shared_ptr<uint64_t>(new uint64_t(*(dir_req->timestamp)));
+                    new_rReq->requested_time = max(system_time, *(dir_req->timestamp) - m_cfg.renewal_threshold);
+
+                    m_rReq_schedule_q.set(new_rReq);
+                    mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] scheduled a rReq on " << new_rReq->maddr
+                              << " at " << new_rReq->requested_time << endl;
+                }
+
                 cache_rep->maddr = start_maddr;
                 cache_rep->sent = false;
                 cache_rep->per_mem_instr_stats = per_mem_instr_stats;
@@ -2182,9 +2592,9 @@ void privateSharedPTI::update_cache_table() {
             if (l1_req->status() == CACHE_REQ_NEW) {
                 /* the L1 request has lost an arbitration - retry */
                 if (l1_req->use_read_ports()) {
-                    m_l1_read_req_schedule_q.push_back(entry);
+                    m_l1_read_req_schedule_q_for_renewal.push_back(entry);
                 } else {
-                    m_l1_write_req_schedule_q.push_back(entry);
+                    m_l1_write_req_schedule_q_for_renewal.push_back(entry);
                 }
                 ++it_addr;
                 continue;
@@ -2207,15 +2617,38 @@ void privateSharedPTI::update_cache_table() {
             if (l1_req->status() == CACHE_REQ_HIT) {
                 mh_assert(l1_line_info->status == TIMESTAMPED);
                 mh_log(4) << "gets an L1 hit and renewed timestamp " << *(l1_line_info->timestamp) << endl;
+#ifdef ADDITIONAL_INSTRUMENT
+                if (m_renewal_count.count(start_maddr) == 0) {
+                    m_renewal_count[start_maddr] = 1;
+                } else {
+                    m_renewal_count[start_maddr] += 1;
+                }
+#endif 
             } else {
                 mh_log(4) << "gets an L1 miss and discarded " << endl;
             }
 
-            if (core_req) {
+            if (m_cfg.renewal_type == _RENEWAL_SCHEDULED && l1_req->status() == CACHE_REQ_HIT) {
+                shared_ptr<coherenceMsg> new_rReq(new coherenceMsg);
+                new_rReq->sender = m_id;
+                new_rReq->receiver = dir_req->sender;
+                new_rReq->type = RREQ;
+                new_rReq->maddr = start_maddr;
+                new_rReq->data = shared_array<uint32_t>();
+                new_rReq->sent = false;
+                new_rReq->timestamp = shared_ptr<uint64_t>(new uint64_t(*(l1_line_info->timestamp)));
+                new_rReq->requested_time = max(system_time, *(l1_line_info->timestamp) - m_cfg.renewal_threshold);
+
+                m_rReq_schedule_q.set(new_rReq);
+                mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] scheduled a rReq on " << new_rReq->maddr
+                          << " at " << new_rReq->requested_time << endl;
+            }
+
+            if (core_req && m_cfg.renewal_type == _RENEWAL_SYNCHED) {
                 /* this renewal was done right after processing a core request */
                 check_to_send_rReq = true;
             } else {
-                ++m_cache_table_vacancy;
+                ++m_cache_renewal_table_vacancy;
                 m_cache_table.erase(it_addr++);
                 continue;
                 /* FINISH */
@@ -2266,8 +2699,6 @@ void privateSharedPTI::update_cache_table() {
                 }
                 set_req_data(core_req, ret);
 
-                /* TODO make it sure scheduled case to work right */
-
                 if (!l1_victim || l1_victim_info->status == TIMESTAMPED) {
                     if (l1_victim) {
                         mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] evicted a cache line in T on "
@@ -2275,18 +2706,38 @@ void privateSharedPTI::update_cache_table() {
                         if (stats_enabled()) {
                             stats()->evict_from_l1((l1_victim_info->home == m_id)? PTI_STAT_LOCAL : PTI_STAT_REMOTE);
                         }
+#ifdef ADDITIONAL_INSTRUMENT
+                        cout << "RC " << l1_victim->start_maddr << " ";
+                        if (m_renewal_count.count(l1_victim->start_maddr) == 0) {
+                            cout << "0";
+                        } else {
+                            cout << m_renewal_count[l1_victim->start_maddr];
+                            m_renewal_count.erase(l1_victim->start_maddr);
+                        }
+                        cout << " for eviction " << endl;
+#endif 
                     }
 
-                    if (l1_line_info->status == TIMESTAMPED) {
+                    if (l1_victim && m_cfg.renewal_type == _RENEWAL_SCHEDULED) {
+                        m_rReq_schedule_q.remove(l1_victim->start_maddr);
+                        /* no need to send rReq any more */
+                    }
 
-                        /* was a tRep */
+                    if (l1_line_info->status == TIMESTAMPED && m_cfg.renewal_type == _RENEWAL_SYNCHED) {
                         mh_assert(core_req->is_read());
                         check_to_send_rReq = true;
                         /* will continue to the last of the loop and will decide to send a rReq */
-
                     } else {
-                        mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] updated for a pRep on " 
-                                  << dir_rep->maddr  << endl;
+
+                        mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] updated for a ";
+                        if (dir_rep->type == TREP) {
+                            mh_log(4) << "tRep ";
+                        } else if (dir_rep->type == PREP) {
+                            mh_log(4) << "pRep ";
+                        } else if (dir_rep->type == RREP) {
+                            mh_log(4) << "rRep ";
+                        } 
+                        mh_log(4) << "on " << dir_rep->maddr  << endl;
                         mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] finishes serving a ";
                         if (core_req->is_read()) {
                             mh_log(4) << "read on ";
@@ -2434,6 +2885,23 @@ void privateSharedPTI::update_cache_table() {
                 new_info->home = dir_rep->sender;
                 new_info->timestamp = dir_rep->timestamp;
 
+                if (m_cfg.renewal_type == _RENEWAL_SCHEDULED) {
+                    shared_ptr<coherenceMsg> new_rReq(new coherenceMsg);
+                    new_rReq->sender = m_id;
+                    new_rReq->receiver = dir_rep->sender;
+                    new_rReq->type = RREQ;
+                    new_rReq->maddr = start_maddr;
+                    new_rReq->data = shared_array<uint32_t>();
+                    new_rReq->sent = false;
+                    new_rReq->timestamp = shared_ptr<uint64_t>(new uint64_t(*(dir_rep->timestamp)));
+                    new_rReq->requested_time = max(system_time, *(dir_rep->timestamp) - m_cfg.renewal_threshold);
+
+                    m_rReq_schedule_q.set(new_rReq);
+                    mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] scheduled a rReq on " << new_rReq->maddr
+                              << " at " << new_rReq->requested_time << endl;
+                    
+                }
+
                 /* aux stat */
                 new_info->in_time = system_time;
 
@@ -2467,11 +2935,12 @@ void privateSharedPTI::update_cache_table() {
             /* 3. after renewing L1, right after a read L1 hit ( haven't checked whether to send a rReq after the hit ) */
             /* 4. after updating L1 without eviction, if the new line is in timestamped */
 
+            mh_assert(m_cfg.renewal_type == _RENEWAL_SYNCHED);
             bool send_rReq = m_cfg.renewal_type != _RENEWAL_NEVER &&
-                             m_cfg.renewal_type == _RENEWAL_SYNCHED && 
+                             l1_line_info->status == TIMESTAMPED &&
                              (m_cfg.renewal_threshold == 0 || *(l1_line_info->timestamp) - system_time < m_cfg.renewal_threshold);
 
-            if (send_rReq) {
+            if (send_rReq && m_cache_renewal_table_vacancy > 0) { 
                 cache_req = shared_ptr<coherenceMsg>(new coherenceMsg);
                 cache_req->sender = m_id;
                 cache_req->receiver = l1_line_info->home;
@@ -2485,12 +2954,16 @@ void privateSharedPTI::update_cache_table() {
                 cache_req->birthtime = system_time;
                 m_cache_req_schedule_q.push_back(entry);
 
+                --m_cache_renewal_table_vacancy;
+                ++m_cache_table_vacancy;
+                ++m_available_core_ports;
+
                 entry->short_latency_begin_time = system_time;
                 entry->status = _CACHE_SEND_RREQ;
                 ++it_addr;
                 continue;
                 /* TRANSITION */
-            }  else {
+            } else {
                 mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] finishes serving a read on "
                           << core_req->maddr() << endl;
                 if (stats_enabled() && per_mem_instr_stats) {
@@ -2608,6 +3081,7 @@ void privateSharedPTI::update_dir_table() {
                 m_dir_rep_schedule_q.push_back(entry);
 
                 entry->status = _DIR_SEND_DIR_REP;
+                entry->substatus = _DIR_SEND_DIR_REP__TREP_PREP;
                 ++it_addr;
                 continue;
                 /* TRANSITION */
@@ -2694,8 +3168,13 @@ void privateSharedPTI::update_dir_table() {
 
                     } else if (prev_info->owner != cache_req->sender) {
                         /* miss on other's P */
-                        mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] gets an L2 miss for pReq as line owned by "
-                                  << prev_info->owner << " on " << cache_req->maddr << endl;
+                        mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] gets an L2 miss for ";
+                        if (cache_req->type == TREQ) {
+                            mh_log(4) << "tReq ";
+                        } else {
+                            mh_log(4) << "pReq ";
+                        }
+                        mh_log(4) << "as line owned by " << prev_info->owner << " on " << cache_req->maddr << endl;
                         if (stats_enabled()) {
                             if (per_mem_instr_stats) {
                                 shared_ptr<privateSharedPTIStatsPerMemInstr> l2_stat = dir_stat->get_tentative_data(T_IDX_L2);
@@ -2926,7 +3405,7 @@ void privateSharedPTI::update_dir_table() {
                         empty_req->per_mem_instr_stats = per_mem_instr_stats;
                         empty_req->birthtime = system_time;
 
-                        m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(false/* local */, empty_req));
+                        m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(FROM_LOCAL_CACHE, empty_req));
 
                         entry->status = _DIR_SEND_EMPTY_REQ_AND_WAIT;
                         ++it_addr;
@@ -2962,6 +3441,7 @@ void privateSharedPTI::update_dir_table() {
                         m_dir_rep_schedule_q.push_back(entry);
 
                         entry->status = _DIR_SEND_DIR_REP;
+                        entry->substatus = _DIR_SEND_DIR_REP__TREP_PREP;
                         ++it_addr;
                         continue;
                     } else {
@@ -3031,6 +3511,7 @@ void privateSharedPTI::update_dir_table() {
                     m_dir_rep_schedule_q.push_back(entry);
 
                     entry->status = _DIR_SEND_DIR_REP;
+                    entry->substatus = _DIR_SEND_DIR_REP__TREP_PREP;
                     ++it_addr;
                     continue;
                     /* TRANSITION */
@@ -3053,9 +3534,9 @@ void privateSharedPTI::update_dir_table() {
 
             if (l2_req->status() == CACHE_REQ_NEW) {
                 if (l2_req->use_read_ports()) {
-                    m_l2_read_req_schedule_q.push_back(entry);
+                    m_l2_read_req_schedule_q_for_renewal.push_back(entry);
                 } else {
-                    m_l2_write_req_schedule_q.push_back(entry);
+                    m_l2_write_req_schedule_q_for_renewal.push_back(entry);
                 }
                 ++it_addr;
                 continue;
@@ -3094,19 +3575,14 @@ void privateSharedPTI::update_dir_table() {
                 m_dir_rep_schedule_q.push_back(entry);
 
                 entry->status = _DIR_SEND_DIR_REP;
+                entry->substatus = _DIR_SEND_DIR_REP__RREP;
                 ++it_addr;
                 continue;
 
             } else {
                 mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] processed and discarded a rReq on " << start_maddr 
                           << " from " << cache_req->sender << endl;
-                if (entry->using_cache_rep_exclusive_space) {
-                    ++m_dir_table_vacancy_cache_rep_exclusive;
-                } else if (entry->using_empty_req_exclusive_space) {
-                    ++m_dir_table_vacancy_empty_req_exclusive;
-                } else {
-                    ++m_dir_table_vacancy_shared;
-                }
+                ++m_dir_renewal_table_vacancy;
                 m_dir_table.erase(it_addr++);
                 continue;
                 /* FINISH */
@@ -3163,6 +3639,7 @@ void privateSharedPTI::update_dir_table() {
                 m_dir_rep_schedule_q.push_back(entry);
 
                 entry->status = _DIR_SEND_DIR_REP;
+                entry->substatus = _DIR_SEND_DIR_REP__TREP_PREP;
                 ++it_addr;
                 continue;
                 /* TRANSITION */
@@ -3238,6 +3715,7 @@ void privateSharedPTI::update_dir_table() {
                 m_dir_rep_schedule_q.push_back(entry);
 
                 entry->status = _DIR_SEND_DIR_REP;
+                entry->substatus = _DIR_SEND_DIR_REP__TREP_PREP;
                 ++it_addr;
                 continue;
                 /* TRANSITION */
@@ -3321,21 +3799,29 @@ void privateSharedPTI::update_dir_table() {
                 stats()->rep_sent(rep_type, (dir_rep->receiver == m_id)? PTI_STAT_LOCAL : PTI_STAT_REMOTE);
             }
             
-            if (entry->using_cache_rep_exclusive_space) {
-                ++m_dir_table_vacancy_cache_rep_exclusive;
-            } else if (entry->using_empty_req_exclusive_space) {
-                ++m_dir_table_vacancy_empty_req_exclusive;
+            if (entry->substatus == _DIR_SEND_DIR_REP__TREP_PREP) {
+                if (entry->using_cache_rep_exclusive_space) {
+                    ++m_dir_table_vacancy_cache_rep_exclusive;
+                } else if (entry->using_empty_req_exclusive_space) {
+                    ++m_dir_table_vacancy_empty_req_exclusive;
+                } else {
+                    ++m_dir_table_vacancy_shared;
+                }
+                m_dir_table.erase(it_addr++);
+                continue;
+                /* FINISH */
             } else {
-                ++m_dir_table_vacancy_shared;
+                mh_assert(entry->substatus == _DIR_SEND_DIR_REP__RREP);
+                ++m_dir_renewal_table_vacancy;
+                m_dir_table.erase(it_addr++);
+                continue;
+                /* FINISH */
             }
-            m_dir_table.erase(it_addr++);
-            continue;
-            /* FINISH */
 
         } else if (entry->status == _DIR_SEND_EMPTY_REQ_AND_WAIT) {
 
             if (!empty_req->sent) {
-                m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(false/* local */, empty_req));
+                m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(FROM_LOCAL_CACHE, empty_req));
                 ++it_addr;
                 continue;
                 /* SPIN */
@@ -3369,6 +3855,7 @@ void privateSharedPTI::update_dir_table() {
             m_dir_rep_schedule_q.push_back(entry);
 
             entry->status = _DIR_SEND_DIR_REP;
+            entry->substatus = _DIR_SEND_DIR_REP__TREP_PREP;
             ++it_addr;
             continue;
         } else if (entry->status == _DIR_SEND_DIR_REQ) {
@@ -3520,6 +4007,7 @@ void privateSharedPTI::update_dir_table() {
                 m_dir_rep_schedule_q.push_back(entry);
 
                 entry->status = _DIR_SEND_DIR_REP;
+                entry->substatus = _DIR_SEND_DIR_REP__TREP_PREP;
                 ++it_addr;
                 continue;
                 /* TRANSITION */
@@ -3559,6 +4047,7 @@ void privateSharedPTI::update_dir_table() {
                 m_dir_rep_schedule_q.push_back(entry);
 
                 entry->status = _DIR_SEND_DIR_REP;
+                entry->substatus = _DIR_SEND_DIR_REP__TREP_PREP;
                 ++it_addr;
                 continue;
             } else {
@@ -3761,22 +4250,13 @@ void privateSharedPTI::accept_incoming_messages() {
         shared_ptr<message_t> msg = m_core_receive_queues[MSG_DIR_REQ_REP]->front();
         shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
         m_new_cache_table_entry_schedule_q.push_back(make_tuple(FROM_REMOTE_DIR, data_msg));
-#ifdef PRINT_ENTRY_FAIL
-        mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] a ";
-        if (data_msg->type == TREP) {
-            mh_log(4) << "tRep ";
-        } else if (data_msg->type == PREP) {
-            mh_log(4) << "pRep ";
-        } else if (data_msg->type == RREP) {
-            mh_log(4) << "rRep ";
-        } else if (data_msg->type == INV_REQ) {
-            mh_log(4) << "invReq ";
-        } else if (data_msg->type == SWITCH_REQ) {
-            mh_log(4) << "switchReq ";
-        }
-        mh_log(4) << "from " << data_msg->sender << " on " << data_msg->maddr 
-                  << " is trying to get in for address " << data_msg->maddr << endl;
-#endif
+        /* only one message a time (otherwise out-of-order reception may happen) */
+        break;
+    }
+    while (m_core_receive_queues[MSG_DIR_RREP]->size()) {
+        shared_ptr<message_t> msg = m_core_receive_queues[MSG_DIR_RREP]->front();
+        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+        m_new_cache_table_entry_schedule_q.push_back(make_tuple(FROM_REMOTE_DIR_RREP, data_msg));
         /* only one message a time (otherwise out-of-order reception may happen) */
         break;
     }
@@ -3785,37 +4265,27 @@ void privateSharedPTI::accept_incoming_messages() {
     while (m_core_receive_queues[MSG_CACHE_REQ]->size()) {
         shared_ptr<message_t> msg = m_core_receive_queues[MSG_CACHE_REQ]->front();
         shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
-        m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(true/* is remote */, data_msg));
-#ifdef PRINT_ENTRY_FAIL
-        mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] a ";
-        if (data_msg->type == TREQ) {
-            mh_log(4) << "tReq ";
-        } else if (data_msg->type == PREQ) {
-            mh_log(4) << "pReq ";
-        } else if (data_msg->type == RREQ) {
-            mh_log(4) << "rReq ";
-        } 
-        mh_log(4) << "from " << data_msg->sender << " on " << data_msg->maddr
-                  << " is trying to get in for address " << data_msg->maddr << endl;
-#endif
+        m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(FROM_REMOTE_CACHE_REQ, data_msg));
         break;
     }
-        
+    while (m_core_receive_queues[MSG_CACHE_PREQ]->size()) {
+        shared_ptr<message_t> msg = m_core_receive_queues[MSG_CACHE_PREQ]->front();
+        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+        m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(FROM_REMOTE_CACHE_PREQ, data_msg));
+        break;
+    }
+    while (m_core_receive_queues[MSG_CACHE_RREQ]->size()) {
+        shared_ptr<message_t> msg = m_core_receive_queues[MSG_CACHE_RREQ]->front();
+        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+        m_new_dir_table_entry_for_renewal_schedule_q.push_back(make_tuple(FROM_REMOTE_CACHE_RREQ, data_msg));
+        break;
+    }
+       
     /* Cache replies (from the network) */
     while (m_core_receive_queues[MSG_CACHE_REP]->size()) {
         shared_ptr<message_t> msg = m_core_receive_queues[MSG_CACHE_REP]->front();
         shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
         m_new_dir_table_entry_for_cache_rep_schedule_q.push_back(make_tuple(true/* is remote */, data_msg));
-#ifdef PRINT_ENTRY_FAIL
-        mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] a ";
-        if (data_msg->type == INV_REP) {
-            mh_log(4) << "invRep ";
-        } else if (data_msg->type == SWITCH_REP) {
-            mh_log(4) << "switchRep ";
-        }
-        mh_log(4) << "from " << data_msg->sender << " on " << data_msg->maddr 
-                  << " is trying to get in for address " << data_msg->maddr << endl;
-#endif
         break;
     }
 
@@ -3836,6 +4306,53 @@ void privateSharedPTI::accept_incoming_messages() {
         m_dir_table[start_maddr]->dramctrl_rep = dramctrl_msg;
         m_core_receive_queues[MSG_DRAMCTRL_REP]->pop();
     }
+
+}
+
+privateSharedPTI::rReqScheduleQueue::rReqScheduleQueue(bool do_retry, const uint64_t& t) 
+    : system_time(t), m_do_retry(do_retry) {}
+
+privateSharedPTI::rReqScheduleQueue::~rReqScheduleQueue() {}
+
+void privateSharedPTI::rReqScheduleQueue::set(shared_ptr<coherenceMsg> rReq) {
+    
+    m_book[rReq->maddr] = rReq;
+    vector<shared_ptr<coherenceMsg> >::reverse_iterator rit;
+    for (rit = m_schedule.rbegin(); rit < m_schedule.rend(); ++rit) {
+        if ((*rit)->requested_time <= rReq->requested_time) {
+            break;
+        }
+    }
+    m_schedule.insert(rit.base(), rReq);
+
+}
+
+void privateSharedPTI::rReqScheduleQueue::remove(maddr_t addr) {
+    if (m_book.count(addr)) {
+        m_book.erase(addr);
+    }
+}
+
+vector<shared_ptr<privateSharedPTI::coherenceMsg> > privateSharedPTI::rReqScheduleQueue::on_due() {
+
+    vector<shared_ptr<coherenceMsg> > ret;
+
+    for (vector<shared_ptr<coherenceMsg> >::iterator it = m_schedule.begin(); it != m_schedule.end(); ) {
+        if ((*it)->requested_time > system_time) {
+            break;
+        }
+        if (m_book.count((*it)->maddr) == 0 || m_book[(*it)->maddr] != *it) {
+            it = m_schedule.erase(it);
+            continue;
+        }
+        if (!m_do_retry && (*it)->requested_time < system_time) {
+            it = m_schedule.erase(it);
+            continue;
+        }
+        ret.push_back(*it);
+        ++it;
+    }
+    return ret;
 
 }
 
