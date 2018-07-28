@@ -144,12 +144,12 @@ bool privateSharedMSIStatsPerMemInstr::add_new_tentative_data(int index) {
     if (m_tentative_data.count(index)) {
         return false;
     }
-    shared_ptr<privateSharedMSIStatsPerMemInstr> new_tentative_set(new privateSharedMSIStatsPerMemInstr(m_is_read));
+    std::shared_ptr<privateSharedMSIStatsPerMemInstr> new_tentative_set(new privateSharedMSIStatsPerMemInstr(m_is_read));
     m_tentative_data[index] = new_tentative_set;
     return true;
 }
 
-shared_ptr<privateSharedMSIStatsPerMemInstr> privateSharedMSIStatsPerMemInstr::get_tentative_data(int index) {
+std::shared_ptr<privateSharedMSIStatsPerMemInstr> privateSharedMSIStatsPerMemInstr::get_tentative_data(int index) {
     if (!m_tentative_data.count(index)) {
         add_new_tentative_data(index);
     }
@@ -159,10 +159,10 @@ shared_ptr<privateSharedMSIStatsPerMemInstr> privateSharedMSIStatsPerMemInstr::g
 int privateSharedMSIStatsPerMemInstr::get_max_tentative_data_index() {
     mh_assert(m_tentative_data.size());
     uint64_t value = 0;
-    map<int, shared_ptr<privateSharedMSIStatsPerMemInstr> >::iterator it;
+    map<int, std::shared_ptr<privateSharedMSIStatsPerMemInstr> >::iterator it;
     int max = 0;
     for (it = m_tentative_data.begin(); it != m_tentative_data.end(); ++it) {
-        shared_ptr<privateSharedMSIStatsPerMemInstr> cur = it->second;
+            std::shared_ptr<privateSharedMSIStatsPerMemInstr> cur = it->second;
         if (cur->total_cost() > value) {
             value = cur->total_cost();
             max = it->first;
@@ -190,10 +190,10 @@ void privateSharedMSIStatsPerMemInstr::commit_max_tentative_data() {
 
 void privateSharedMSIStatsPerMemInstr::commit_min_tentative_data() {
     uint64_t value = UINT64_MAX;
-    map<int, shared_ptr<privateSharedMSIStatsPerMemInstr> >::iterator it;
-    shared_ptr<privateSharedMSIStatsPerMemInstr> min = shared_ptr<privateSharedMSIStatsPerMemInstr>();
+    map<int, std::shared_ptr<privateSharedMSIStatsPerMemInstr> >::iterator it;
+    std::shared_ptr<privateSharedMSIStatsPerMemInstr> min = std::shared_ptr<privateSharedMSIStatsPerMemInstr>();
     for (it = m_tentative_data.begin(); it != m_tentative_data.end(); ++it) {
-        shared_ptr<privateSharedMSIStatsPerMemInstr> cur = it->second;
+            std::shared_ptr<privateSharedMSIStatsPerMemInstr> cur = it->second;
         if (cur->total_cost() < value) {
             value = cur->total_cost();
             min = cur;
@@ -417,7 +417,7 @@ void privateSharedMSIStats::print_stats(ostream &out) {
     for (it = m_per_tile_stats.begin(); it != m_per_tile_stats.end(); ++it) {
         ++num_tiles;
         uint32_t id = it->first;
-        shared_ptr<privateSharedMSIStatsPerTile> st = static_pointer_cast<privateSharedMSIStatsPerTile>(it->second);
+        std::shared_ptr<privateSharedMSIStatsPerTile> st = static_pointer_cast<privateSharedMSIStatsPerTile>(it->second);
         sprintf(str, "[P1S2MSIMESI:Core %d ] %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld "
                      "%ld %ld %ld %ld %ld %ld %ld %ld %ld %ld "
                      "%ld %ld %ld %ld %ld %ld %ld %ld %ld %ld "

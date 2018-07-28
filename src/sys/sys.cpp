@@ -6,8 +6,6 @@
 #include <set>
 #include <cassert>
 #include <boost/static_assert.hpp>
-#include <boost/tuple/tuple.hpp>
-#include <boost/tuple/tuple_comparison.hpp>
 #include <boost/bind.hpp>
 #include <boost/function.hpp>
 #include "cstdint.hpp"
@@ -37,7 +35,7 @@ typedef enum {
     CORE_MCPU = 3
 } sys_core_type_t;
 
-static uint32_t read_word(shared_ptr<ifstream> in) throw(err) {
+static uint32_t read_word(std::shared_ptr<ifstream> in) {
     uint32_t word = 0xdeadbeef;
     in->read((char *) &word, 4);
     if (in->bad()) throw err_bad_mem_img();
@@ -45,7 +43,7 @@ static uint32_t read_word(shared_ptr<ifstream> in) throw(err) {
     return word;
 }
 
-static double read_double(shared_ptr<ifstream> in) throw(err) {
+static double read_double(std::shared_ptr<ifstream> in) {
     uint64_t word = 0xdeadbeefdeadbeefULL;
     in->read((char *) &word, 8);
     if (in->bad()) throw err_bad_mem_img();
@@ -56,7 +54,7 @@ static double read_double(shared_ptr<ifstream> in) throw(err) {
     return d;
 }
 
-static string read_string(shared_ptr<ifstream> in) throw(err) {
+static string read_string(std::shared_ptr<ifstream> in) {
     char buf[256];
     in->read((char *) &buf, 256);
     if (in->bad()) throw err_bad_mem_img();
@@ -65,21 +63,21 @@ static string read_string(shared_ptr<ifstream> in) throw(err) {
 }
 
 static void read_mem(uint8_t *ptr, uint32_t num_bytes,
-                     shared_ptr<ifstream> in) throw(err) {
+                     std::shared_ptr<ifstream> in) {
     assert(ptr);
     in->read((char *) ptr, num_bytes);
     if (in->bad()) throw err_bad_mem_img();
 }
 
-static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_ptr<memtraceThreadPool> pool, int num_cores, 
-                                    const uint64_t &system_time, logger &log, shared_ptr<system_statistics> sys_stats,
-                                    shared_ptr<SynchedCATModel> cat_model, uint32_t cat_allocation_unit_in_bytes) 
+static void create_memtrace_threads(std::shared_ptr<vector<string> > files, std::shared_ptr<memtraceThreadPool> pool, int num_cores, 
+                                    const uint64_t &system_time, logger &log, std::shared_ptr<system_statistics> sys_stats,
+                                    std::shared_ptr<SynchedCATModel> cat_model, uint32_t cat_allocation_unit_in_bytes) 
 {
     if (!files) {
         return;
     }
-    shared_ptr<memtraceThreadStats> memth_stats = 
-        shared_ptr<memtraceThreadStats>(new memtraceThreadStats(system_time));
+    std::shared_ptr<memtraceThreadStats> memth_stats = 
+        std::shared_ptr<memtraceThreadStats>(new memtraceThreadStats(system_time));
     for (vector<string>::const_iterator fi = files->begin(); fi != files->end(); ++fi) {
         ifstream input(fi->c_str());
         if (input.fail()) throw err_parse(*fi, "cannot open file");
@@ -116,11 +114,11 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
                     cat_model->set(start_maddr, 0, home);
                 }
 
-                shared_ptr<memtraceThread> thread = pool->find(th_id);
+                std::shared_ptr<memtraceThread> thread = pool->find(th_id);
                 if (!thread) {
-                    thread = shared_ptr<memtraceThread>(new memtraceThread(th_id, system_time, log));
-                    shared_ptr<memtraceThreadStatsPerThread> per_thread_stats=
-                        shared_ptr<memtraceThreadStatsPerThread>(new memtraceThreadStatsPerThread(th_id, system_time));
+                    thread = std::shared_ptr<memtraceThread>(new memtraceThread(th_id, system_time, log));
+                    std::shared_ptr<memtraceThreadStatsPerThread> per_thread_stats=
+                        std::shared_ptr<memtraceThreadStatsPerThread>(new memtraceThreadStatsPerThread(th_id, system_time));
                     thread->set_per_thread_stats(per_thread_stats);
                     memth_stats->add_per_thread_stats(per_thread_stats);
                     pool->add_thread(thread);
@@ -137,33 +135,33 @@ static void create_memtrace_threads(shared_ptr<vector<string> > files, shared_pt
     }
 }
 
-sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
-         const uint64_t &stats_t0, shared_ptr<vector<string> > events_files, shared_ptr<vector<string> > memtrace_files,
-         shared_ptr<vcd_writer> vcd,
+sys::sys(const uint64_t &new_sys_time, std::shared_ptr<ifstream> img,
+         const uint64_t &stats_t0, std::shared_ptr<vector<string> > events_files, std::shared_ptr<vector<string> > memtrace_files,
+         std::shared_ptr<vcd_writer> vcd,
          logger &new_log, uint32_t seed, bool use_graphite_inj,
-         uint64_t new_test_flags) throw(err)
+         uint64_t new_test_flags)
     : sys_time(new_sys_time), stats(new system_statistics()), log(new_log),
       sys_rand(new random_gen(-1, seed++)), test_flags(new_test_flags) {
     uint32_t num_nodes = read_word(img);
     uint32_t network_width = read_word(img);
     LOG(log,2) << "creating system with " << num_nodes << " node"
                << (num_nodes == 1 ? "" : "s") << "..." << endl;
-    shared_ptr<flow_rename_table> flow_renames =
-        shared_ptr<flow_rename_table>(new flow_rename_table());
+    std::shared_ptr<flow_rename_table> flow_renames =
+        std::shared_ptr<flow_rename_table>(new flow_rename_table());
     for (uint32_t i = 0; i < num_nodes; ++i) {
         tile_indices.push_back(tile_id(i));
-        tiles.push_back(shared_ptr<tile>(new tile(tile_id(i), num_nodes,
+        tiles.push_back(std::shared_ptr<tile>(new tile(tile_id(i), num_nodes,
                                                   sys_time, stats_t0,
                                                   flow_renames, log)));
         stats->add(i, tiles.back()->get_statistics());
     }
-    typedef vector<shared_ptr<pe> > pes_t;
-    typedef vector<shared_ptr<bridge> > bridges_t;
-    typedef vector<shared_ptr<node> > nodes_t;
-    typedef map<tuple<unsigned, unsigned>, shared_ptr<arbiter> > arbiters_t;
-    typedef vector<shared_ptr<router> > routers_t;
-    typedef vector<shared_ptr<channel_alloc> > vcas_t;
-    typedef vector<shared_ptr<bridge_channel_alloc> > br_vcas_t;
+    typedef vector<std::shared_ptr<pe> > pes_t;
+    typedef vector<std::shared_ptr<bridge> > bridges_t;
+    typedef vector<std::shared_ptr<node> > nodes_t;
+    typedef map<std::tuple<unsigned, unsigned>, std::shared_ptr<arbiter> > arbiters_t;
+    typedef vector<std::shared_ptr<router> > routers_t;
+    typedef vector<std::shared_ptr<channel_alloc> > vcas_t;
+    typedef vector<std::shared_ptr<bridge_channel_alloc> > br_vcas_t;
     pes_t pes(num_nodes);
     nodes_t nodes(num_nodes);
     bridges_t bridges(num_nodes);
@@ -173,16 +171,16 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     br_vcas_t br_vcas(num_nodes);
     typedef event_parser::injectors_t injectors_t;
     typedef event_parser::flow_starts_t flow_starts_t;
-    shared_ptr<injectors_t> injectors(new injectors_t(num_nodes));
-    shared_ptr<flow_starts_t> flow_starts(new flow_starts_t());
+    std::shared_ptr<injectors_t> injectors(new injectors_t(num_nodes));
+    std::shared_ptr<flow_starts_t> flow_starts(new flow_starts_t());
 
-    vector<shared_ptr<memtraceCore> > memtrace_cores;
-    shared_ptr<memtraceThreadPool> memtrace_thread_pool(new memtraceThreadPool());
+    vector<std::shared_ptr<memtraceCore> > memtrace_cores;
+    std::shared_ptr<memtraceThreadPool> memtrace_thread_pool(new memtraceThreadPool());
 
-    shared_ptr<memStats> mem_stats = shared_ptr<memStats>();
+    std::shared_ptr<memStats> mem_stats = std::shared_ptr<memStats>();
 
-    shared_ptr<dram> new_dram(new dram());
-    shared_ptr<SynchedCATModel> cat_model(new SynchedCATModel());
+    std::shared_ptr<dram> new_dram(new dram());
+    std::shared_ptr<SynchedCATModel> cat_model(new SynchedCATModel());
     uint32_t cat_allocation_unit_in_bytes = 0;
 
     for (unsigned i = 0; i < num_nodes; ++i) {
@@ -190,23 +188,23 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         uint32_t bytes_per_flit = read_word(img);
         if (id < 0 || id >= num_nodes) throw err_bad_mem_img();
         if (nodes[id]) throw err_bad_mem_img();
-        shared_ptr<tile> t = tiles[id];
-        shared_ptr<random_gen> ran(new random_gen(id, seed++));
-        shared_ptr<router> n_rt(new set_router(id, log, ran));
+        std::shared_ptr<tile> t = tiles[id];
+        std::shared_ptr<random_gen> ran(new random_gen(id, seed++));
+        std::shared_ptr<router> n_rt(new set_router(id, log, ran));
         uint32_t one_q_per_f = read_word(img);
         uint32_t one_f_per_q = read_word(img);
         uint32_t multi_path_routing = read_word(img);
         n_rt->set_multi_path_routing((router::multi_path_routing_t)multi_path_routing);
-        shared_ptr<channel_alloc>
+        std::shared_ptr<channel_alloc>
             //n_vca(new set_channel_alloc(id, one_q_per_f, one_f_per_q, log, ran));
             n_vca(new set_channel_alloc(id, one_q_per_f, one_f_per_q, t->get_statistics(),
                   log, ran));//pengju
         n_rt->set_virtual_channel_alloc(n_vca);
-        shared_ptr<bridge_channel_alloc>
+        std::shared_ptr<bridge_channel_alloc>
             b_vca(new set_bridge_channel_alloc(id, one_q_per_f, one_f_per_q,
                                                log, ran));
         uint32_t flits_per_q = read_word(img);
-        shared_ptr<node> n(new node(node_id(id), flits_per_q, n_rt, n_vca,
+        std::shared_ptr<node> n(new node(node_id(id), flits_per_q, n_rt, n_vca,
                                     t->get_statistics(), vcd, log, ran));
         nodes[id] = n;
         t->add(n);
@@ -223,7 +221,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         for (uint32_t q = 0; q < n2b_num_queues; ++q) {
             n2b_queues.insert(virtual_queue_id(read_word(img)));
         }
-        shared_ptr<bridge> b(new bridge(n, b_vca,
+        std::shared_ptr<bridge> b(new bridge(n, b_vca,
                                         n2b_queues, n2b_bw, b2n_queues, b2n_bw,
                                         flits_per_q, b2n_xbar_bw,
                                         one_q_per_f, one_f_per_q,
@@ -231,9 +229,9 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                                         t->get_statistics(), vcd, log));
         bridges[id] = b;
         t->add(b);
-        shared_ptr<set_bridge_channel_alloc> vca =
+        std::shared_ptr<set_bridge_channel_alloc> vca =
             static_pointer_cast<set_bridge_channel_alloc>(b_vca);
-        shared_ptr<ingress> b_n_i = n->get_ingress_from(b->get_id());
+        std::shared_ptr<ingress> b_n_i = n->get_ingress_from(b->get_id());
         const ingress::queues_t &b_n_i_qs = b_n_i->get_queues();
         for (ingress::queues_t::const_iterator qi = b_n_i_qs.begin();
                  qi != b_n_i_qs.end(); ++qi) {
@@ -241,18 +239,18 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         }
         uint32_t core_type_word = read_word(img);
         sys_core_type_t core_type = static_cast<sys_core_type_t>(core_type_word);
-        shared_ptr<pe> p;
+        std::shared_ptr<pe> p;
 
         switch (core_type) {
         case CORE_MIPS_MPI: {
             uint32_t mem_start = read_word(img);
             uint32_t mem_size = read_word(img);
-            shared_ptr<mem> m(new mem(id, mem_start, mem_size, log));
+            std::shared_ptr<mem> m(new mem(id, mem_start, mem_size, log));
             read_mem(m->ptr(mem_start), mem_size, img);
 
             uint32_t cpu_entry_point = read_word(img);
             uint32_t cpu_stack_pointer = read_word(img);
-            p = shared_ptr<pe>(new cpu(pe_id(id), t->get_time(), m,
+            p = std::shared_ptr<pe>(new cpu(pe_id(id), t->get_time(), m,
                                        cpu_entry_point,
                                        cpu_stack_pointer,
                                        t->get_statistics(),
@@ -260,11 +258,11 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             break;
         }
         case CORE_INJECTOR: {
-            shared_ptr<injector> inj(new injector(id, t->get_time(),
+                                    std::shared_ptr<injector> inj(new injector(id, t->get_time(),
                                                   t->get_packet_id_factory(),
                                                   t->get_statistics(),
                                                   log, ran));
-            shared_ptr<ginj> g_inj(new ginj(id, t->get_time(),
+                                    std::shared_ptr<ginj> g_inj(new ginj(id, t->get_time(),
                                             t->get_packet_id_factory(), 
                                             t->get_statistics(), log, ran));
             if (use_graphite_inj) {
@@ -307,19 +305,19 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             /* cat number of ports 0:infinite */
             uint32_t cat_num_ports = read_word(img);
 
-            shared_ptr<cat> new_cat = shared_ptr<cat>();
+            std::shared_ptr<cat> new_cat = std::shared_ptr<cat>();
             switch(cat_type) {
             case CAT_STRIPE:
-                new_cat = shared_ptr<catStripe>(new catStripe(num_nodes, t->get_time(), cat_num_ports, 
+                new_cat = std::shared_ptr<catStripe>(new catStripe(num_nodes, t->get_time(), cat_num_ports, 
                                                               cat_latency, cat_allocation_unit_in_bytes));
                 break;
             case CAT_STATIC:
-                new_cat = shared_ptr<catStatic>(new catStatic(num_nodes, t->get_time(), cat_num_ports, 
+                new_cat = std::shared_ptr<catStatic>(new catStatic(num_nodes, t->get_time(), cat_num_ports, 
                                                               cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay,
                                                               cat_model));
                 break;
             case CAT_FIRST_TOUCH:
-                new_cat = shared_ptr<catFirstTouch>(new catFirstTouch(num_nodes, t->get_time(), cat_num_ports, 
+                new_cat = std::shared_ptr<catFirstTouch>(new catFirstTouch(num_nodes, t->get_time(), cat_num_ports, 
                                                                       cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay,
                                                                       cat_model));
                 break;
@@ -335,7 +333,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             uint32_t address_size_in_bytes = read_word(img);
 
             /* cache configurations */
-            shared_ptr<memory> mem = shared_ptr<memory>();
+            std::shared_ptr<memory> mem = std::shared_ptr<memory>();
 
             switch (mem_type) {
             case MEM_PRIVATE_SHARED_MSI_MESI:
@@ -366,16 +364,16 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     cfg.l2_num_write_ports = read_word(img);
 
                     assert(support_em == false);
-                    if (mem_stats == shared_ptr<memStats>()) {
+                    if (mem_stats == std::shared_ptr<memStats>()) {
                         mem_stats = 
-                            shared_ptr<privateSharedMSIStats>(new privateSharedMSIStats(t->get_time()));
+                            std::shared_ptr<privateSharedMSIStats>(new privateSharedMSIStats(t->get_time()));
                         stats->add_aux_statistics(mem_stats);
                     }
-                    shared_ptr<privateSharedMSI> new_mem = 
-                        shared_ptr<privateSharedMSI>(new privateSharedMSI(id, t->get_time(), 
+                    std::shared_ptr<privateSharedMSI> new_mem = 
+                        std::shared_ptr<privateSharedMSI>(new privateSharedMSI(id, t->get_time(), 
                                                                           t->get_statistics(), log, ran, new_cat, cfg));
-                    shared_ptr<privateSharedMSIStatsPerTile> per_tile_stats = 
-                        shared_ptr<privateSharedMSIStatsPerTile>(new privateSharedMSIStatsPerTile(id, t->get_time()));
+                    std::shared_ptr<privateSharedMSIStatsPerTile> per_tile_stats = 
+                        std::shared_ptr<privateSharedMSIStatsPerTile>(new privateSharedMSIStatsPerTile(id, t->get_time()));
                     new_mem->set_per_tile_stats(per_tile_stats);
 
                     mem_stats->add_per_tile_stats(per_tile_stats);
@@ -422,16 +420,16 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     cfg.l2_num_write_ports = read_word(img);
 
                     assert(support_em == false);
-                    if (mem_stats == shared_ptr<memStats>()) {
+                    if (mem_stats == std::shared_ptr<memStats>()) {
                         mem_stats = 
-                            shared_ptr<privateSharedPTIStats>(new privateSharedPTIStats(t->get_time()));
+                            std::shared_ptr<privateSharedPTIStats>(new privateSharedPTIStats(t->get_time()));
                         stats->add_aux_statistics(mem_stats);
                     }
-                    shared_ptr<privateSharedPTI> new_mem = 
-                        shared_ptr<privateSharedPTI>(new privateSharedPTI(id, t->get_time(), 
+                    std::shared_ptr<privateSharedPTI> new_mem = 
+                        std::shared_ptr<privateSharedPTI>(new privateSharedPTI(id, t->get_time(), 
                                                                           t->get_statistics(), log, ran, new_cat, cfg));
-                    shared_ptr<privateSharedPTIStatsPerTile> per_tile_stats = 
-                        shared_ptr<privateSharedPTIStatsPerTile>(new privateSharedPTIStatsPerTile(id, t->get_time()));
+                    std::shared_ptr<privateSharedPTIStatsPerTile> per_tile_stats = 
+                        std::shared_ptr<privateSharedPTIStatsPerTile>(new privateSharedPTIStatsPerTile(id, t->get_time()));
                     new_mem->set_per_tile_stats(per_tile_stats);
 
                     mem_stats->add_per_tile_stats(per_tile_stats);
@@ -478,17 +476,17 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     cfg.l2_num_read_ports = read_word(img);
                     cfg.l2_num_write_ports = read_word(img);
 
-                    if (mem_stats == shared_ptr<memStats>()) {
+                    if (mem_stats == std::shared_ptr<memStats>()) {
                         mem_stats = 
-                            shared_ptr<sharedSharedLCCStats>(new sharedSharedLCCStats(t->get_time()));
+                            std::shared_ptr<sharedSharedLCCStats>(new sharedSharedLCCStats(t->get_time()));
                         stats->add_aux_statistics(mem_stats);
                     }
 
-                    shared_ptr<sharedSharedLCC> new_mem = 
-                        shared_ptr<sharedSharedLCC>(new sharedSharedLCC(id, t->get_time(), 
+                    std::shared_ptr<sharedSharedLCC> new_mem = 
+                        std::shared_ptr<sharedSharedLCC>(new sharedSharedLCC(id, t->get_time(), 
                                                                           t->get_statistics(), log, ran, new_cat, cfg));
-                    shared_ptr<sharedSharedLCCStatsPerTile> per_tile_stats = 
-                        shared_ptr<sharedSharedLCCStatsPerTile>(new sharedSharedLCCStatsPerTile(id, t->get_time()));
+                    std::shared_ptr<sharedSharedLCCStatsPerTile> per_tile_stats = 
+                        std::shared_ptr<sharedSharedLCCStatsPerTile>(new sharedSharedLCCStatsPerTile(id, t->get_time()));
                     new_mem->set_per_tile_stats(per_tile_stats);
 
                     mem_stats->add_per_tile_stats(per_tile_stats);
@@ -525,17 +523,17 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     cfg.l2_num_read_ports = read_word(img);
                     cfg.l2_num_write_ports = read_word(img);
 
-                    if (mem_stats == shared_ptr<sharedSharedEMRAStats>()) {
+                    if (mem_stats == std::shared_ptr<sharedSharedEMRAStats>()) {
                         mem_stats = 
-                            shared_ptr<sharedSharedEMRAStats>(new sharedSharedEMRAStats(t->get_time()));
+                            std::shared_ptr<sharedSharedEMRAStats>(new sharedSharedEMRAStats(t->get_time()));
                         stats->add_aux_statistics(mem_stats);
                     }
 
-                    shared_ptr<sharedSharedEMRA> new_mem = 
-                        shared_ptr<sharedSharedEMRA>(new sharedSharedEMRA(id, t->get_time(), 
+                    std::shared_ptr<sharedSharedEMRA> new_mem = 
+                        std::shared_ptr<sharedSharedEMRA>(new sharedSharedEMRA(id, t->get_time(), 
                                                                             t->get_statistics(), log, ran, new_cat, cfg));
-                    shared_ptr<sharedSharedEMRAStatsPerTile> per_tile_stats = 
-                        shared_ptr<sharedSharedEMRAStatsPerTile>(new sharedSharedEMRAStatsPerTile(id, t->get_time()));
+                    std::shared_ptr<sharedSharedEMRAStatsPerTile> per_tile_stats = 
+                        std::shared_ptr<sharedSharedEMRAStatsPerTile>(new sharedSharedEMRAStatsPerTile(id, t->get_time()));
                     new_mem->set_per_tile_stats(per_tile_stats);
 
                     mem_stats->add_per_tile_stats(per_tile_stats);
@@ -598,8 +596,8 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                                                true /* use lock */);
             }
 
-            shared_ptr<memtraceCore> new_core = 
-                shared_ptr<memtraceCore>(new memtraceCore(pe_id(id), t->get_time(), t->get_packet_id_factory(),
+            std::shared_ptr<memtraceCore> new_core = 
+                std::shared_ptr<memtraceCore>(new memtraceCore(pe_id(id), t->get_time(), t->get_packet_id_factory(),
                                                           t->get_statistics(), log, ran, memtrace_thread_pool, mem,
                                                           support_em, msg_queue_size, bytes_per_flit, 
                                                           (mig_size_in_bytes + bytes_per_flit - 1)/bytes_per_flit, /* flit/context */
@@ -618,7 +616,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             uint32_t mem_start = read_word(img);
             uint32_t mem_size = read_word(img);
 
-            shared_ptr<mem> m(new mem(id, mem_start, mem_size, log));
+            std::shared_ptr<mem> m(new mem(id, mem_start, mem_size, log));
             read_mem(m->ptr(mem_start), mem_size, img);
 
             uint32_t __attribute__((unused)) cpu_entry_point = read_word(img);
@@ -650,19 +648,19 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             /* cat number of ports 0:infinite */
             uint32_t cat_num_ports = read_word(img);
 
-            shared_ptr<cat> new_cat = shared_ptr<cat>();
+            std::shared_ptr<cat> new_cat = std::shared_ptr<cat>();
             switch(cat_type) {
             case CAT_STRIPE:
-                new_cat = shared_ptr<catStripe>(new catStripe(num_nodes, t->get_time(), cat_num_ports, 
+                new_cat = std::shared_ptr<catStripe>(new catStripe(num_nodes, t->get_time(), cat_num_ports, 
                                                               cat_latency, cat_allocation_unit_in_bytes));
                 break;
             case CAT_STATIC:
-                new_cat = shared_ptr<catStatic>(new catStatic(num_nodes, t->get_time(), cat_num_ports, 
+                new_cat = std::shared_ptr<catStatic>(new catStatic(num_nodes, t->get_time(), cat_num_ports, 
                                                               cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay,
                                                               cat_model));
                 break;
             case CAT_FIRST_TOUCH:
-                new_cat = shared_ptr<catFirstTouch>(new catFirstTouch(num_nodes, t->get_time(), cat_num_ports, 
+                new_cat = std::shared_ptr<catFirstTouch>(new catFirstTouch(num_nodes, t->get_time(), cat_num_ports, 
                                                                       cat_latency, cat_allocation_unit_in_bytes, cat_synch_delay,
                                                                       cat_model));
                 break;
@@ -682,7 +680,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
             // data and instruction cache --------------------------------------
 
-            shared_ptr<memory> data_memory = shared_ptr<memory>();
+            std::shared_ptr<memory> data_memory = std::shared_ptr<memory>();
             //shared_ptr<memory> instruction_memory = shared_ptr<memory>();
 
             privateSharedMSI::privateSharedMSICfg_t cfg;
@@ -710,22 +708,22 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
             cfg.l2_num_read_ports = read_word(img);
             cfg.l2_num_write_ports = read_word(img);
 
-            if (mem_stats == shared_ptr<memStats>()) {
+            if (mem_stats == std::shared_ptr<memStats>()) {
                 mem_stats = 
-                    shared_ptr<privateSharedMSIStats>(new privateSharedMSIStats(t->get_time()));
+                    std::shared_ptr<privateSharedMSIStats>(new privateSharedMSIStats(t->get_time()));
                 stats->add_aux_statistics(mem_stats);
             }
 
             // form new caches
-            shared_ptr<privateSharedMSI> new_data_memory = 
-                shared_ptr<privateSharedMSI>(new privateSharedMSI(id, t->get_time(), 
+            std::shared_ptr<privateSharedMSI> new_data_memory = 
+                std::shared_ptr<privateSharedMSI>(new privateSharedMSI(id, t->get_time(), 
                                                                   t->get_statistics(), log, ran, new_cat, cfg));
             //shared_ptr<privateSharedMSI> new_instruction_memory = 
             //    shared_ptr<privateSharedMSI>(new privateSharedMSI(id, t->get_time(), 
             //                                                     t->get_statistics(), log, ran, new_cat, cfg));
 
-            shared_ptr<privateSharedMSIStatsPerTile> per_tile_stats = 
-                shared_ptr<privateSharedMSIStatsPerTile>(new privateSharedMSIStatsPerTile(id, t->get_time()));
+            std::shared_ptr<privateSharedMSIStatsPerTile> per_tile_stats = 
+                std::shared_ptr<privateSharedMSIStatsPerTile>(new privateSharedMSIStatsPerTile(id, t->get_time()));
             new_data_memory->set_per_tile_stats(per_tile_stats);
             //new_instruction_memory->set_per_tile_stats(per_tile_stats);
 
@@ -789,7 +787,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
 
             new_dram->mem_write_instant(m, i+1, mem_start, mem_size);
 
-            shared_ptr<mcpu> new_core(new mcpu( pe_id(id), 
+            std::shared_ptr<mcpu> new_core(new mcpu( pe_id(id), 
                                                 t->get_time(), 
                                                 cpu_entry_point,
                                                 cpu_stack_pointer,
@@ -837,7 +835,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         arb_delay = read_word(img);
     }
     uint32_t num_cxns = read_word(img);
-    typedef set<tuple<uint32_t, uint32_t> > cxns_t;
+    typedef set<std::tuple<uint32_t, uint32_t> > cxns_t;
     cxns_t cxns;
     LOG(log,2) << "network fabric has " << dec << num_cxns
                << " one-way link" << (num_cxns == 1 ? "" : "s") << endl;
@@ -876,13 +874,13 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     }
     if (arb_scheme != AS_NONE) {
         for (cxns_t::const_iterator i = cxns.begin(); i != cxns.end(); ++i) {
-            uint32_t from, to;
-            tie(from, to) = *i;
+            uint32_t from = get<0>(*i);
+            uint32_t to = get<1>(*i);
             if (from <= to
                 && cxns.count(make_tuple(to, from)) > 0) {
-                shared_ptr<tile> t = tiles[from];
-                shared_ptr<arbiter> arb =
-                    shared_ptr<arbiter>(new arbiter(t->get_time(), nodes[from],
+                std::shared_ptr<tile> t = tiles[from];
+                std::shared_ptr<arbiter> arb =
+                    std::shared_ptr<arbiter>(new arbiter(t->get_time(), nodes[from],
                                                     nodes[to], arb_scheme,
                                                     arb_min_bw, arb_period,
                                                     arb_delay,
@@ -903,7 +901,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
         uint32_t prev_n = read_word(img);
         if (prev_n == 0xffffffffUL) { // program the bridge
             uint32_t num_queues = read_word(img); // 0 is valid (= all queues)
-            vector<tuple<virtual_queue_id, double> > qs;
+            vector<std::tuple<virtual_queue_id, double> > qs;
             for (uint32_t q = 0; q < num_queues; ++q) {
                 uint32_t vqid = read_word(img);
                 double prop = read_double(img);
@@ -911,12 +909,12 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                 qs.push_back(make_tuple(virtual_queue_id(vqid), prop));
             }
             (*flow_starts)[flow] = cur_n;
-            shared_ptr<set_bridge_channel_alloc> vca =
+            std::shared_ptr<set_bridge_channel_alloc> vca =
                 static_pointer_cast<set_bridge_channel_alloc>(br_vcas[cur_n]);
             vca->add_route(flow_id(flow), qs);
         } else { // program a routing node
             uint32_t num_nodes = read_word(img);
-            vector<tuple<node_id,flow_id,double> > next_nodes;
+            vector<std::tuple<node_id,flow_id,double> > next_nodes;
             if (num_nodes == 0) throw err_bad_mem_img();
             for (uint32_t n = 0; n < num_nodes; ++n) {
                 uint32_t next_n = read_word(img);
@@ -925,14 +923,14 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                 if (nprop <= 0) throw err_bad_mem_img();
                 next_nodes.push_back(make_tuple(next_n, next_f, nprop));
                 uint32_t num_queues = read_word(img); // 0 is valid
-                vector<tuple<virtual_queue_id,double> > next_qs;
+                vector<std::tuple<virtual_queue_id,double> > next_qs;
                 for (uint32_t q = 0; q < num_queues; ++q) {
                     uint32_t qid = read_word(img);
                     double qprop = read_double(img);
                     if (qprop <= 0) throw err_bad_mem_img();
                     next_qs.push_back(make_tuple(qid, qprop));
                 }
-                shared_ptr<set_channel_alloc> vca =
+                std::shared_ptr<set_channel_alloc> vca =
                     static_pointer_cast<set_channel_alloc>(n_vcas[cur_n]);
                 vca->add_route(prev_n, flow_id(flow),
                                next_n, flow_id(next_f), next_qs);
@@ -940,7 +938,7 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
                     flow_renames->add_flow_rename(flow, next_f);
                 }
             }
-            shared_ptr<set_router> r =
+            std::shared_ptr<set_router> r =
                 static_pointer_cast<set_router>(node_rts[cur_n]);
             r->add_route(prev_n, flow_id(flow), next_nodes);
         }
@@ -962,20 +960,20 @@ sys::sys(const uint64_t &new_sys_time, shared_ptr<ifstream> img,
     LOG(log,1) << "system created" << endl;
 }
 
-shared_ptr<system_statistics> sys::get_statistics() const throw() {
+std::shared_ptr<system_statistics> sys::get_statistics() const {
     return stats;
 }
 
-shared_ptr<tile_statistics> sys::get_statistics_tile(tile_id t) const throw() {
+std::shared_ptr<tile_statistics> sys::get_statistics_tile(tile_id t) const {
     assert(t.get_numeric_id() < tiles.size());
     return tiles[t.get_numeric_id()]->get_statistics();
 }
 
-uint32_t sys::get_num_tiles() const throw() {
+uint32_t sys::get_num_tiles() const {
     return tiles.size();
 }
 
-void sys::tick_positive_edge() throw(err) {
+void sys::tick_positive_edge() {
     LOG(log,1) << "[system] posedge " << dec << get_time() << endl;
     if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
         boost::function<int(int)> rr_fn =
@@ -988,7 +986,7 @@ void sys::tick_positive_edge() throw(err) {
     }
 }
 
-void sys::tick_negative_edge() throw(err) {
+void sys::tick_negative_edge() {
     LOG(log,1) << "[system] negedge " << dec << get_time() << endl;
     if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
         boost::function<int(int)> rr_fn =
@@ -1001,7 +999,7 @@ void sys::tick_negative_edge() throw(err) {
     }
 }
 
-void sys::fast_forward_time(uint64_t new_time) throw() {
+void sys::fast_forward_time(uint64_t new_time) {
     assert(new_time >= get_time());
     LOG(log,1) << "[system] fast forward to  " << dec << new_time << endl;
     if (test_flags & TF_RANDOMIZE_NODE_ORDER) {
@@ -1016,12 +1014,12 @@ void sys::fast_forward_time(uint64_t new_time) throw() {
     sys_time = new_time;
 }
 
-void sys::tick_positive_edge_tile(tile_id tile_no) throw(err) {
+void sys::tick_positive_edge_tile(tile_id tile_no) {
     assert(tile_no.get_numeric_id() < tiles.size());
     tiles[tile_no.get_numeric_id()]->tick_positive_edge();
 }
 
-void sys::tick_negative_edge_tile(tile_id tile_no) throw(err) {
+void sys::tick_negative_edge_tile(tile_id tile_no) {
     assert(tile_no.get_numeric_id() < tiles.size());
     tiles[tile_no.get_numeric_id()]->tick_negative_edge();
     if (tiles[tile_no.get_numeric_id()]->get_time() > get_time()) {
@@ -1029,18 +1027,18 @@ void sys::tick_negative_edge_tile(tile_id tile_no) throw(err) {
     }
 }
 
-void sys::fast_forward_time_tile(tile_id tile_no, uint64_t new_time) throw() {
+void sys::fast_forward_time_tile(tile_id tile_no, uint64_t new_time) {
     assert(new_time >= get_time());
     assert(tile_no.get_numeric_id() < tiles.size());
     tiles[tile_no.get_numeric_id()]->fast_forward_time(new_time);
     sys_time = new_time;
 }
 
-uint64_t sys::get_time_tile(tile_id tile_no) const throw() {
+uint64_t sys::get_time_tile(tile_id tile_no) const {
     return tiles[tile_no.get_numeric_id()]->get_time();
 }
 
-uint64_t sys::advance_time() throw(err) {
+uint64_t sys::advance_time() {
     uint64_t next_time = UINT64_MAX;
     for (vector<tile_id>::const_iterator i = tile_indices.begin();
          i != tile_indices.end(); ++i) {
@@ -1050,11 +1048,11 @@ uint64_t sys::advance_time() throw(err) {
     return next_time;
 }
 
-uint64_t sys::advance_time_tile(tile_id tile_no) throw(err) {
+uint64_t sys::advance_time_tile(tile_id tile_no) {
     return tiles[tile_no.get_numeric_id()]->next_pkt_time();
 }
 
-bool sys::is_drained() const throw() {
+bool sys::is_drained() const {
     for (vector<tile_id>::const_iterator i = tile_indices.begin();
          i != tile_indices.end(); ++i) {
         if (!is_drained_tile(*i)) return false;
@@ -1062,24 +1060,24 @@ bool sys::is_drained() const throw() {
     return true;
 }
 
-bool sys::is_drained_tile(tile_id tile_no) const throw() {
+bool sys::is_drained_tile(tile_id tile_no) const {
     return tiles[tile_no.get_numeric_id()]->is_drained();
 }
 
-bool sys::nothing_to_offer() throw(err) {
+bool sys::nothing_to_offer() {
     for (tiles_t::const_iterator i = tiles.begin(); i != tiles.end(); ++i) {
         if ((*i)->is_ready_to_offer()) return false;
     }
     return true;
 }
 
-bool sys::work_tbd_darsim() throw(err) {
+bool sys::work_tbd_darsim() {
     for (tiles_t::const_iterator i = tiles.begin(); i != tiles.end(); ++i) {
        if ((*i)->work_queued()) return true;
     }
     return false;
 }
 
-uint64_t sys::get_time() const throw() {
+uint64_t sys::get_time() const {
     return sys_time;
 }

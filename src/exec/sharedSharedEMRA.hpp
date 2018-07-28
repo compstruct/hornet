@@ -48,23 +48,23 @@ public:
 
     sharedSharedEMRA(uint32_t numeric_id, 
                      const uint64_t &system_time, 
-                     shared_ptr<tile_statistics> stats, 
+                     std::shared_ptr<tile_statistics> stats, 
                      logger &log, 
-                     shared_ptr<random_gen> ran, 
-                     shared_ptr<cat> a_cat, 
+                     std::shared_ptr<random_gen> ran, 
+                     std::shared_ptr<cat> a_cat, 
                      sharedSharedEMRACfg_t cfg);
     virtual ~sharedSharedEMRA();
 
     virtual uint32_t number_of_mem_msg_types();
 
-    virtual void request(shared_ptr<memoryRequest> req);
+    virtual void request(std::shared_ptr<memoryRequest> req);
     virtual void tick_positive_edge();
     virtual void tick_negative_edge();
 
     /* set stats */
-    inline void set_per_tile_stats(shared_ptr<sharedSharedEMRAStatsPerTile> stats) { m_stats = stats; }
-    inline bool stats_enabled() { return (m_stats != shared_ptr<sharedSharedEMRAStatsPerTile>()); }
-    inline shared_ptr<sharedSharedEMRAStatsPerTile> stats() { return m_stats; }
+    inline void set_per_tile_stats(std::shared_ptr<sharedSharedEMRAStatsPerTile> stats) { m_stats = stats; }
+    inline bool stats_enabled() { return (m_stats != std::shared_ptr<sharedSharedEMRAStatsPerTile>()); }
+    inline std::shared_ptr<sharedSharedEMRAStatsPerTile> stats() { return m_stats; }
 
     typedef enum {
         MSG_DRAMCTRL_REQ = 0,
@@ -92,7 +92,7 @@ public:
         bool sent;
 
         /* fot stats */
-        shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
+        std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
         uint64_t birthtime;
 
     } coherenceMsg;
@@ -100,7 +100,7 @@ public:
     typedef struct {
         uint32_t sender;
         uint32_t receiver;
-        shared_ptr<dramRequest> dram_req;
+        std::shared_ptr<dramRequest> dram_req;
         maddr_t maddr;
 
         /* status */
@@ -108,7 +108,7 @@ public:
 
         /* for stats */
         uint64_t birthtime;
-        shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
+        std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
 
     } dramctrlMsg;
 
@@ -133,33 +133,33 @@ private:
     typedef struct {
         entryStatus status;
 
-        shared_ptr<memoryRequest> core_req;
-        shared_ptr<catRequest> cat_req;
-        shared_ptr<cacheRequest> l1_req;
-        shared_ptr<cacheRequest> l2_req;
-        shared_ptr<coherenceMsg> ra_req;
-        shared_ptr<coherenceMsg> ra_rep;
-        shared_ptr<dramctrlMsg> dramctrl_req;
-        shared_ptr<dramctrlMsg> dramctrl_rep;
+        std::shared_ptr<memoryRequest> core_req;
+        std::shared_ptr<catRequest> cat_req;
+        std::shared_ptr<cacheRequest> l1_req;
+        std::shared_ptr<cacheRequest> l2_req;
+        std::shared_ptr<coherenceMsg> ra_req;
+        std::shared_ptr<coherenceMsg> ra_rep;
+        std::shared_ptr<dramctrlMsg> dramctrl_req;
+        std::shared_ptr<dramctrlMsg> dramctrl_rep;
 
         /* for stats */
-        shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
+        std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
 
     } tableEntry;
 
     typedef struct {
-        shared_ptr<dramctrlMsg> dramctrl_req;
-        shared_ptr<dramctrlMsg> dramctrl_rep;
-        shared_ptr<message_t> net_msg_to_send;
+            std::shared_ptr<dramctrlMsg> dramctrl_req;
+            std::shared_ptr<dramctrlMsg> dramctrl_rep;
+            std::shared_ptr<message_t> net_msg_to_send;
 
         /* for stats */
         uint64_t operation_begin_time;
-        shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
+        std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
 
     } dramctrlTableEntry;
 
-    typedef map<maddr_t, shared_ptr<tableEntry> > workTable;
-    typedef map<maddr_t, shared_ptr<dramctrlTableEntry> > dramctrlTable;
+    typedef map<maddr_t, std::shared_ptr<tableEntry> > workTable;
+    typedef map<maddr_t, std::shared_ptr<dramctrlTableEntry> > dramctrlTable;
 
     inline maddr_t get_start_maddr_in_line(maddr_t maddr) { 
         maddr.address -= (maddr.address)%(m_cfg.words_per_cache_line*4); return maddr; 
@@ -184,9 +184,9 @@ private:
 
     cache* m_l1;
     cache* m_l2;
-    shared_ptr<cat> m_cat;
+    std::shared_ptr<cat> m_cat;
 
-    shared_ptr<sharedSharedEMRAStatsPerTile> m_stats;
+    std::shared_ptr<sharedSharedEMRAStatsPerTile> m_stats;
 
     workTable m_work_table;
     dramctrlTable m_dramctrl_work_table;
@@ -195,24 +195,24 @@ private:
     uint32_t m_available_core_ports;
 
     /* keep track of writeback requests to priortize it. no real hw, for simulation performance */
-    map<maddr_t, shared_ptr<tableEntry> > m_l2_writeback_status;
-    map<maddr_t, shared_ptr<tableEntry> > m_dramctrl_writeback_status;
+    map<maddr_t, std::shared_ptr<tableEntry> > m_l2_writeback_status;
+    map<maddr_t, std::shared_ptr<tableEntry> > m_dramctrl_writeback_status;
 
     /* SCHEDULER QUEUES */
     /* no real hardware... volatile at clock boundaries */
 
-    vector<shared_ptr<memoryRequest> > m_core_port_schedule_q; 
-    vector<tuple<bool/* is remote */, shared_ptr<void> > > m_new_work_table_entry_schedule_q;
+    vector<std::shared_ptr<memoryRequest> > m_core_port_schedule_q; 
+    vector<std::tuple<bool/* is remote */, std::shared_ptr<void> > > m_new_work_table_entry_schedule_q;
 
-    vector<shared_ptr<tableEntry> > m_cat_req_schedule_q;
-    vector<shared_ptr<tableEntry> > m_l1_read_req_schedule_q;
-    vector<shared_ptr<tableEntry> > m_l1_write_req_schedule_q;
-    vector<shared_ptr<tableEntry> > m_l2_read_req_schedule_q;
-    vector<shared_ptr<tableEntry> > m_l2_write_req_schedule_q;
-    vector<shared_ptr<tableEntry> > m_ra_req_schedule_q;
-    vector<shared_ptr<tableEntry> > m_ra_rep_schedule_q;
-    vector<tuple<bool/* is remote */, shared_ptr<void> > > m_dramctrl_req_schedule_q;
-    vector<shared_ptr<dramctrlTableEntry> > m_dramctrl_rep_schedule_q;
+    vector<std::shared_ptr<tableEntry> > m_cat_req_schedule_q;
+    vector<std::shared_ptr<tableEntry> > m_l1_read_req_schedule_q;
+    vector<std::shared_ptr<tableEntry> > m_l1_write_req_schedule_q;
+    vector<std::shared_ptr<tableEntry> > m_l2_read_req_schedule_q;
+    vector<std::shared_ptr<tableEntry> > m_l2_write_req_schedule_q;
+    vector<std::shared_ptr<tableEntry> > m_ra_req_schedule_q;
+    vector<std::shared_ptr<tableEntry> > m_ra_rep_schedule_q;
+    vector<std::tuple<bool/* is remote */, std::shared_ptr<void> > > m_dramctrl_req_schedule_q;
+    vector<std::shared_ptr<dramctrlTableEntry> > m_dramctrl_rep_schedule_q;
 
 };
 

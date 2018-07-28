@@ -17,22 +17,22 @@ using namespace std;
 
 class channel_alloc {
 public:
-    virtual ~channel_alloc() throw();
-    virtual void claim(const virtual_queue_node_id &q) throw(err);
-    virtual void release(const virtual_queue_node_id &q) throw(err);
-    virtual bool is_claimed(const virtual_queue_node_id &q) throw(err);
-    virtual void allocate() throw(err) = 0;
-    virtual void add_ingress(shared_ptr<ingress> ingress) throw(err);
-    virtual void add_egress(shared_ptr<egress> egress) throw(err) = 0;
-    const node_id &get_id() const throw();
+    virtual ~channel_alloc();
+    virtual void claim(const virtual_queue_node_id &q);
+    virtual void release(const virtual_queue_node_id &q);
+    virtual bool is_claimed(const virtual_queue_node_id &q);
+    virtual void allocate() = 0;
+    virtual void add_ingress(std::shared_ptr<ingress> ingress);
+    virtual void add_egress(std::shared_ptr<egress> egress) = 0;
+    const node_id &get_id() const;
 protected:
     channel_alloc(node_id src, bool one_queue_per_flow, bool one_flow_per_queue,
-                  logger &log) throw();
+                  logger &log);
 protected:
     const node_id id;
     bool one_queue_per_flow;
     bool one_flow_per_queue;
-    typedef vector<shared_ptr<ingress> > ingresses_t;
+    typedef vector<std::shared_ptr<ingress> > ingresses_t;
     ingresses_t ingresses;
 private:
     set<virtual_queue_node_id> in_use;
@@ -40,7 +40,7 @@ protected:
     logger &log;
 };
 
-inline const node_id &channel_alloc::get_id() const throw() { return id; }
+inline const node_id &channel_alloc::get_id() const { return id; }
 
 #endif // __CHANNEL_ALLOC_HPP__
 

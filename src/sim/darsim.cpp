@@ -9,7 +9,7 @@
 #include <csignal>
 #include <iterator>
 #include <algorithm>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include <boost/lexical_cast.hpp>
 #include <boost/program_options.hpp>
 #include <boost/algorithm/string.hpp>
@@ -33,9 +33,9 @@ static const uint32_t version = 201003171;
 typedef void (*custom_signal_handler_t)(int);
 
 static logger syslog;
-static shared_ptr<sys> s;
-static shared_ptr<system_statistics> stats;
-static shared_ptr<vcd_writer> vcd;
+static std::shared_ptr<sys> s;
+static std::shared_ptr<system_statistics> stats;
+static std::shared_ptr<vcd_writer> vcd;
 static bool report_stats = true;
 
 custom_signal_handler_t prev_sig_int_handler;
@@ -60,13 +60,13 @@ static uint32_t fresh_random_seed() {
     return random_seed;
 }
 
-shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
+std::shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
                            const uint64_t &stats_start,
-                           shared_ptr<vector<string> > evt_files,
-                           shared_ptr<vector<string> > memtrace_files,
+                           std::shared_ptr<vector<string> > evt_files,
+                           std::shared_ptr<vector<string> > memtrace_files,
                            uint32_t random_seed,
-                           uint32_t test_flags) throw(err) {
-    shared_ptr<ifstream> img(new ifstream(file.c_str(), ios::in | ios::binary));
+                           uint32_t test_flags) {
+    std::shared_ptr<ifstream> img(new ifstream(file.c_str(), ios::in | ios::binary));
     if (img->fail()) throw err_parse(file, "cannot read file");
     char file_magic[5] = { 0, 0, 0, 0, 0 };
     img->read(file_magic, 4);
@@ -80,7 +80,7 @@ shared_ptr<sys> new_system(const uint64_t &sys_time, string file,
             << "does not match simulator (" << version << ")";
         throw err_parse(file, msg.str());
     }
-    shared_ptr<sys> s(new sys(sys_time, img, stats_start,
+    std::shared_ptr<sys> s(new sys(sys_time, img, stats_start,
                               evt_files, memtrace_files, vcd, syslog, random_seed, false,
                               test_flags));
     img->close();
@@ -173,7 +173,7 @@ int main(int argc, char **argv) {
         vector<string> fns = opts["log-file"].as<vector<string> >();
         for (vector<string>::const_iterator fn = fns.begin();
              fn != fns.end(); ++fn) {
-            shared_ptr<ofstream> f(new ofstream(fn->c_str()));
+            std::shared_ptr<ofstream> f(new ofstream(fn->c_str()));
             if (f->fail()) {
                 cerr << "ERROR: failed to write log: " << *fn << endl;
                 exit(1);
@@ -247,16 +247,16 @@ int main(int argc, char **argv) {
         srandom(fresh_random_seed());
         random_seed = fresh_random_seed();
     }
-    shared_ptr<vector<string> > events_files;
+    std::shared_ptr<vector<string> > events_files;
     if (opts.count("events")) {
-        events_files = shared_ptr<vector<string> >(new vector<string>());
+        events_files = std::shared_ptr<vector<string> >(new vector<string>());
         vector<string> fns = opts["events"].as<vector<string> >();
         copy(fns.begin(), fns.end(),
              back_insert_iterator<vector<string> >(*events_files));
     }
-    shared_ptr<vector<string> > memtraces_files;
+    std::shared_ptr<vector<string> > memtraces_files;
     if (opts.count("memory-traces")) {
-        memtraces_files = shared_ptr<vector<string> >(new vector<string>());
+        memtraces_files = std::shared_ptr<vector<string> >(new vector<string>());
         vector<string> fns = opts["memory-traces"].as<vector<string> >();
         copy(fns.begin(), fns.end(),
              back_insert_iterator<vector<string> >(*memtraces_files));
@@ -269,11 +269,11 @@ int main(int argc, char **argv) {
         fast_forward = false;
     }
     LOG(syslog,0) << dar_full_version << endl << endl;
-    vcd = shared_ptr<vcd_writer>();
+    vcd = std::shared_ptr<vcd_writer>();
     if (opts.count("vcd-file") == 1) {
         uint64_t vcd_start = 0, vcd_end = 0;
         string fn = opts["vcd-file"].as<string>();
-        shared_ptr<ofstream> f(new ofstream(fn.c_str()));
+        std::shared_ptr<ofstream> f(new ofstream(fn.c_str()));
         if (f->fail()) {
             cerr << "failed to write VCD: " << fn << endl;
             exit(1);
@@ -301,7 +301,7 @@ int main(int argc, char **argv) {
                 exit(1);
             }
         }
-        vcd = shared_ptr<vcd_writer>(new vcd_writer(0, f,
+        vcd = std::shared_ptr<vcd_writer>(new vcd_writer(0, f,
                                                     vcd_start, vcd_end));
     } else if (opts.count("vcd-file") > 1) {
         cerr << "ERROR: option --vcd-file admits only one argument" << endl;
@@ -362,7 +362,7 @@ int main(int argc, char **argv) {
         uint32_t last_stats_start = stats_start;
         {
             // the_sim does not leave the scope until simulation ends
-            shared_ptr<random_gen> rng(new random_gen(-2, random_seed));
+            std::shared_ptr<random_gen> rng(new random_gen(-2, random_seed));
             sim the_sim(s, num_cycles, num_packets, sync_period, concurrency,
                         fast_forward, tile_mapping, cpu_affinities,
                         vcd, syslog, rng

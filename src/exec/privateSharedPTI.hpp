@@ -73,23 +73,23 @@ public:
 
     privateSharedPTI(uint32_t numeric_id,
                      const uint64_t &system_time,
-                     shared_ptr<tile_statistics> stats,
+                     std::shared_ptr<tile_statistics> stats,
                      logger &log,
-                     shared_ptr<random_gen> ran,
-                     shared_ptr<cat> a_cat,
+                     std::shared_ptr<random_gen> ran,
+                     std::shared_ptr<cat> a_cat,
                      privateSharedPTICfg_t cfg);
     virtual ~privateSharedPTI();
 
     virtual uint32_t number_of_mem_msg_types();
 
-    virtual void request(shared_ptr<memoryRequest> req);
+    virtual void request(std::shared_ptr<memoryRequest> req);
     virtual void tick_positive_edge();
     virtual void tick_negative_edge();
 
     /* set stats */
-    inline void set_per_tile_stats(shared_ptr<privateSharedPTIStatsPerTile> stats) { m_stats = stats; }
-    inline bool stats_enabled() { return (m_stats != shared_ptr<privateSharedPTIStatsPerTile>()); }
-    inline shared_ptr<privateSharedPTIStatsPerTile> stats() { return m_stats; }
+    inline void set_per_tile_stats(std::shared_ptr<privateSharedPTIStatsPerTile> stats) { m_stats = stats; }
+    inline bool stats_enabled() { return (m_stats != std::shared_ptr<privateSharedPTIStatsPerTile>()); }
+    inline std::shared_ptr<privateSharedPTIStatsPerTile> stats() { return m_stats; }
 
     typedef enum {
         MSG_DRAMCTRL_REQ = 0,
@@ -133,14 +133,14 @@ public:
         bool sent;
 
         coherenceStatus_t coherence_status;
-        shared_ptr<uint64_t> timestamp;
+        std::shared_ptr<uint64_t> timestamp;
 
         /* for empty requests */
         maddr_t replacing_maddr;
-        shared_ptr<void> replacing_info;
+        std::shared_ptr<void> replacing_info;
         bool is_empty_req_done;
 
-        shared_ptr<privateSharedPTIStatsPerMemInstr> per_mem_instr_stats;
+        std::shared_ptr<privateSharedPTIStatsPerMemInstr> per_mem_instr_stats;
         uint64_t birthtime;
 
         /* to identify tReq-tRep pairs */
@@ -152,7 +152,7 @@ public:
     typedef struct {
         coherenceStatus_t status;
         uint32_t home;
-        shared_ptr<uint64_t> timestamp; /* pointer for ideal */
+        std::shared_ptr<uint64_t> timestamp; /* pointer for ideal */
 
         /* aux stat */
         uint64_t in_time;
@@ -173,7 +173,7 @@ public:
         bool locked; 
         coherenceStatus_t status;
         uint32_t owner;
-        shared_ptr<uint64_t> max_timestamp; /* pointer for ideal */
+        std::shared_ptr<uint64_t> max_timestamp; /* pointer for ideal */
         uint64_t last_write_time;
     } dirCoherenceInfo;
 
@@ -203,14 +203,14 @@ public:
         maddr_t replacing_maddr;
         bool is_replaced_line_dirty; /* to return */
         shared_array<uint32_t> replaced_line; /* to return */
-        shared_ptr<dirCoherenceInfo> previous_info; /* to return: record before the current request */
+        std::shared_ptr<dirCoherenceInfo> previous_info; /* to return: record before the current request */
 
     } dirAuxInfoForCoherence;
 
     typedef struct {
         uint32_t sender;
         uint32_t receiver;
-        shared_ptr<dramRequest> dram_req;
+        std::shared_ptr<dramRequest> dram_req;
         maddr_t maddr;
 
         /* status */
@@ -218,7 +218,7 @@ public:
 
         /* for stats */
         uint64_t birthtime;
-        shared_ptr<privateSharedPTIStatsPerMemInstr> per_mem_instr_stats;
+        std::shared_ptr<privateSharedPTIStatsPerMemInstr> per_mem_instr_stats;
 
     } dramctrlMsg;
 
@@ -241,15 +241,15 @@ private:
     typedef struct {
         cacheEntryStatus status;
 
-        shared_ptr<memoryRequest> core_req;
-        shared_ptr<cacheRequest> l1_req;
-        shared_ptr<catRequest> cat_req;
-        shared_ptr<coherenceMsg> dir_req;
-        shared_ptr<coherenceMsg> dir_rep;
-        shared_ptr<coherenceMsg> cache_req;
-        shared_ptr<coherenceMsg> cache_rep;
+        std::shared_ptr<memoryRequest> core_req;
+        std::shared_ptr<cacheRequest> l1_req;
+        std::shared_ptr<catRequest> cat_req;
+        std::shared_ptr<coherenceMsg> dir_req;
+        std::shared_ptr<coherenceMsg> dir_rep;
+        std::shared_ptr<coherenceMsg> cache_req;
+        std::shared_ptr<coherenceMsg> cache_rep;
 
-        shared_ptr<privateSharedPTIStatsPerMemInstr> per_mem_instr_stats;
+        std::shared_ptr<privateSharedPTIStatsPerMemInstr> per_mem_instr_stats;
 
         /* stats */
         uint64_t short_latency_begin_time;
@@ -292,19 +292,19 @@ private:
         dirEntryStatus status;
         dirEntrySubstatus substatus;
 
-        shared_ptr<coherenceMsg> cache_req;
-        shared_ptr<coherenceMsg> bypassed_tReq;
-        shared_ptr<cacheRequest> l2_req;
-        shared_ptr<coherenceMsg> cache_rep;
-        shared_ptr<coherenceMsg> dir_req;
-        shared_ptr<coherenceMsg> dir_rep;
-        shared_ptr<dramctrlMsg> dramctrl_req;
-        shared_ptr<dramctrlMsg> dramctrl_rep;
-        shared_ptr<coherenceMsg> empty_req;
+        std::shared_ptr<coherenceMsg> cache_req;
+        std::shared_ptr<coherenceMsg> bypassed_tReq;
+        std::shared_ptr<cacheRequest> l2_req;
+        std::shared_ptr<coherenceMsg> cache_rep;
+        std::shared_ptr<coherenceMsg> dir_req;
+        std::shared_ptr<coherenceMsg> dir_rep;
+        std::shared_ptr<dramctrlMsg> dramctrl_req;
+        std::shared_ptr<dramctrlMsg> dramctrl_rep;
+        std::shared_ptr<coherenceMsg> empty_req;
 
         /* data & info being blocked are stored in the table to serve bypassable reads */
         shared_array<uint32_t> blocked_data;
-        shared_ptr<dirCoherenceInfo> blocked_line_info;
+        std::shared_ptr<dirCoherenceInfo> blocked_line_info;
          
         /* for invalidation */
         dirCoherenceInfo cached_dir;
@@ -316,26 +316,26 @@ private:
         bool using_empty_req_exclusive_space;
 
         /* for stats */
-        shared_ptr<privateSharedPTIStatsPerMemInstr> per_mem_instr_stats;
+        std::shared_ptr<privateSharedPTIStatsPerMemInstr> per_mem_instr_stats;
         uint64_t block_or_inv_begin_time;
         uint64_t bypass_begin_time;
         
     } dirTableEntry;
 
     typedef struct {
-        shared_ptr<dramctrlMsg> dramctrl_req;
-        shared_ptr<dramctrlMsg> dramctrl_rep;
-        shared_ptr<message_t> net_msg_to_send;
+            std::shared_ptr<dramctrlMsg> dramctrl_req;
+            std::shared_ptr<dramctrlMsg> dramctrl_rep;
+            std::shared_ptr<message_t> net_msg_to_send;
 
         /* for stats */
         uint64_t operation_begin_time;
-        shared_ptr<privateSharedPTIStatsPerMemInstr> per_mem_instr_stats;
+        std::shared_ptr<privateSharedPTIStatsPerMemInstr> per_mem_instr_stats;
 
     } dramctrlTableEntry;
 
-    typedef map<maddr_t, shared_ptr<cacheTableEntry> > cacheTable;
-    typedef map<maddr_t, shared_ptr<dirTableEntry> > dirTable;
-    typedef map<maddr_t, shared_ptr<dramctrlTableEntry> > dramctrlTable;
+    typedef map<maddr_t, std::shared_ptr<cacheTableEntry> > cacheTable;
+    typedef map<maddr_t, std::shared_ptr<dirTableEntry> > dirTable;
+    typedef map<maddr_t, std::shared_ptr<dramctrlTableEntry> > dramctrlTable;
 
     inline maddr_t get_start_maddr_in_line(maddr_t maddr) { 
         maddr.address -= (maddr.address)%(m_cfg.words_per_cache_line*4); return maddr; 
@@ -355,9 +355,9 @@ private:
 
     cache* m_l1;
     cache* m_l2;
-    shared_ptr<cat> m_cat;
+    std::shared_ptr<cat> m_cat;
 
-    shared_ptr<privateSharedPTIStatsPerTile> m_stats;
+    std::shared_ptr<privateSharedPTIStatsPerTile> m_stats;
 
     /* work tables */
     cacheTable m_cache_table;;
@@ -376,13 +376,13 @@ private:
     uint32_t m_available_core_ports;
 
     /* keep track of writeback requests to priortize it. must hold other reads and writes until writeback finishes */
-    map<maddr_t, shared_ptr<dirTableEntry> > m_l2_writeback_status;
-    map<maddr_t, shared_ptr<dirTableEntry> > m_dramctrl_writeback_status;
+    map<maddr_t, std::shared_ptr<dirTableEntry> > m_l2_writeback_status;
+    map<maddr_t, std::shared_ptr<dirTableEntry> > m_dramctrl_writeback_status;
 
     /* SCHEDULER QUEUES */
     /* no real hardware... volatile at clock boundaries */
  
-    vector<shared_ptr<memoryRequest> > m_core_port_schedule_q; 
+    vector<std::shared_ptr<memoryRequest> > m_core_port_schedule_q; 
 
     typedef enum {
         FROM_LOCAL_CORE_REQ = 0,
@@ -392,7 +392,7 @@ private:
         FROM_REMOTE_DIR_RREP
     } cacheTableEntrySrc_t;
 
-    vector<tuple<cacheTableEntrySrc_t, shared_ptr<void> > > m_new_cache_table_entry_schedule_q;
+    vector<std::tuple<cacheTableEntrySrc_t, std::shared_ptr<void> > > m_new_cache_table_entry_schedule_q;
 
     typedef enum {
         FROM_LOCAL_CACHE,
@@ -401,30 +401,30 @@ private:
         FROM_REMOTE_CACHE_RREQ
     } dirTableEntrySrc_t;
 
-    vector<tuple<bool/* is remote */, shared_ptr<coherenceMsg> > > m_new_dir_table_entry_for_cache_rep_schedule_q;
-    vector<tuple<dirTableEntrySrc_t, shared_ptr<coherenceMsg> > > m_new_dir_table_entry_for_req_schedule_q;
-    vector<tuple<dirTableEntrySrc_t, shared_ptr<coherenceMsg> > > m_new_dir_table_entry_for_renewal_schedule_q;
+    vector<std::tuple<bool/* is remote */, std::shared_ptr<coherenceMsg> > > m_new_dir_table_entry_for_cache_rep_schedule_q;
+    vector<std::tuple<dirTableEntrySrc_t, std::shared_ptr<coherenceMsg> > > m_new_dir_table_entry_for_req_schedule_q;
+    vector<std::tuple<dirTableEntrySrc_t, std::shared_ptr<coherenceMsg> > > m_new_dir_table_entry_for_renewal_schedule_q;
 
-    vector<shared_ptr<cacheTableEntry> > m_cat_req_schedule_q;
+    vector<std::shared_ptr<cacheTableEntry> > m_cat_req_schedule_q;
 
-    vector<shared_ptr<cacheTableEntry> > m_l1_read_req_schedule_q;
-    vector<shared_ptr<cacheTableEntry> > m_l1_write_req_schedule_q;
-    vector<shared_ptr<cacheTableEntry> > m_l1_read_req_schedule_q_for_renewal;
-    vector<shared_ptr<cacheTableEntry> > m_l1_write_req_schedule_q_for_renewal;
+    vector<std::shared_ptr<cacheTableEntry> > m_l1_read_req_schedule_q;
+    vector<std::shared_ptr<cacheTableEntry> > m_l1_write_req_schedule_q;
+    vector<std::shared_ptr<cacheTableEntry> > m_l1_read_req_schedule_q_for_renewal;
+    vector<std::shared_ptr<cacheTableEntry> > m_l1_write_req_schedule_q_for_renewal;
 
-    vector<shared_ptr<cacheTableEntry> > m_cache_req_schedule_q;
-    vector<shared_ptr<cacheTableEntry> > m_cache_rep_schedule_q;
+    vector<std::shared_ptr<cacheTableEntry> > m_cache_req_schedule_q;
+    vector<std::shared_ptr<cacheTableEntry> > m_cache_rep_schedule_q;
 
-    vector<shared_ptr<dirTableEntry> > m_l2_read_req_schedule_q;
-    vector<shared_ptr<dirTableEntry> > m_l2_write_req_schedule_q;
-    vector<shared_ptr<dirTableEntry> > m_l2_read_req_schedule_q_for_renewal;
-    vector<shared_ptr<dirTableEntry> > m_l2_write_req_schedule_q_for_renewal;
+    vector<std::shared_ptr<dirTableEntry> > m_l2_read_req_schedule_q;
+    vector<std::shared_ptr<dirTableEntry> > m_l2_write_req_schedule_q;
+    vector<std::shared_ptr<dirTableEntry> > m_l2_read_req_schedule_q_for_renewal;
+    vector<std::shared_ptr<dirTableEntry> > m_l2_write_req_schedule_q_for_renewal;
 
-    vector<shared_ptr<dirTableEntry> > m_dir_req_schedule_q;
-    vector<shared_ptr<dirTableEntry> > m_dir_rep_schedule_q;
+    vector<std::shared_ptr<dirTableEntry> > m_dir_req_schedule_q;
+    vector<std::shared_ptr<dirTableEntry> > m_dir_rep_schedule_q;
 
-    vector<tuple<bool/* is remote */, shared_ptr<void> > > m_dramctrl_req_schedule_q;
-    vector<shared_ptr<dramctrlTableEntry> > m_dramctrl_rep_schedule_q;
+    vector<std::tuple<bool/* is remote */, std::shared_ptr<void> > > m_dramctrl_req_schedule_q;
+    vector<std::shared_ptr<dramctrlTableEntry> > m_dramctrl_rep_schedule_q;
 
     /* scheduled rReq */
     class rReqScheduleQueue{
@@ -432,16 +432,16 @@ private:
         rReqScheduleQueue(bool do_retry, const uint64_t& t);
         ~rReqScheduleQueue();
 
-        void set(shared_ptr<coherenceMsg> rReq);
+        void set(std::shared_ptr<coherenceMsg> rReq);
         void remove(maddr_t addr);
-        vector<shared_ptr<coherenceMsg> > on_due();
+        vector<std::shared_ptr<coherenceMsg> > on_due();
 
     private:
         const uint64_t& system_time;
         bool m_do_retry;
 
-        vector<shared_ptr<coherenceMsg> > m_schedule;
-        map<maddr_t, shared_ptr<coherenceMsg> > m_book;
+        vector<std::shared_ptr<coherenceMsg> > m_schedule;
+        map<maddr_t, std::shared_ptr<coherenceMsg> > m_book;
     };
 
     rReqScheduleQueue m_rReq_schedule_q;

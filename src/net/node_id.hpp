@@ -11,41 +11,41 @@ using namespace std;
 
 class node_id {
 public:
-    node_id(uint32_t new_id) throw();
-    node_id() throw();
-    bool is_valid() const throw();
-    void operator=(const node_id &) throw();
-    bool operator==(const node_id &) const throw();
-    bool operator!=(const node_id &) const throw();
-    bool operator<(const node_id &) const throw();
-    uint32_t get_numeric_id() const throw();
+    node_id(uint32_t new_id);
+    node_id();
+    bool is_valid() const;
+    void operator=(const node_id &);
+    bool operator==(const node_id &) const;
+    bool operator!=(const node_id &) const;
+    bool operator<(const node_id &) const;
+    uint32_t get_numeric_id() const;
     friend ostream &operator<<(ostream &, const node_id &);
 private:
     uint32_t id;
 private:
 };
 
-inline node_id::node_id(uint32_t new_id) throw() : id(new_id) { }
+inline node_id::node_id(uint32_t new_id) : id(new_id) { }
 
-inline node_id::node_id() throw() : id(0xffffffffUL) { }
+inline node_id::node_id() : id(0xffffffffUL) { }
 
-inline bool node_id::is_valid() const throw() { return id != 0xffffffffUL; }
+inline bool node_id::is_valid() const { return id != 0xffffffffUL; }
 
-inline void node_id::operator=(const node_id &o) throw() { id = o.id; }
+inline void node_id::operator=(const node_id &o) { id = o.id; }
 
-inline bool node_id::operator==(const node_id &o) const throw() {
+inline bool node_id::operator==(const node_id &o) const {
     return id == o.id;
 }
 
-inline bool node_id::operator!=(const node_id &o) const throw() {
+inline bool node_id::operator!=(const node_id &o) const {
     return id != o.id;
 }
 
-inline bool node_id::operator<(const node_id &o) const throw() {
+inline bool node_id::operator<(const node_id &o) const {
     return id < o.id;
 }
 
-inline uint32_t node_id::get_numeric_id() const throw() { return id; }
+inline uint32_t node_id::get_numeric_id() const { return id; }
 
 ostream &operator<<(ostream &, const node_id &);
 

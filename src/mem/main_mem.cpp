@@ -7,7 +7,7 @@
 #include "main_mem.hpp"
 
 main_mem::main_mem(uint32_t new_id, uint32_t new_start, uint32_t new_size,
-                   logger &new_log) throw(err)
+                   logger &new_log)
     : id(new_id), start(new_start), size(new_size),
       contents(new uint8_t[new_size]), interfaces(), log(new_log) {
     if (contents == NULL) throw err_out_of_mem();
@@ -17,12 +17,12 @@ main_mem::main_mem(uint32_t new_id, uint32_t new_start, uint32_t new_size,
                << dec << size << " bytes" << endl;
 };
 
-main_mem::~main_mem() throw() {
+main_mem::~main_mem() {
     assert(contents != NULL);
     if (contents != NULL) delete[] contents;
 };
 
-shared_ptr<mem_ifc> main_mem::new_interface() throw() {
+shared_ptr<mem_ifc> main_mem::new_interface() {
     shared_ptr<mem_ifc::reqs_t> reqs =
         shared_ptr<mem_ifc::reqs_t>(new mem_ifc::reqs_t());
     shared_ptr<mem_ifc::resps_t> resps =
@@ -32,7 +32,7 @@ shared_ptr<mem_ifc> main_mem::new_interface() throw() {
     return ifc;
 }
 
-void main_mem::tick_positive_edge() throw(err) {
+void main_mem::tick_positive_edge() {
     assert(contents);
     for (interfaces_t::iterator ii = interfaces.begin();
          ii != interfaces.end(); ++ii) {
@@ -89,5 +89,5 @@ void main_mem::tick_positive_edge() throw(err) {
     }
 }
 
-void main_mem::tick_negative_edge() throw(err) { }
+void main_mem::tick_negative_edge() { }
 

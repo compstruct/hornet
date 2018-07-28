@@ -4,7 +4,7 @@
 #ifndef __MEMTRACE_THREAD_HPP__
 #define __MEMTRACE_THREAD_HPP__
 
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include "memory.hpp"
 #include "logger.hpp"
 #include "memtraceThreadStats.hpp"
@@ -55,31 +55,31 @@ public:
     void add_non_mem_inst(uint32_t repeats);
 
     /* set stats */
-    inline void set_per_thread_stats(shared_ptr<memtraceThreadStatsPerThread> stats) { m_stats = stats; }
-    inline bool stats_enabled() { return (m_stats != shared_ptr<memtraceThreadStatsPerThread>()); }
-    inline shared_ptr<memtraceThreadStatsPerThread> stats() { return m_stats; }
+    inline void set_per_thread_stats(std::shared_ptr<memtraceThreadStatsPerThread> stats) { m_stats = stats; }
+    inline bool stats_enabled() { return (m_stats != std::shared_ptr<memtraceThreadStatsPerThread>()); }
+    inline std::shared_ptr<memtraceThreadStatsPerThread> stats() { return m_stats; }
 
-    inline shared_ptr<shared_ptr<void> > per_mem_instr_runtime_info() { return m_cur.per_mem_instr_runtime_info; }
+    inline std::shared_ptr<std::shared_ptr<void> > per_mem_instr_runtime_info() { return m_cur.per_mem_instr_runtime_info; }
 
 private:
     typedef struct {
-        uint32_t repeats;
-        uint32_t alu_cost;
-        uint32_t remaining_alu_cost;
-        inst_type_t type;
-        bool is_read;
-        maddr_t maddr;
-        uint32_t word_count;
+        uint32_t repeats = 0;
+        uint32_t alu_cost = 0;
+        uint32_t remaining_alu_cost = 0;
+        inst_type_t type = INST_NONE;
+        bool is_read = false;
+        maddr_t maddr = { 0, 0 };
+        uint32_t word_count = 0;
         /* stats */
-        bool first_memory_issued;
-        uint64_t first_memory_issued_time;
-        shared_ptr<shared_ptr<void> > per_mem_instr_runtime_info;
+        bool first_memory_issued = false;
+        uint64_t first_memory_issued_time = 0;
+        std::shared_ptr<std::shared_ptr<void> > per_mem_instr_runtime_info = std::shared_ptr<std::shared_ptr<void> >();
     } inst_t;
 
     uint32_t m_id;
     const uint64_t &system_time;
     logger &log;
-    shared_ptr<memtraceThreadStatsPerThread> m_stats;
+    std::shared_ptr<memtraceThreadStatsPerThread> m_stats;
 
     inst_t m_cur;
     vector<inst_t> m_insts;
@@ -93,9 +93,9 @@ public:
     memtraceThreadPool();
     ~memtraceThreadPool();
 
-    void add_thread(shared_ptr<memtraceThread> p);
-    shared_ptr<memtraceThread> find(uint32_t id);
-    shared_ptr<memtraceThread> thread_at(uint32_t n);
+    void add_thread(std::shared_ptr<memtraceThread> p);
+    std::shared_ptr<memtraceThread> find(uint32_t id);
+    std::shared_ptr<memtraceThread> thread_at(uint32_t n);
     unsigned int size();
 
     bool empty();
@@ -104,7 +104,7 @@ private:
     /* memtraceThreadPool class has the following restrictions for the performance reason */
     /* 1. no thread is added to the pool during simulation */
     /* 2. no thread is removed from the pool during simulation */
-    map<uint32_t, shared_ptr<memtraceThread> >m_threads;
+    map<uint32_t, std::shared_ptr<memtraceThread> >m_threads;
     mutable recursive_mutex memtraceThreadPool_mutex;
 };
 

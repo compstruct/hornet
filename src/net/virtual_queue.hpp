@@ -10,9 +10,7 @@
 #include <cstddef>
 #include <utility>
 #include <deque>
-#include <boost/shared_ptr.hpp>
-#include <boost/tuple/tuple.hpp>
-#include <boost/thread.hpp>
+#include <memory>
 #include "error.hpp"
 #include "logger.hpp"
 #include "flit.hpp"
@@ -45,59 +43,59 @@ public:
                            node_id src_node_id,
                            ingress_id parent_ingress_id,
                            uint32_t max_size,
-                           shared_ptr<channel_alloc> vc_alloc,
-                           shared_ptr<pressure_tracker> pressures,
-                           shared_ptr<tile_statistics> stats,
-                           shared_ptr<vcd_writer> vcd,
-                           logger &log) throw();
+                           std::shared_ptr<channel_alloc> vc_alloc,
+                           std::shared_ptr<pressure_tracker> pressures,
+                           std::shared_ptr<tile_statistics> stats,
+                           std::shared_ptr<vcd_writer> vcd,
+                           logger &log);
 
     // methods which do not change over the life of the queue
-    const virtual_queue_node_id &get_id() const throw();
-    node_id get_src_node_id() const throw();
-    ingress_id get_ingress_id() const throw();
+    const virtual_queue_node_id &get_id() const;
+    node_id get_src_node_id() const;
+    ingress_id get_ingress_id() const;
 
     // methods reading the front ("read end") of the queue
-    bool front_is_empty() const throw();
-    bool front_is_head_flit() const throw();
-    node_id front_node_id() const throw();
-    virtual_queue_id front_vq_id() const throw();
-    flow_id front_old_flow_id() const throw();
-    flow_id front_new_flow_id() const throw();
-    uint32_t front_num_remaining_flits_in_packet() const throw();
-    const flit &front_flit() const throw();
+    bool front_is_empty() const;
+    bool front_is_head_flit() const;
+    node_id front_node_id() const;
+    virtual_queue_id front_vq_id() const;
+    flow_id front_old_flow_id() const;
+    flow_id front_new_flow_id() const;
+    uint32_t front_num_remaining_flits_in_packet() const;
+    const flit &front_flit() const;
 
     // methods modifying the front ("read end") of the queue
-    void front_pop() throw();
-    void front_set_next_hop(const node_id &nid, const flow_id &fid) throw();
-    void front_set_vq_id(const virtual_queue_id &vqid) throw();
-    void front_power_on() throw();
-    void front_power_off() throw();
+    void front_pop();
+    void front_set_next_hop(const node_id &nid, const flow_id &fid);
+    void front_set_vq_id(const virtual_queue_id &vqid);
+    void front_power_on();
+    void front_power_off();
 
     // methods reading/modifying the back ("write end") of the queue
-    void back_push(const flit &) throw();
-    bool back_is_powered_on() const throw();
-    bool back_is_full() const throw();
-    bool back_is_mid_packet() const throw();
+    void back_push(const flit &);
+    bool back_is_powered_on() const;
+    bool back_is_full() const;
+    bool back_is_mid_packet() const;
 
     // true iff "stale" view of the VC is empty
     // (not taking into account any front_pop() calls in this clock cycle)
-    bool back_is_empty() const throw(); // required for EDVCA
+    bool back_is_empty() const; // required for EDVCA
 
     // true iff "stale" view of the VC has a flit with old flow ID f
     // (not taking into account any front_pop() calls in this clock cycle)
-    bool back_has_old_flow(const flow_id &f) throw(); // required for EDVCA
+    bool back_has_old_flow(const flow_id &f); // required for EDVCA
 
     // other methods
-    void tick_positive_edge() throw();
-    void tick_negative_edge() throw();
+    void tick_positive_edge();
+    void tick_negative_edge();
 
     // methods accessing both ends of the queue
 
     // may only be called after all negedges have completed
-    bool is_drained() const throw();
+    bool is_drained() const;
 
 private:
-    uint32_t front_size() const throw();
+    uint32_t front_size() const;
 
 private:
     const virtual_queue_node_id id;
@@ -128,11 +126,11 @@ private:
     uint32_t back_stale_egress_packet_flits_remaining; // 0 iff packet complete
     bool back_powered;
 
-    shared_ptr<channel_alloc> vc_alloc;
-    shared_ptr<pressure_tracker> pressures;
+    std::shared_ptr<channel_alloc> vc_alloc;
+    std::shared_ptr<pressure_tracker> pressures;
 
-    shared_ptr<tile_statistics> stats;
-    shared_ptr<vcd_writer> vcd;
+    std::shared_ptr<tile_statistics> stats;
+    std::shared_ptr<vcd_writer> vcd;
     logger &log;
 
     mutable recursive_mutex front_mutex;

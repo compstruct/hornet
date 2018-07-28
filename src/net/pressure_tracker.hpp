@@ -14,18 +14,18 @@ class pressure_tracker {
 public:
     typedef unsigned pressure_t;
 public:
-    pressure_tracker(const node_id &parent_node, logger &log) throw();
-    const node_id &get_id() const throw();
-    void inc(const node_id &target, const virtual_queue_id &q) throw(err);
-    void dec(const node_id &target, const virtual_queue_id &q) throw(err);
-    pressure_t get(const node_id &target) throw(err);
-    void add_egress(const node_id &target) throw(err);
+    pressure_tracker(const node_id &parent_node, logger &log);
+    const node_id &get_id() const;
+    void inc(const node_id &target, const virtual_queue_id &q);
+    void dec(const node_id &target, const virtual_queue_id &q);
+    pressure_t get(const node_id &target);
+    void add_egress(const node_id &target);
 private:
     const node_id id;
     map<node_id, pressure_t> pressures;
     logger &log;
 };
 
-inline const node_id &pressure_tracker::get_id() const throw() { return id; }
+inline const node_id &pressure_tracker::get_id() const { return id; }
 
 #endif // __PRESSURE_TRACKER_HPP__

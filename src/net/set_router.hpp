@@ -5,8 +5,7 @@
 #define __SET_ROUTER_HPP__
 
 #include <map>
-#include "boost/tuple/tuple.hpp"
-#include "boost/tuple/tuple_comparison.hpp"
+#include <tuple>
 #include "router.hpp"
 #include "random.hpp"
 
@@ -14,21 +13,21 @@ using namespace boost;
 
 class set_router : public router {
 public:
-    set_router(node_id id, logger &log, shared_ptr<random_gen> ran) throw();
-    virtual ~set_router() throw();
-    virtual void route() throw(err);
-    virtual void add_egress(shared_ptr<egress> egress) throw(err);
+    set_router(node_id id, logger &log, std::shared_ptr<random_gen> ran);
+    virtual ~set_router();
+    virtual void route();
+    virtual void add_egress(std::shared_ptr<egress> egress);
     void add_route(const node_id &prev, const flow_id &flow,
-                   const vector<tuple<node_id,flow_id,double> > &next_hops)
-        throw(err);
+                   const vector<std::tuple<node_id,flow_id,double> > &next_hops)
+       ;
 private:
-    typedef tuple<node_id, flow_id> route_query_t;
+    typedef std::tuple<node_id, flow_id> route_query_t;
     // doubles in routes are cumulative propensities
-    typedef vector<tuple<node_id,flow_id,double> > route_nodes_t;
+    typedef vector<std::tuple<node_id,flow_id,double> > route_nodes_t;
     typedef map<route_query_t, route_nodes_t> routes_t;
     routes_t routes;
-    shared_ptr<random_gen> ran;
-    typedef map<node_id, shared_ptr<egress> > egresses_t;
+    std::shared_ptr<random_gen> ran;
+    typedef map<node_id, std::shared_ptr<egress> > egresses_t;
     egresses_t egresses;
 };
 

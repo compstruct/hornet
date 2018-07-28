@@ -37,25 +37,25 @@
 
 /* coherence info copier */
 
-static shared_ptr<void> cache_copy_coherence_info(shared_ptr<void> source) {
-    shared_ptr<privateSharedMSI::cacheCoherenceInfo> ret
+static std::shared_ptr<void> cache_copy_coherence_info(std::shared_ptr<void> source) {
+        std::shared_ptr<privateSharedMSI::cacheCoherenceInfo> ret
         (new privateSharedMSI::cacheCoherenceInfo(*static_pointer_cast<privateSharedMSI::cacheCoherenceInfo>(source)));
     return ret;
 }
 
-static shared_ptr<void> dir_copy_coherence_info(shared_ptr<void> source) {
-    shared_ptr<privateSharedMSI::dirCoherenceInfo> ret
+static std::shared_ptr<void> dir_copy_coherence_info(std::shared_ptr<void> source) {
+        std::shared_ptr<privateSharedMSI::dirCoherenceInfo> ret
         (new privateSharedMSI::dirCoherenceInfo(*static_pointer_cast<privateSharedMSI::dirCoherenceInfo>(source)));
     return ret;
 }
 
 /* hit checkers */
 
-static bool cache_hit_checker(shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) {
+static bool cache_hit_checker(std::shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) {
 
-    shared_ptr<privateSharedMSI::cacheCoherenceInfo> cache_coherence_info = 
+        std::shared_ptr<privateSharedMSI::cacheCoherenceInfo> cache_coherence_info = 
         static_pointer_cast<privateSharedMSI::cacheCoherenceInfo>(line.coherence_info);
-    shared_ptr<privateSharedMSI::cacheAuxInfoForCoherence> request_info = 
+        std::shared_ptr<privateSharedMSI::cacheAuxInfoForCoherence> request_info = 
         static_pointer_cast<privateSharedMSI::cacheAuxInfoForCoherence>(req->aux_info_for_coherence());
 
     if (*request_info == privateSharedMSI::LOCAL_WRITE) {
@@ -72,13 +72,13 @@ static bool cache_hit_checker(shared_ptr<cacheRequest> req, cacheLine& line, con
 
 }
 
-static bool dir_hit_checker(shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) {
+static bool dir_hit_checker(std::shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) {
 
     /* do both test checks and directory updates */
 
-    shared_ptr<privateSharedMSI::dirCoherenceInfo> dir_coherence_info = 
+        std::shared_ptr<privateSharedMSI::dirCoherenceInfo> dir_coherence_info = 
         static_pointer_cast<privateSharedMSI::dirCoherenceInfo>(line.coherence_info);
-    shared_ptr<privateSharedMSI::dirAuxInfoForCoherence> request_info = 
+        std::shared_ptr<privateSharedMSI::dirAuxInfoForCoherence> request_info = 
         static_pointer_cast<privateSharedMSI::dirAuxInfoForCoherence>(req->aux_info_for_coherence());
 
     request_info->initial_dir_info = 
@@ -140,7 +140,7 @@ static bool dir_hit_checker(shared_ptr<cacheRequest> req, cacheLine& line, const
 /* evictable checker */
 
 static bool dir_can_evict_line(cacheLine &line, const uint64_t& system_time) {
-    shared_ptr<privateSharedMSI::dirCoherenceInfo> info = 
+        std::shared_ptr<privateSharedMSI::dirCoherenceInfo> info = 
         static_pointer_cast<privateSharedMSI::dirCoherenceInfo>(line.coherence_info);
     if (info->locked) 
         return false;
@@ -149,7 +149,7 @@ static bool dir_can_evict_line(cacheLine &line, const uint64_t& system_time) {
 
 static bool dir_evict_need_action(cacheLine &line, const uint64_t& system_time) {
 
-    shared_ptr<privateSharedMSI::dirCoherenceInfo> dir_coherence_info = 
+        std::shared_ptr<privateSharedMSI::dirCoherenceInfo> dir_coherence_info = 
         static_pointer_cast<privateSharedMSI::dirCoherenceInfo>(line.coherence_info);
     if (dir_coherence_info->dir.size()) {
         dir_coherence_info->locked = true;
@@ -162,17 +162,17 @@ static bool dir_evict_need_action(cacheLine &line, const uint64_t& system_time) 
 
 privateSharedMSI::privateSharedMSI(uint32_t id,
                                    const uint64_t &t,
-                                   shared_ptr<tile_statistics> st,
+                                   std::shared_ptr<tile_statistics> st,
                                    logger &l,
-                                   shared_ptr<random_gen> r,
-                                   shared_ptr<cat> a_cat,
+                                   std::shared_ptr<random_gen> r,
+                                   std::shared_ptr<cat> a_cat,
                                    privateSharedMSICfg_t cfg) :
     memory(id, t, st, l, r),
     m_cfg(cfg),
     m_l1(NULL),
     m_l2(NULL),
     m_cat(a_cat),
-    m_stats(shared_ptr<privateSharedMSIStatsPerTile>()),
+    m_stats(std::shared_ptr<privateSharedMSIStatsPerTile>()),
     m_cache_table_vacancy(cfg.cache_table_size),
     m_dir_table_vacancy_shared(cfg.dir_table_size_shared),
     m_dir_table_vacancy_cache_rep_exclusive(cfg.dir_table_size_cache_rep_exclusive),
@@ -254,7 +254,7 @@ privateSharedMSI::~privateSharedMSI() {
 
 uint32_t privateSharedMSI::number_of_mem_msg_types() { return NUM_MSG_TYPES; }
 
-void privateSharedMSI::request(shared_ptr<memoryRequest> req) {
+void privateSharedMSI::request(std::shared_ptr<memoryRequest> req) {
 
     /* assumes a request is not across multiple cache lines */
     uint32_t __attribute__((unused)) byte_offset = req->maddr().address%(m_cfg.words_per_cache_line*4);
@@ -264,12 +264,12 @@ void privateSharedMSI::request(shared_ptr<memoryRequest> req) {
     set_req_status(req, REQ_WAIT);
 
     /* per memory instruction info */
-    shared_ptr<shared_ptr<void> > p_runtime_info = req->per_mem_instr_runtime_info();
-    shared_ptr<void>& runtime_info = *p_runtime_info;
-    shared_ptr<privateSharedMSIStatsPerMemInstr> per_mem_instr_stats;
+    std::shared_ptr<std::shared_ptr<void> > p_runtime_info = req->per_mem_instr_runtime_info();
+    std::shared_ptr<void>& runtime_info = *p_runtime_info;
+    std::shared_ptr<privateSharedMSIStatsPerMemInstr> per_mem_instr_stats;
     if (!runtime_info) {
         /* no per-instr stats: this is the first time this memory instruction is issued */
-        per_mem_instr_stats = shared_ptr<privateSharedMSIStatsPerMemInstr>(new privateSharedMSIStatsPerMemInstr(req->is_read()));
+        per_mem_instr_stats = std::shared_ptr<privateSharedMSIStatsPerMemInstr>(new privateSharedMSIStatsPerMemInstr(req->is_read()));
         per_mem_instr_stats->set_serialization_begin_time_at_current_core(system_time);
         runtime_info = per_mem_instr_stats;
     } else {
@@ -345,25 +345,25 @@ void privateSharedMSI::update_cache_table() {
     for (cacheTable::iterator it_addr = m_cache_table.begin(); it_addr != m_cache_table.end(); ) {
 
         maddr_t start_maddr = it_addr->first;
-        shared_ptr<cacheTableEntry>& entry = it_addr->second;
+        std::shared_ptr<cacheTableEntry>& entry = it_addr->second;
 
-        shared_ptr<memoryRequest>& core_req = entry->core_req;
-        shared_ptr<catRequest>& cat_req = entry->cat_req;
+        std::shared_ptr<memoryRequest>& core_req = entry->core_req;
+        std::shared_ptr<catRequest>& cat_req = entry->cat_req;
 
-        shared_ptr<cacheRequest>& l1_req = entry->l1_req;
-        shared_ptr<coherenceMsg>& dir_req = entry->dir_req;
-        shared_ptr<coherenceMsg>& dir_rep = entry->dir_rep;
-        shared_ptr<coherenceMsg>& cache_req = entry->cache_req;
-        shared_ptr<coherenceMsg>& cache_rep = entry->cache_rep;
+        std::shared_ptr<cacheRequest>& l1_req = entry->l1_req;
+        std::shared_ptr<coherenceMsg>& dir_req = entry->dir_req;
+        std::shared_ptr<coherenceMsg>& dir_rep = entry->dir_rep;
+        std::shared_ptr<coherenceMsg>& cache_req = entry->cache_req;
+        std::shared_ptr<coherenceMsg>& cache_rep = entry->cache_rep;
 
-        shared_ptr<cacheLine> l1_line = (l1_req)? l1_req->line_copy() : shared_ptr<cacheLine>();
-        shared_ptr<cacheLine> l1_victim = (l1_req)? l1_req->line_to_evict_copy() : shared_ptr<cacheLine>();
-        shared_ptr<cacheCoherenceInfo> l1_line_info = 
-            (l1_line)? static_pointer_cast<cacheCoherenceInfo>(l1_line->coherence_info) : shared_ptr<cacheCoherenceInfo>();
-        shared_ptr<cacheCoherenceInfo> l1_victim_info = 
-            (l1_victim)? static_pointer_cast<cacheCoherenceInfo>(l1_victim->coherence_info) : shared_ptr<cacheCoherenceInfo>();
+        std::shared_ptr<cacheLine> l1_line = (l1_req)? l1_req->line_copy() : std::shared_ptr<cacheLine>();
+        std::shared_ptr<cacheLine> l1_victim = (l1_req)? l1_req->line_to_evict_copy() : std::shared_ptr<cacheLine>();
+        std::shared_ptr<cacheCoherenceInfo> l1_line_info = 
+            (l1_line)? static_pointer_cast<cacheCoherenceInfo>(l1_line->coherence_info) : std::shared_ptr<cacheCoherenceInfo>();
+        std::shared_ptr<cacheCoherenceInfo> l1_victim_info = 
+            (l1_victim)? static_pointer_cast<cacheCoherenceInfo>(l1_victim->coherence_info) : std::shared_ptr<cacheCoherenceInfo>();
 
-        shared_ptr<privateSharedMSIStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
+        std::shared_ptr<privateSharedMSIStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
 
         if (entry->status == _CACHE_CAT_AND_L1_FOR_LOCAL) {
 
@@ -385,7 +385,7 @@ void privateSharedMSI::update_cache_table() {
 #endif
 
                 home = l1_line_info->home;
-                cat_req = shared_ptr<catRequest>();
+                cat_req = std::shared_ptr<catRequest>();
 
                 shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
                 uint32_t word_offset = (core_req->maddr().address / 4) % m_cfg.words_per_cache_line;
@@ -435,11 +435,11 @@ void privateSharedMSI::update_cache_table() {
                           << core_req->maddr() << endl;
 
                 home = l1_line_info->home;
-                cat_req = shared_ptr<catRequest>();
+                cat_req = std::shared_ptr<catRequest>();
 
                 /* TODO could migrate out here */
 
-                cache_req = shared_ptr<coherenceMsg>(new coherenceMsg);
+                cache_req = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                 cache_req->sender = m_id;
                 cache_req->receiver = home;
                 cache_req->type = core_req->is_read()? SH_REQ : EX_REQ;
@@ -450,7 +450,7 @@ void privateSharedMSI::update_cache_table() {
                 cache_req->data = shared_array<uint32_t>();
                 cache_req->birthtime = system_time;
 
-                cache_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                cache_rep = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                 cache_rep->sender = m_id;
                 cache_rep->receiver = home;
                 cache_rep->type = INV_REP;
@@ -514,7 +514,7 @@ void privateSharedMSI::update_cache_table() {
 
                         /* could migrate out here */
                         
-                        cache_req = shared_ptr<coherenceMsg>(new coherenceMsg);
+                        cache_req = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                         cache_req->sender = m_id;
                         cache_req->receiver = home;
                         cache_req->type = core_req->is_read()? SH_REQ : EX_REQ;
@@ -604,7 +604,7 @@ void privateSharedMSI::update_cache_table() {
                 }
 #endif
                 uint32_t home = l1_line_info->home;
-                cache_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                cache_rep = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                 cache_rep->sender = m_id;
                 cache_rep->receiver = home;
                 if (dir_req->type == INV_REQ) {
@@ -713,21 +713,21 @@ void privateSharedMSI::update_cache_table() {
                 }
             }
 
-            shared_ptr<cacheCoherenceInfo> new_info(new cacheCoherenceInfo);
+            std::shared_ptr<cacheCoherenceInfo> new_info(new cacheCoherenceInfo);
             new_info->home = dir_rep->sender;
             new_info->status = dir_rep->type == SH_REP? SHARED : EXCLUSIVE;
 
             /* additional instrumentation */
 #ifdef INSTRUMENT_SHARED_LINE
             if (dir_rep->type == SH_REP) {
-                new_info->birth_time = shared_ptr<uint64_t>(new uint64_t(system_time));
-                new_info->last_hit = shared_ptr<uint64_t>(new uint64_t(system_time));
-                new_info->num_hits = shared_ptr<uint32_t>(new uint32_t(1));
-                new_info->max_interval = shared_ptr<uint32_t>(new uint32_t(0));
+                new_info->birth_time = std::shared_ptr<uint64_t>(new uint64_t(system_time));
+                new_info->last_hit = std::shared_ptr<uint64_t>(new uint64_t(system_time));
+                new_info->num_hits = std::shared_ptr<uint32_t>(new uint32_t(1));
+                new_info->max_interval = std::shared_ptr<uint32_t>(new uint32_t(0));
             }
 #endif
 
-            l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+            l1_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                m_cfg.words_per_cache_line, 
                                                                dir_rep->data, new_info));
             l1_req->set_serialization_begin_time(system_time);
@@ -735,7 +735,7 @@ void privateSharedMSI::update_cache_table() {
             l1_req->set_claim(true);
             l1_req->set_evict(true);
             l1_req->set_aux_info_for_coherence
-                (shared_ptr<cacheAuxInfoForCoherence>
+                (std::shared_ptr<cacheAuxInfoForCoherence>
                     (new cacheAuxInfoForCoherence((dir_rep->type == SH_REP)? UPDATE_BY_SHREP : UPDATE_BY_EXREP)));
 
             if (l1_req->use_read_ports()) {
@@ -814,7 +814,7 @@ void privateSharedMSI::update_cache_table() {
                     stats()->evict_at_l1();
                 }
 
-                cache_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                cache_rep = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                 cache_rep->sender = m_id;
                 cache_rep->receiver = l1_victim_info->home;
                 if (l1_victim_info->status == SHARED) {
@@ -825,7 +825,7 @@ void privateSharedMSI::update_cache_table() {
 
                 cache_rep->maddr = l1_victim->start_maddr;
                 cache_rep->sent = false;
-                cache_rep->per_mem_instr_stats = shared_ptr<privateSharedMSIStatsPerMemInstr>();
+                cache_rep->per_mem_instr_stats = std::shared_ptr<privateSharedMSIStatsPerMemInstr>();
                 cache_rep->birthtime = system_time;
 
                 if (m_cfg.use_mesi) {
@@ -919,26 +919,26 @@ void privateSharedMSI::update_dir_table() {
     for (dirTable::iterator it_addr = m_dir_table.begin(); it_addr != m_dir_table.end(); ) {
 
         maddr_t start_maddr = it_addr->first;
-        shared_ptr<dirTableEntry>& entry = it_addr->second;
+        std::shared_ptr<dirTableEntry>& entry = it_addr->second;
 
-        shared_ptr<coherenceMsg>& cache_req = entry->cache_req;
-        shared_ptr<cacheRequest>& l2_req = entry->l2_req;
-        shared_ptr<coherenceMsg>& cache_rep = entry->cache_rep;
-        vector<shared_ptr<coherenceMsg> >& dir_reqs = entry->dir_reqs;
-        shared_ptr<coherenceMsg>& dir_rep = entry->dir_rep;
-        shared_ptr<coherenceMsg>& empty_req = entry->empty_req;
-        shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
-        shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
+        std::shared_ptr<coherenceMsg>& cache_req = entry->cache_req;
+        std::shared_ptr<cacheRequest>& l2_req = entry->l2_req;
+        std::shared_ptr<coherenceMsg>& cache_rep = entry->cache_rep;
+        vector<std::shared_ptr<coherenceMsg> >& dir_reqs = entry->dir_reqs;
+        std::shared_ptr<coherenceMsg>& dir_rep = entry->dir_rep;
+        std::shared_ptr<coherenceMsg>& empty_req = entry->empty_req;
+        std::shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
+        std::shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
 
-        shared_ptr<cacheLine> l2_line = (l2_req)? l2_req->line_copy() : shared_ptr<cacheLine>();
-        shared_ptr<cacheLine> l2_victim = (l2_req)? l2_req->line_to_evict_copy() : shared_ptr<cacheLine>();
-        shared_ptr<dirCoherenceInfo> l2_line_info = 
-            (l2_line)? static_pointer_cast<dirCoherenceInfo>(l2_line->coherence_info) : shared_ptr<dirCoherenceInfo>();
-        shared_ptr<dirCoherenceInfo> l2_victim_info = 
-            (l2_victim)? static_pointer_cast<dirCoherenceInfo>(l2_victim->coherence_info) : shared_ptr<dirCoherenceInfo>();
-        shared_ptr<dirAuxInfoForCoherence> l2_aux_info = static_pointer_cast<dirAuxInfoForCoherence>(l2_req->aux_info_for_coherence());
+        std::shared_ptr<cacheLine> l2_line = (l2_req)? l2_req->line_copy() : std::shared_ptr<cacheLine>();
+        std::shared_ptr<cacheLine> l2_victim = (l2_req)? l2_req->line_to_evict_copy() : std::shared_ptr<cacheLine>();
+        std::shared_ptr<dirCoherenceInfo> l2_line_info = 
+            (l2_line)? static_pointer_cast<dirCoherenceInfo>(l2_line->coherence_info) : std::shared_ptr<dirCoherenceInfo>();
+        std::shared_ptr<dirCoherenceInfo> l2_victim_info = 
+            (l2_victim)? static_pointer_cast<dirCoherenceInfo>(l2_victim->coherence_info) : std::shared_ptr<dirCoherenceInfo>();
+        std::shared_ptr<dirAuxInfoForCoherence> l2_aux_info = static_pointer_cast<dirAuxInfoForCoherence>(l2_req->aux_info_for_coherence());
 
-        shared_ptr<privateSharedMSIStatsPerMemInstr> __attribute__((unused)) & per_mem_instr_stats = entry->per_mem_instr_stats;
+        std::shared_ptr<privateSharedMSIStatsPerMemInstr> __attribute__((unused)) & per_mem_instr_stats = entry->per_mem_instr_stats;
 
         if (entry->status == _DIR_L2_FOR_CACHE_REQ) {
 
@@ -1010,7 +1010,7 @@ void privateSharedMSI::update_dir_table() {
                     /* TRANSITION */
 
                 } else {
-                    dir_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                    dir_rep = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                     dir_rep->sender = m_id;
                     dir_rep->receiver = cache_req->sender;
                     dir_rep->type = (cache_req->type == SH_REQ)? SH_REP : EX_REP;
@@ -1068,11 +1068,11 @@ void privateSharedMSI::update_dir_table() {
                         per_mem_instr_stats->clear_tentative_data();
                     }
 
-                    dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                    dramctrl_req = std::shared_ptr<dramctrlMsg>(new dramctrlMsg);
                     dramctrl_req->sender = m_id;
                     dramctrl_req->receiver = m_dramctrl_location;
                     dramctrl_req->maddr = start_maddr;
-                    dramctrl_req->dram_req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
+                    dramctrl_req->dram_req = std::shared_ptr<dramRequest>(new dramRequest(start_maddr,
                                                                                      DRAM_REQ_READ,
                                                                                      m_cfg.words_per_cache_line));
                     dramctrl_req->sent = false;
@@ -1111,7 +1111,7 @@ void privateSharedMSI::update_dir_table() {
                             /* a cache rep is coming, need not send a dir req */
                             continue;
                         }
-                        shared_ptr<coherenceMsg> new_dir_req(new coherenceMsg);
+                        std::shared_ptr<coherenceMsg> new_dir_req(new coherenceMsg);
                         new_dir_req->sender = m_id;
                         new_dir_req->receiver = *it;
                         if (entry->cached_dir.status == SHARED) {
@@ -1125,7 +1125,7 @@ void privateSharedMSI::update_dir_table() {
                         new_dir_req->maddr = start_maddr;
                         new_dir_req->data = shared_array<uint32_t>();
                         new_dir_req->sent = false;
-                        new_dir_req->per_mem_instr_stats = shared_ptr<privateSharedMSIStatsPerMemInstr>();
+                        new_dir_req->per_mem_instr_stats = std::shared_ptr<privateSharedMSIStatsPerMemInstr>();
                         new_dir_req->birthtime = system_time;
 
                         dir_reqs.push_back(new_dir_req);
@@ -1260,7 +1260,7 @@ void privateSharedMSI::update_dir_table() {
 
                 /* queue up directory requests to send */
                 for (set<uint32_t>::iterator it = entry->cached_dir.dir.begin(); it != entry->cached_dir.dir.end(); ++it) {
-                    shared_ptr<coherenceMsg> new_dir_req(new coherenceMsg);
+                        std::shared_ptr<coherenceMsg> new_dir_req(new coherenceMsg);
                     new_dir_req->sender = m_id;
                     new_dir_req->receiver = *it;
                     new_dir_req->type = (entry->cached_dir.status == SHARED)? INV_REQ : FLUSH_REQ;
@@ -1268,7 +1268,7 @@ void privateSharedMSI::update_dir_table() {
                     new_dir_req->maddr = start_maddr;
                     new_dir_req->data = shared_array<uint32_t>();
                     new_dir_req->sent = false;
-                    new_dir_req->per_mem_instr_stats = shared_ptr<privateSharedMSIStatsPerMemInstr>();
+                    new_dir_req->per_mem_instr_stats = std::shared_ptr<privateSharedMSIStatsPerMemInstr>();
                     new_dir_req->birthtime = system_time;
 
                     dir_reqs.push_back(new_dir_req);
@@ -1300,12 +1300,12 @@ void privateSharedMSI::update_dir_table() {
                         stats()->writeback_at_l2();
                     }
 
-                    dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                    dramctrl_req = std::shared_ptr<dramctrlMsg>(new dramctrlMsg);
                     dramctrl_req->sender = m_id;
                     dramctrl_req->receiver = m_dramctrl_location;
                     dramctrl_req->maddr = start_maddr;
 
-                    dramctrl_req->dram_req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
+                    dramctrl_req->dram_req = std::shared_ptr<dramRequest>(new dramRequest(start_maddr,
                                                                                      DRAM_REQ_WRITE,
                                                                                      m_cfg.words_per_cache_line,
                                                                                      l2_aux_info->replaced_line));
@@ -1408,12 +1408,12 @@ void privateSharedMSI::update_dir_table() {
                 per_mem_instr_stats->add_dramctrl_rep_nas(system_time - dramctrl_rep->birthtime);
             }
 
-            shared_ptr<dirCoherenceInfo> new_info(new dirCoherenceInfo);
+            std::shared_ptr<dirCoherenceInfo> new_info(new dirCoherenceInfo);
             new_info->status = (cache_req->type == SH_REQ)? SHARED : EXCLUSIVE;
             new_info->locked = false;
             new_info->dir.insert(cache_req->sender);
 
-            l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+            l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                m_cfg.words_per_cache_line,
                                                                dramctrl_rep->dram_req->read(),
                                                                new_info));
@@ -1422,7 +1422,7 @@ void privateSharedMSI::update_dir_table() {
             l2_req->set_claim(true);
             l2_req->set_evict(true);
 
-            shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
+            std::shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
             aux_info->core_id = cache_req->sender;
             aux_info->req_type = UPDATE_FOR_DRAMFEED;
             l2_req->set_aux_info_for_coherence(aux_info);
@@ -1489,7 +1489,7 @@ void privateSharedMSI::update_dir_table() {
                     }
                 }
 
-                dir_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                dir_rep = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                 dir_rep->sender = m_id;
                 dir_rep->receiver = cache_req->sender;
                 dir_rep->type = (cache_req->type == SH_REQ)? SH_REP : EX_REP;
@@ -1569,7 +1569,7 @@ void privateSharedMSI::update_dir_table() {
                                       << l2_victim->start_maddr << " by an L2 feed" << endl;
                         }
 
-                        dir_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                        dir_rep = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                         dir_rep->sender = m_id;
                         dir_rep->receiver = cache_req->sender;
                         dir_rep->type = (cache_req->type == SH_REQ)? SH_REP : EX_REP;
@@ -1595,11 +1595,11 @@ void privateSharedMSI::update_dir_table() {
                                       << l2_victim->start_maddr << " by an L2 feed" << endl;
                         }
 
-                        dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                        dramctrl_req = std::shared_ptr<dramctrlMsg>(new dramctrlMsg);
                         dramctrl_req->sender = m_id;
                         dramctrl_req->receiver = m_dramctrl_location;
                         dramctrl_req->maddr = l2_victim->start_maddr;
-                        dramctrl_req->dram_req = shared_ptr<dramRequest>(new dramRequest(l2_victim->start_maddr,
+                        dramctrl_req->dram_req = std::shared_ptr<dramRequest>(new dramRequest(l2_victim->start_maddr,
                                                                                          DRAM_REQ_WRITE,
                                                                                          m_cfg.words_per_cache_line,
                                                                                          l2_victim->data));
@@ -1633,7 +1633,7 @@ void privateSharedMSI::update_dir_table() {
                     mh_log(4) << endl;
 
 
-                    empty_req = shared_ptr<coherenceMsg>(new coherenceMsg);
+                    empty_req = std::shared_ptr<coherenceMsg>(new coherenceMsg);
 
                     empty_req->sender = m_id;
                     empty_req->receiver = m_id;
@@ -1677,7 +1677,7 @@ void privateSharedMSI::update_dir_table() {
                 mh_log(4) << "[DRAMCTRL " << m_id << " @ " << system_time << " ] written back sent for address "
                           << l2_victim->start_maddr << endl;
 
-                dir_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                dir_rep = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                 dir_rep->sender = m_id;
                 dir_rep->receiver = cache_req->sender;
                 dir_rep->type = (cache_req->type == SH_REQ)? SH_REP : EX_REP;
@@ -1732,7 +1732,7 @@ void privateSharedMSI::update_dir_table() {
             }
             mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] finished emptying " << empty_req->maddr 
                       << " for " << start_maddr << endl;
-            dir_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+            dir_rep = std::shared_ptr<coherenceMsg>(new coherenceMsg);
             dir_rep->sender = m_id;
             dir_rep->receiver = cache_req->sender;
             dir_rep->type = (cache_req->type == SH_REQ)? SH_REP : EX_REP;
@@ -1805,7 +1805,7 @@ void privateSharedMSI::update_dir_table() {
                         entry->cached_line = cache_rep->data;
                     }
                 }
-                cache_rep = shared_ptr<coherenceMsg>();
+                cache_rep = std::shared_ptr<coherenceMsg>();
             }
 
             if (entry->substatus == _DIR_SEND_DIR_REQ_AND_WAIT_CACHE_REP__EMPTY_REQ) {
@@ -1824,12 +1824,12 @@ void privateSharedMSI::update_dir_table() {
                             stats()->writeback_at_l2();
                         }
 
-                        dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                        dramctrl_req = std::shared_ptr<dramctrlMsg>(new dramctrlMsg);
                         dramctrl_req->sender = m_id;
                         dramctrl_req->receiver = m_dramctrl_location;
                         dramctrl_req->maddr = start_maddr;
 
-                        dramctrl_req->dram_req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
+                        dramctrl_req->dram_req = std::shared_ptr<dramRequest>(new dramRequest(start_maddr,
                                                                                          DRAM_REQ_WRITE,
                                                                                          m_cfg.words_per_cache_line,
                                                                                          (entry->is_written_back)? 
@@ -1905,21 +1905,21 @@ void privateSharedMSI::update_dir_table() {
                 if (is_done) {
                     if (entry->is_written_back || entry->need_to_writeback_dir) {
 
-                        shared_ptr<dirCoherenceInfo> new_info(new dirCoherenceInfo(entry->cached_dir));
+                            std::shared_ptr<dirCoherenceInfo> new_info(new dirCoherenceInfo(entry->cached_dir));
                         l2_req = 
-                            shared_ptr<cacheRequest>(new cacheRequest(start_maddr, 
+                            std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, 
                                                                       CACHE_REQ_UPDATE,
                                                                       (entry->is_written_back)? m_cfg.words_per_cache_line : 0,
                                                                       entry->cached_line,
                                                                       (entry->need_to_writeback_dir)? 
-                                                                      new_info : shared_ptr<dirCoherenceInfo>())
+                                                                      new_info : std::shared_ptr<dirCoherenceInfo>())
                                                     );
                         l2_req->set_serialization_begin_time(system_time);
                         l2_req->set_unset_dirty_on_write(!entry->is_written_back);
                         l2_req->set_claim(false);
                         l2_req->set_evict(false);
 
-                        shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
+                        std::shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
                         aux_info->core_id = cache_req->sender;
                         aux_info->req_type = UPDATE_FOR_DIR_UPDATE_OR_WRITEBACK;
                         l2_req->set_aux_info_for_coherence(aux_info);
@@ -1937,7 +1937,7 @@ void privateSharedMSI::update_dir_table() {
                         /* TRANSITION */
 
                     } else {
-                        dir_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                        dir_rep = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                         dir_rep->sender = m_id;
                         dir_rep->receiver = cache_req->sender;
                         dir_rep->type = (cache_req->type == SH_REQ)? SH_REP : EX_REP;
@@ -1982,10 +1982,10 @@ void privateSharedMSI::update_dir_table() {
 void privateSharedMSI::update_dramctrl_work_table() {
 
     for (dramctrlTable::iterator it_addr = m_dramctrl_work_table.begin(); it_addr != m_dramctrl_work_table.end(); ) {
-        shared_ptr<dramctrlTableEntry>& entry = it_addr->second;
-        shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
-        shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
-        shared_ptr<privateSharedMSIStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
+        std::shared_ptr<dramctrlTableEntry>& entry = it_addr->second;
+        std::shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
+        std::shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
+        std::shared_ptr<privateSharedMSIStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
 
         /* only reads are in the table */
         if (dramctrl_req->dram_req->status() == DRAM_REQ_DONE) {
@@ -1994,7 +1994,7 @@ void privateSharedMSI::update_dramctrl_work_table() {
                 if (stats_enabled() && per_mem_instr_stats) {
                     per_mem_instr_stats->add_dram_ops(system_time - entry->operation_begin_time);
                 }
-                dramctrl_rep = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                dramctrl_rep = std::shared_ptr<dramctrlMsg>(new dramctrlMsg);
                 dramctrl_rep->sender = m_id;
                 dramctrl_rep->maddr = dramctrl_req->maddr;
                 dramctrl_rep->dram_req = dramctrl_req->dram_req;
@@ -2024,8 +2024,8 @@ void privateSharedMSI::accept_incoming_messages() {
 
     /* Directory requests and replies (from the network) */
     while (m_core_receive_queues[MSG_DIR_REQ_REP]->size()) {
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_DIR_REQ_REP]->front();
-        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+        std::shared_ptr<message_t> msg = m_core_receive_queues[MSG_DIR_REQ_REP]->front();
+        std::shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
         if (data_msg->type == SH_REP || data_msg->type == EX_REP) {
             maddr_t msg_start_maddr = get_start_maddr_in_line(data_msg->maddr);
             mh_assert(m_cache_table.count(msg_start_maddr) &&
@@ -2044,8 +2044,8 @@ void privateSharedMSI::accept_incoming_messages() {
 
     /* Cache requests (from the network) */
     while (m_core_receive_queues[MSG_CACHE_REQ]->size()) {
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_CACHE_REQ]->front();
-        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+        std::shared_ptr<message_t> msg = m_core_receive_queues[MSG_CACHE_REQ]->front();
+        std::shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
         m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(true/* is remote */, data_msg));
         mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] a cache req from " << data_msg->sender 
                   << " is trying to get in for address " << data_msg->maddr << endl;
@@ -2054,8 +2054,8 @@ void privateSharedMSI::accept_incoming_messages() {
         
     /* Cache replies (from the network) */
     while (m_core_receive_queues[MSG_CACHE_REP]->size()) {
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_CACHE_REP]->front();
-        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+        std::shared_ptr<message_t> msg = m_core_receive_queues[MSG_CACHE_REP]->front();
+        std::shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
         m_new_dir_table_entry_for_cache_rep_schedule_q.push_back(make_tuple(true/* is remote */, data_msg));
         mh_log(4) << "[NET " << m_id << " @ " << system_time << " ] a cache rep from " << data_msg->sender 
                   << " is trying to get in for address " << data_msg->maddr << endl;
@@ -2064,15 +2064,15 @@ void privateSharedMSI::accept_incoming_messages() {
 
     /* DRAMCTRL requests and replies from the network */
     if (m_core_receive_queues[MSG_DRAMCTRL_REQ]->size()) {
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAMCTRL_REQ]->front();
-        shared_ptr<dramctrlMsg> dram_msg = static_pointer_cast<dramctrlMsg>(msg->content);
+        std::shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAMCTRL_REQ]->front();
+        std::shared_ptr<dramctrlMsg> dram_msg = static_pointer_cast<dramctrlMsg>(msg->content);
         m_dramctrl_req_schedule_q.push_back(make_tuple(true/* is remote */, dram_msg));
     }
 
     if (m_core_receive_queues[MSG_DRAMCTRL_REP]->size()) {
         /* note: no replies for DRAM writes */
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAMCTRL_REP]->front();
-        shared_ptr<dramctrlMsg> dramctrl_msg = static_pointer_cast<dramctrlMsg>(msg->content);
+        std::shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAMCTRL_REP]->front();
+        std::shared_ptr<dramctrlMsg> dramctrl_msg = static_pointer_cast<dramctrlMsg>(msg->content);
         maddr_t start_maddr = dramctrl_msg->dram_req->maddr(); /* always access by a cache line */
         mh_assert(m_dir_table.count(start_maddr) > 0 &&
                   m_dir_table[dramctrl_msg->maddr]->status == _DIR_WAIT_DRAMCTRL_REP);
@@ -2092,13 +2092,13 @@ void privateSharedMSI::schedule_requests() {
 
     random_shuffle(m_cache_req_schedule_q.begin(), m_cache_req_schedule_q.end(), rr_fn);
     while (m_cache_req_schedule_q.size()) {
-        shared_ptr<cacheTableEntry>& entry = m_cache_req_schedule_q.front();
-        shared_ptr<coherenceMsg>& cache_req = entry->cache_req;
+        std::shared_ptr<cacheTableEntry>& entry = m_cache_req_schedule_q.front();
+        std::shared_ptr<coherenceMsg>& cache_req = entry->cache_req;
 
         if (m_id == cache_req->receiver) {
             m_new_dir_table_entry_for_req_schedule_q.push_back(make_tuple(false, cache_req));
         } else if (m_core_send_queues[MSG_CACHE_REQ]->available()) {
-            shared_ptr<message_t> msg(new message_t);
+                std::shared_ptr<message_t> msg(new message_t);
             msg->src = m_id;
             msg->dst = cache_req->receiver;
             msg->type = MSG_CACHE_REQ;
@@ -2121,13 +2121,13 @@ void privateSharedMSI::schedule_requests() {
 
     random_shuffle(m_cache_rep_schedule_q.begin(), m_cache_rep_schedule_q.end(), rr_fn);
     while (m_cache_rep_schedule_q.size()) {
-        shared_ptr<cacheTableEntry>& entry = m_cache_rep_schedule_q.front();
-        shared_ptr<coherenceMsg>& cache_rep = entry->cache_rep;
+            std::shared_ptr<cacheTableEntry>& entry = m_cache_rep_schedule_q.front();
+            std::shared_ptr<coherenceMsg>& cache_rep = entry->cache_rep;
 
         if (m_id == cache_rep->receiver) {
             m_new_dir_table_entry_for_cache_rep_schedule_q.push_back(make_tuple(false, cache_rep));
         } else if (m_core_send_queues[MSG_CACHE_REP]->available()) {
-            shared_ptr<message_t> msg(new message_t);
+                std::shared_ptr<message_t> msg(new message_t);
             msg->src = m_id;
             msg->dst = cache_rep->receiver;
             msg->type = MSG_CACHE_REP;
@@ -2151,13 +2151,13 @@ void privateSharedMSI::schedule_requests() {
 
     random_shuffle(m_dir_req_schedule_q.begin(), m_dir_req_schedule_q.end(), rr_fn);
     while (m_dir_req_schedule_q.size()) {
-        shared_ptr<dirTableEntry>& entry = m_dir_req_schedule_q.front();
-        shared_ptr<coherenceMsg>& dir_req = entry->dir_reqs.front();
+            std::shared_ptr<dirTableEntry>& entry = m_dir_req_schedule_q.front();
+            std::shared_ptr<coherenceMsg>& dir_req = entry->dir_reqs.front();
 
         if (m_id == dir_req->receiver) {
             m_new_cache_table_entry_schedule_q.push_back(make_tuple(FROM_LOCAL_DIR_REQ, dir_req));
         } else if (m_core_send_queues[MSG_DIR_REQ_REP]->available()) {
-            shared_ptr<message_t> msg(new message_t);
+                std::shared_ptr<message_t> msg(new message_t);
             msg->src = m_id;
             msg->dst = dir_req->receiver;
             msg->type = MSG_DIR_REQ_REP;
@@ -2179,8 +2179,8 @@ void privateSharedMSI::schedule_requests() {
 
     random_shuffle(m_dir_rep_schedule_q.begin(), m_dir_rep_schedule_q.end(), rr_fn);
     while (m_dir_rep_schedule_q.size()) {
-        shared_ptr<dirTableEntry>& entry = m_dir_rep_schedule_q.front();
-        shared_ptr<coherenceMsg>& dir_rep = entry->dir_rep;
+            std::shared_ptr<dirTableEntry>& entry = m_dir_rep_schedule_q.front();
+            std::shared_ptr<coherenceMsg>& dir_rep = entry->dir_rep;
 
         if (m_id == dir_rep->receiver) {
             mh_assert(m_cache_table.count(dir_rep->maddr));
@@ -2197,7 +2197,7 @@ void privateSharedMSI::schedule_requests() {
             }
 
         } else if (m_core_send_queues[MSG_DIR_REQ_REP]->available()) {
-            shared_ptr<message_t> msg(new message_t);
+                std::shared_ptr<message_t> msg(new message_t);
             msg->src = m_id;
             msg->dst = dir_rep->receiver;
             msg->type = MSG_DIR_REQ_REP;
@@ -2230,7 +2230,7 @@ void privateSharedMSI::schedule_requests() {
     random_shuffle(m_core_port_schedule_q.begin(), m_core_port_schedule_q.end(), rr_fn);
     uint32_t requested = 0;
     while (m_core_port_schedule_q.size()) {
-        shared_ptr<memoryRequest> req = m_core_port_schedule_q.front();
+            std::shared_ptr<memoryRequest> req = m_core_port_schedule_q.front();
         if (requested < m_available_core_ports) {
             m_new_cache_table_entry_schedule_q.push_back(make_tuple(FROM_LOCAL_CORE_REQ, req));
             ++requested;
@@ -2246,15 +2246,15 @@ void privateSharedMSI::schedule_requests() {
 
     random_shuffle(m_new_cache_table_entry_schedule_q.begin(), m_new_cache_table_entry_schedule_q.end(), rr_fn);
     while (m_new_cache_table_entry_schedule_q.size()) {
-        cacheTableEntrySrc_t source = m_new_cache_table_entry_schedule_q.front().get<0>();
+        cacheTableEntrySrc_t source = get<0>(m_new_cache_table_entry_schedule_q.front());
         if (source == FROM_LOCAL_CORE_REQ) {
 
-            shared_ptr<memoryRequest> core_req = static_pointer_cast<memoryRequest>(m_new_cache_table_entry_schedule_q.front().get<1>());
-            shared_ptr<privateSharedMSIStatsPerMemInstr> per_mem_instr_stats = 
+                std::shared_ptr<memoryRequest> core_req = static_pointer_cast<memoryRequest>(get<1>(m_new_cache_table_entry_schedule_q.front()));
+                std::shared_ptr<privateSharedMSIStatsPerMemInstr> per_mem_instr_stats = 
                 (core_req->per_mem_instr_runtime_info())?
                     static_pointer_cast<privateSharedMSIStatsPerMemInstr>(*(core_req->per_mem_instr_runtime_info()))
                 :
-                    shared_ptr<privateSharedMSIStatsPerMemInstr>();
+                    std::shared_ptr<privateSharedMSIStatsPerMemInstr>();
             maddr_t start_maddr = get_start_maddr_in_line(core_req->maddr());
             if (m_cache_table.count(start_maddr) || m_cache_table_vacancy == 0 || m_available_core_ports == 0) {
                 set_req_status(core_req, REQ_RETRY);
@@ -2272,10 +2272,10 @@ void privateSharedMSI::schedule_requests() {
                 }
             }
 
-            shared_ptr<catRequest> cat_req(new catRequest(core_req->maddr(), m_id));
+            std::shared_ptr<catRequest> cat_req(new catRequest(core_req->maddr(), m_id));
             cat_req->set_serialization_begin_time(system_time);
 
-            shared_ptr<cacheRequest> l1_req(new cacheRequest(core_req->maddr(),
+            std::shared_ptr<cacheRequest> l1_req(new cacheRequest(core_req->maddr(),
                                                              core_req->is_read()? CACHE_REQ_READ : CACHE_REQ_WRITE,
                                                              core_req->word_count(),
                                                              core_req->is_read()? shared_array<uint32_t>() : core_req->data()));
@@ -2284,16 +2284,16 @@ void privateSharedMSI::schedule_requests() {
             l1_req->set_claim(false);
             l1_req->set_evict(false);
             l1_req->set_aux_info_for_coherence
-                (shared_ptr<cacheAuxInfoForCoherence>(new cacheAuxInfoForCoherence(core_req->is_read()? LOCAL_READ : LOCAL_WRITE)));
+                (std::shared_ptr<cacheAuxInfoForCoherence>(new cacheAuxInfoForCoherence(core_req->is_read()? LOCAL_READ : LOCAL_WRITE)));
 
-            shared_ptr<cacheTableEntry> new_entry(new cacheTableEntry);
+            std::shared_ptr<cacheTableEntry> new_entry(new cacheTableEntry);
             new_entry->core_req =  core_req;
             new_entry->cat_req = cat_req;
             new_entry->l1_req = l1_req;
-            new_entry->dir_req = shared_ptr<coherenceMsg>();
-            new_entry->dir_rep = shared_ptr<coherenceMsg>();
-            new_entry->cache_req = shared_ptr<coherenceMsg>();
-            new_entry->cache_rep = shared_ptr<coherenceMsg>();
+            new_entry->dir_req = std::shared_ptr<coherenceMsg>();
+            new_entry->dir_rep = std::shared_ptr<coherenceMsg>();
+            new_entry->cache_req = std::shared_ptr<coherenceMsg>();
+            new_entry->cache_rep = std::shared_ptr<coherenceMsg>();
 
             new_entry->per_mem_instr_stats = per_mem_instr_stats;
 
@@ -2320,7 +2320,7 @@ void privateSharedMSI::schedule_requests() {
 
             /* a directory request from the local or a remote directory */
 
-            shared_ptr<coherenceMsg> dir_req = static_pointer_cast<coherenceMsg>(m_new_cache_table_entry_schedule_q.front().get<1>());
+                std::shared_ptr<coherenceMsg> dir_req = static_pointer_cast<coherenceMsg>(get<1>(m_new_cache_table_entry_schedule_q.front()));
             mh_assert(get_start_maddr_in_line(dir_req->maddr) == dir_req->maddr);
             if (m_cache_table.count(dir_req->maddr)) {
                 
@@ -2384,28 +2384,28 @@ void privateSharedMSI::schedule_requests() {
                 }
             }
 
-            shared_ptr<cacheRequest> l1_req;
+            std::shared_ptr<cacheRequest> l1_req;
             if (dir_req->type == WB_REQ) {
-                shared_ptr<cacheCoherenceInfo> new_info(new cacheCoherenceInfo);
+                    std::shared_ptr<cacheCoherenceInfo> new_info(new cacheCoherenceInfo);
                 new_info->status = SHARED;
                 new_info->home = dir_req->sender;
-                new_info->birth_time = shared_ptr<uint64_t>(new uint64_t(system_time));
-                new_info->last_hit = shared_ptr<uint64_t>(new uint64_t(system_time));
-                new_info->num_hits = shared_ptr<uint32_t>(new uint32_t(0));
-                new_info->max_interval = shared_ptr<uint32_t>(new uint32_t(0));
-                l1_req = shared_ptr<cacheRequest>(new cacheRequest(dir_req->maddr, CACHE_REQ_UPDATE,
+                new_info->birth_time = std::shared_ptr<uint64_t>(new uint64_t(system_time));
+                new_info->last_hit = std::shared_ptr<uint64_t>(new uint64_t(system_time));
+                new_info->num_hits = std::shared_ptr<uint32_t>(new uint32_t(0));
+                new_info->max_interval = std::shared_ptr<uint32_t>(new uint32_t(0));
+                l1_req = std::shared_ptr<cacheRequest>(new cacheRequest(dir_req->maddr, CACHE_REQ_UPDATE,
                                                                    0, shared_array<uint32_t>(), new_info));
                 l1_req->set_aux_info_for_coherence
-                    (shared_ptr<cacheAuxInfoForCoherence>(new cacheAuxInfoForCoherence(UPDATE_BY_WBREQ)));
+                    (std::shared_ptr<cacheAuxInfoForCoherence>(new cacheAuxInfoForCoherence(UPDATE_BY_WBREQ)));
             } else {
                 /* invReq or flushReq */
-                l1_req = shared_ptr<cacheRequest>(new cacheRequest(dir_req->maddr, CACHE_REQ_INVALIDATE));
+                l1_req = std::shared_ptr<cacheRequest>(new cacheRequest(dir_req->maddr, CACHE_REQ_INVALIDATE));
                 if (dir_req->type == INV_REQ) {
                     l1_req->set_aux_info_for_coherence
-                        (shared_ptr<cacheAuxInfoForCoherence>(new cacheAuxInfoForCoherence(INVALIDATE_BY_INVREQ)));
+                        (std::shared_ptr<cacheAuxInfoForCoherence>(new cacheAuxInfoForCoherence(INVALIDATE_BY_INVREQ)));
                 } else {
                     l1_req->set_aux_info_for_coherence
-                        (shared_ptr<cacheAuxInfoForCoherence>(new cacheAuxInfoForCoherence(INVALIDATE_BY_FLUSHREQ)));
+                        (std::shared_ptr<cacheAuxInfoForCoherence>(new cacheAuxInfoForCoherence(INVALIDATE_BY_FLUSHREQ)));
                 }
             }
             l1_req->set_serialization_begin_time(system_time);
@@ -2413,16 +2413,16 @@ void privateSharedMSI::schedule_requests() {
             l1_req->set_claim(false);
             l1_req->set_evict(false);
 
-            shared_ptr<cacheTableEntry> new_entry(new cacheTableEntry);
-            new_entry->core_req =  shared_ptr<memoryRequest>();
-            new_entry->cat_req = shared_ptr<catRequest>();
+            std::shared_ptr<cacheTableEntry> new_entry(new cacheTableEntry);
+            new_entry->core_req =  std::shared_ptr<memoryRequest>();
+            new_entry->cat_req = std::shared_ptr<catRequest>();
             new_entry->l1_req = l1_req;
             new_entry->dir_req = dir_req;
-            new_entry->dir_rep = shared_ptr<coherenceMsg>();
-            new_entry->cache_req = shared_ptr<coherenceMsg>();
-            new_entry->cache_rep = shared_ptr<coherenceMsg>();
+            new_entry->dir_rep = std::shared_ptr<coherenceMsg>();
+            new_entry->cache_req = std::shared_ptr<coherenceMsg>();
+            new_entry->cache_rep = std::shared_ptr<coherenceMsg>();
 
-            new_entry->per_mem_instr_stats = shared_ptr<privateSharedMSIStatsPerMemInstr>();
+            new_entry->per_mem_instr_stats = std::shared_ptr<privateSharedMSIStatsPerMemInstr>();
 
             new_entry->status = _CACHE_L1_FOR_DIR_REQ;
 
@@ -2449,8 +2449,8 @@ void privateSharedMSI::schedule_requests() {
     /* cache replies is prior to other requests */
     random_shuffle(m_new_dir_table_entry_for_cache_rep_schedule_q.begin(), m_new_dir_table_entry_for_cache_rep_schedule_q.end(), rr_fn);
     while (m_new_dir_table_entry_for_cache_rep_schedule_q.size()) {
-        bool is_remote = m_new_dir_table_entry_for_cache_rep_schedule_q.front().get<0>();
-        shared_ptr<coherenceMsg> cache_rep = m_new_dir_table_entry_for_cache_rep_schedule_q.front().get<1>();
+        bool is_remote = get<0>(m_new_dir_table_entry_for_cache_rep_schedule_q.front());
+        std::shared_ptr<coherenceMsg> cache_rep = get<1>(m_new_dir_table_entry_for_cache_rep_schedule_q.front());
         mh_assert(get_start_maddr_in_line(cache_rep->maddr) == cache_rep->maddr);
         if (m_dir_table.count(cache_rep->maddr)) {
             if (m_dir_table[cache_rep->maddr]->status == _DIR_SEND_DIR_REQ_AND_WAIT_CACHE_REP &&
@@ -2494,8 +2494,8 @@ void privateSharedMSI::schedule_requests() {
             mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache reply from " << cache_rep->sender 
                       << " for address " << cache_rep->maddr << " (new entry) " << endl;
 
-            shared_ptr<cacheRequest> l2_req;
-            l2_req = shared_ptr<cacheRequest>(new cacheRequest(cache_rep->maddr, CACHE_REQ_UPDATE,
+            std::shared_ptr<cacheRequest> l2_req;
+            l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(cache_rep->maddr, CACHE_REQ_UPDATE,
                                                                (cache_rep->type == INV_REP)? 0 : m_cfg.words_per_cache_line,
                                                                (cache_rep->type == INV_REP)? shared_array<uint32_t>() : cache_rep->data
                                                               ));
@@ -2504,7 +2504,7 @@ void privateSharedMSI::schedule_requests() {
             l2_req->set_claim(false);
             l2_req->set_evict(false);
 
-            shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
+            std::shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
             aux_info->core_id = cache_rep->sender;
             if (cache_rep->type == WB_REP) {
                 aux_info->req_type = UPDATE_FOR_WBREP;
@@ -2513,14 +2513,14 @@ void privateSharedMSI::schedule_requests() {
             }
             l2_req->set_aux_info_for_coherence(aux_info);
 
-            shared_ptr<dirTableEntry> new_entry(new dirTableEntry);
-            new_entry->cache_req = shared_ptr<coherenceMsg>();
+            std::shared_ptr<dirTableEntry> new_entry(new dirTableEntry);
+            new_entry->cache_req = std::shared_ptr<coherenceMsg>();
             new_entry->l2_req = l2_req;
             new_entry->cache_rep = cache_rep;
-            new_entry->dir_rep = shared_ptr<coherenceMsg>();
-            new_entry->dramctrl_req = shared_ptr<dramctrlMsg>();
-            new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
-            new_entry->empty_req = shared_ptr<coherenceMsg>();
+            new_entry->dir_rep = std::shared_ptr<coherenceMsg>();
+            new_entry->dramctrl_req = std::shared_ptr<dramctrlMsg>();
+            new_entry->dramctrl_rep = std::shared_ptr<dramctrlMsg>();
+            new_entry->empty_req = std::shared_ptr<coherenceMsg>();
             new_entry->is_written_back = false;
             new_entry->need_to_writeback_dir = false;
             if (use_exclusive) {
@@ -2560,8 +2560,8 @@ void privateSharedMSI::schedule_requests() {
     /* cache requests/empty requests scheuling */
     random_shuffle(m_new_dir_table_entry_for_req_schedule_q.begin(), m_new_dir_table_entry_for_req_schedule_q.end(), rr_fn);
     while (m_new_dir_table_entry_for_req_schedule_q.size()) {
-        bool is_remote = m_new_dir_table_entry_for_req_schedule_q.front().get<0>();
-        shared_ptr<coherenceMsg> req = static_pointer_cast<coherenceMsg>(m_new_dir_table_entry_for_req_schedule_q.front().get<1>());
+        bool is_remote = get<0>(m_new_dir_table_entry_for_req_schedule_q.front());
+        std::shared_ptr<coherenceMsg> req = static_pointer_cast<coherenceMsg>(get<1>(m_new_dir_table_entry_for_req_schedule_q.front()));
 
         mh_assert(get_start_maddr_in_line(req->maddr) == req->maddr);
 
@@ -2587,8 +2587,8 @@ void privateSharedMSI::schedule_requests() {
         mh_log(4) << "[MEM " << m_id << " @ " << system_time << " ] received a cache request (" << req->type 
                   << ") from " << req->sender << " for address " << req->maddr << " (new entry) " << endl;
 
-        shared_ptr<cacheRequest> l2_req;
-        shared_ptr<dirTableEntry> new_entry(new dirTableEntry);
+        std::shared_ptr<cacheRequest> l2_req;
+        std::shared_ptr<dirTableEntry> new_entry(new dirTableEntry);
 
         if (req->type == EMPTY_REQ) {
 
@@ -2596,19 +2596,19 @@ void privateSharedMSI::schedule_requests() {
                 stats()->empty_req_sent();
             }
 
-            shared_ptr<dirCoherenceInfo> new_info(new dirCoherenceInfo);
+            std::shared_ptr<dirCoherenceInfo> new_info(new dirCoherenceInfo);
             new_info->status = (req->empty_req_for_shreq)? SHARED : EXCLUSIVE;
             new_info->locked = false;
             new_info->dir.insert(req->new_requester);
 
-            l2_req = shared_ptr<cacheRequest>(new cacheRequest(req->maddr, CACHE_REQ_UPDATE,
+            l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(req->maddr, CACHE_REQ_UPDATE,
                                                                m_cfg.words_per_cache_line, req->data, new_info));
             l2_req->set_serialization_begin_time(system_time);
             l2_req->set_unset_dirty_on_write(req->empty_req_for_shreq);
             l2_req->set_claim(false);
             l2_req->set_evict(false);
 
-            shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
+            std::shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
             aux_info->core_id = req->new_requester;
             aux_info->req_type = UPDATE_FOR_EMPTYREQ;
             aux_info->replacing_maddr = req->replacing_maddr;
@@ -2616,7 +2616,7 @@ void privateSharedMSI::schedule_requests() {
             aux_info->is_replaced_line_dirty = false;
             l2_req->set_aux_info_for_coherence(aux_info);
 
-            new_entry->cache_req = shared_ptr<coherenceMsg>();
+            new_entry->cache_req = std::shared_ptr<coherenceMsg>();
             new_entry->empty_req = req;
 
             new_entry->status = _DIR_L2_FOR_EMPTY_REQ;
@@ -2642,19 +2642,19 @@ void privateSharedMSI::schedule_requests() {
                 }
             }
 
-            l2_req = shared_ptr<cacheRequest>(new cacheRequest(req->maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
+            l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(req->maddr, CACHE_REQ_READ, m_cfg.words_per_cache_line));
             l2_req->set_serialization_begin_time(system_time);
             l2_req->set_unset_dirty_on_write(false);
             l2_req->set_claim(false);
             l2_req->set_evict(false);
 
-            shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
+            std::shared_ptr<dirAuxInfoForCoherence> aux_info(new dirAuxInfoForCoherence());
             aux_info->core_id = req->sender;
             aux_info->req_type = (req->type == SH_REQ)? READ_FOR_SHREQ : READ_FOR_EXREQ;
             l2_req->set_aux_info_for_coherence(aux_info);
 
             new_entry->cache_req = req;
-            new_entry->empty_req = shared_ptr<coherenceMsg>();
+            new_entry->empty_req = std::shared_ptr<coherenceMsg>();
 
             new_entry->status = _DIR_L2_FOR_CACHE_REQ;
             new_entry->per_mem_instr_stats = req->per_mem_instr_stats;
@@ -2679,10 +2679,10 @@ void privateSharedMSI::schedule_requests() {
         }
 
         new_entry->l2_req = l2_req;
-        new_entry->cache_rep = shared_ptr<coherenceMsg>();
-        new_entry->dir_rep = shared_ptr<coherenceMsg>();
-        new_entry->dramctrl_req = shared_ptr<dramctrlMsg>();
-        new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
+        new_entry->cache_rep = std::shared_ptr<coherenceMsg>();
+        new_entry->dir_rep = std::shared_ptr<coherenceMsg>();
+        new_entry->dramctrl_req = std::shared_ptr<dramctrlMsg>();
+        new_entry->dramctrl_rep = std::shared_ptr<dramctrlMsg>();
         new_entry->is_written_back = false;
         new_entry->need_to_writeback_dir = false;
 
@@ -2715,13 +2715,13 @@ void privateSharedMSI::schedule_requests() {
     
     random_shuffle(m_dramctrl_req_schedule_q.begin(), m_dramctrl_req_schedule_q.end(), rr_fn);
     while (m_dramctrl_req_schedule_q.size()) {
-        bool is_remote = m_dramctrl_req_schedule_q.front().get<0>();
-        shared_ptr<dirTableEntry> entry = shared_ptr<dirTableEntry>();
-        shared_ptr<dramctrlMsg> dramctrl_msg = shared_ptr<dramctrlMsg>();
+        bool is_remote = get<0>(m_dramctrl_req_schedule_q.front());
+        std::shared_ptr<dirTableEntry> entry = std::shared_ptr<dirTableEntry>();
+        std::shared_ptr<dramctrlMsg> dramctrl_msg = std::shared_ptr<dramctrlMsg>();
         if (is_remote) {
-            dramctrl_msg = static_pointer_cast<dramctrlMsg>(m_dramctrl_req_schedule_q.front().get<1>());
+            dramctrl_msg = static_pointer_cast<dramctrlMsg>(get<1>(m_dramctrl_req_schedule_q.front()));
         } else {
-            entry = static_pointer_cast<dirTableEntry>(m_dramctrl_req_schedule_q.front().get<1>());
+            entry = static_pointer_cast<dirTableEntry>(get<1>(m_dramctrl_req_schedule_q.front()));
             dramctrl_msg = entry->dramctrl_req;
             if (m_dramctrl_writeback_status.count(entry->dramctrl_req->maddr) && 
                 m_dramctrl_writeback_status[entry->dramctrl_req->maddr] != entry) 
@@ -2741,9 +2741,9 @@ void privateSharedMSI::schedule_requests() {
                     continue;
                 }
                 if (dramctrl_msg->dram_req->is_read()) {
-                    shared_ptr<dramctrlTableEntry> new_entry(new dramctrlTableEntry);
+                        std::shared_ptr<dramctrlTableEntry> new_entry(new dramctrlTableEntry);
                     new_entry->dramctrl_req = dramctrl_msg;
-                    new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
+                    new_entry->dramctrl_rep = std::shared_ptr<dramctrlMsg>();
                     new_entry->per_mem_instr_stats = dramctrl_msg->per_mem_instr_stats;
                     new_entry->operation_begin_time= system_time;
 
@@ -2780,7 +2780,7 @@ void privateSharedMSI::schedule_requests() {
         } else {
             if (m_core_send_queues[MSG_DRAMCTRL_REQ]->available()) {
 
-                shared_ptr<message_t> msg(new message_t);
+                    std::shared_ptr<message_t> msg(new message_t);
                 msg->src = m_id;
                 msg->dst = m_dramctrl_location;
                 msg->type = MSG_DRAMCTRL_REQ;
@@ -2813,8 +2813,8 @@ void privateSharedMSI::schedule_requests() {
 
     random_shuffle(m_cat_req_schedule_q.begin(), m_cat_req_schedule_q.end(), rr_fn);
     while (m_cat->available() && m_cat_req_schedule_q.size()) {
-        shared_ptr<cacheTableEntry> entry = m_cat_req_schedule_q.front();
-        shared_ptr<catRequest> cat_req = entry->cat_req;
+            std::shared_ptr<cacheTableEntry> entry = m_cat_req_schedule_q.front();
+            std::shared_ptr<catRequest> cat_req = entry->cat_req;
 
         if (cat_req->serialization_begin_time() == UINT64_MAX) {
             cat_req->set_operation_begin_time(UINT64_MAX);
@@ -2841,8 +2841,8 @@ void privateSharedMSI::schedule_requests() {
 
     random_shuffle(m_l1_read_req_schedule_q.begin(), m_l1_read_req_schedule_q.end(), rr_fn);
     while (m_l1->read_port_available() && m_l1_read_req_schedule_q.size()) {
-        shared_ptr<cacheTableEntry>& entry = m_l1_read_req_schedule_q.front();
-        shared_ptr<cacheRequest>& l1_req = entry->l1_req;
+            std::shared_ptr<cacheTableEntry>& entry = m_l1_read_req_schedule_q.front();
+            std::shared_ptr<cacheRequest>& l1_req = entry->l1_req;
 
         if (l1_req->serialization_begin_time() == UINT64_MAX) {
             l1_req->set_operation_begin_time(UINT64_MAX);
@@ -2862,8 +2862,8 @@ void privateSharedMSI::schedule_requests() {
 
     random_shuffle(m_l1_write_req_schedule_q.begin(), m_l1_write_req_schedule_q.end(), rr_fn);
     while (m_l1->write_port_available() && m_l1_write_req_schedule_q.size()) {
-        shared_ptr<cacheTableEntry>& entry = m_l1_write_req_schedule_q.front();
-        shared_ptr<cacheRequest>& l1_req = entry->l1_req;
+            std::shared_ptr<cacheTableEntry>& entry = m_l1_write_req_schedule_q.front();
+            std::shared_ptr<cacheRequest>& l1_req = entry->l1_req;
 
         if (l1_req->serialization_begin_time() == UINT64_MAX) {
             l1_req->set_operation_begin_time(UINT64_MAX);
@@ -2887,8 +2887,8 @@ void privateSharedMSI::schedule_requests() {
 
     random_shuffle(m_l2_read_req_schedule_q.begin(), m_l2_read_req_schedule_q.end(), rr_fn);
     while (m_l2->read_port_available() && m_l2_read_req_schedule_q.size()) {
-        shared_ptr<dirTableEntry>& entry = m_l2_read_req_schedule_q.front();
-        shared_ptr<cacheRequest>& l2_req = entry->l2_req;
+            std::shared_ptr<dirTableEntry>& entry = m_l2_read_req_schedule_q.front();
+            std::shared_ptr<cacheRequest>& l2_req = entry->l2_req;
 
         if (m_l2_writeback_status.count(get_start_maddr_in_line(l2_req->maddr())) > 0) {
             m_l2_read_req_schedule_q.erase(m_l2_read_req_schedule_q.begin());
@@ -2913,8 +2913,8 @@ void privateSharedMSI::schedule_requests() {
 
     random_shuffle(m_l2_write_req_schedule_q.begin(), m_l2_write_req_schedule_q.end(), rr_fn);
     while (m_l2->write_port_available() && m_l2_write_req_schedule_q.size()) {
-        shared_ptr<dirTableEntry>& entry = m_l2_write_req_schedule_q.front();
-        shared_ptr<cacheRequest>& l2_req = entry->l2_req;
+            std::shared_ptr<dirTableEntry>& entry = m_l2_write_req_schedule_q.front();
+            std::shared_ptr<cacheRequest>& l2_req = entry->l2_req;
 
         if (m_l2_writeback_status.count(get_start_maddr_in_line(l2_req->maddr())) > 0 &&
             m_l2_writeback_status[get_start_maddr_in_line(l2_req->maddr())] != entry)
@@ -2945,9 +2945,9 @@ void privateSharedMSI::schedule_requests() {
 
     random_shuffle(m_dramctrl_rep_schedule_q.begin(), m_dramctrl_rep_schedule_q.end(), rr_fn);
     while (m_dramctrl_rep_schedule_q.size()) {
-        shared_ptr<dramctrlTableEntry>& entry = m_dramctrl_rep_schedule_q.front();
-        shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
-        shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
+            std::shared_ptr<dramctrlTableEntry>& entry = m_dramctrl_rep_schedule_q.front();
+            std::shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
+            std::shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
 
         if (dramctrl_req->sender == m_id) {
             mh_assert(m_dir_table.count(dramctrl_req->maddr));
@@ -2958,7 +2958,7 @@ void privateSharedMSI::schedule_requests() {
 
         } else if (m_core_send_queues[MSG_DRAMCTRL_REP]->available()) {
 
-            shared_ptr<message_t> msg(new message_t);
+                std::shared_ptr<message_t> msg(new message_t);
             msg->src = m_id;
             msg->dst = dramctrl_req->sender;
             msg->type = MSG_DRAMCTRL_REP;
@@ -2993,7 +2993,7 @@ void privateSharedMSI::print_size_directory() {
         for (uint32_t it_way = 0; it_way < m_cfg.l2_associativity; ++it_way) {
             cacheLine& line = it->second[it_way];
             if (line.claimed) {
-                shared_ptr<dirCoherenceInfo> info = static_pointer_cast<dirCoherenceInfo>(line.coherence_info);
+                    std::shared_ptr<dirCoherenceInfo> info = static_pointer_cast<dirCoherenceInfo>(line.coherence_info);
                 if (count.count(info->dir.size()) == 0) {
                     count[info->dir.size()] = 1;
                 } else {

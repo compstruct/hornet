@@ -5,7 +5,7 @@
 #define __MEM_HPP__
 
 #include <queue>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include "cstdint.hpp"
 #include "pe.hpp"
 #include "error.hpp"
@@ -38,7 +38,7 @@ typedef queue<mem_req> reqs_t;
 typedef queue<mem_resp> resps_t;
 public:
     explicit mem_ifc(shared_ptr<reqs_t> reqs,
-                     shared_ptr<resps_t> resps) throw();
+                     shared_ptr<resps_t> resps);
 public:
     shared_ptr<reqs_t> requests;
     shared_ptr<resps_t> responses;
@@ -46,7 +46,7 @@ public:
 
 class mem {
 public:
-    virtual shared_ptr<mem_ifc> new_interface() throw() = 0;
+    virtual shared_ptr<mem_ifc> new_interface() = 0;
 };
 
 #endif // __MEM_HPP__

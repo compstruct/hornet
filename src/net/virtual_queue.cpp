@@ -11,11 +11,11 @@ virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
                              node_id new_src_node_id, 
                              ingress_id new_ingress_id,
                              uint32_t new_max_size,
-                             shared_ptr<channel_alloc> new_vc_alloc,
-                             shared_ptr<pressure_tracker> new_pt,
-                             shared_ptr<tile_statistics> st,
-                             shared_ptr<vcd_writer> new_vcd,
-                             logger &l) throw()
+                             std::shared_ptr<channel_alloc> new_vc_alloc,
+                             std::shared_ptr<pressure_tracker> new_pt,
+                             std::shared_ptr<tile_statistics> st,
+                             std::shared_ptr<vcd_writer> new_vcd,
+                             logger &l)
     : id(make_tuple(new_node_id, new_vq_id)), src_node_id(new_src_node_id),
       parent_ingress_id(new_ingress_id),
       buffer_size(new_max_size + 1), contents(new_max_size + 1),
@@ -32,7 +32,7 @@ virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
     if (vcd) {
         vector<string> path;
         ostringstream oss;
-        oss << id.get<0>() << "_" << id.get<1>();
+        oss << get<0>(id) << "_" << get<1>(id);
         path.push_back("queues");
         path.push_back("size");
         path.push_back(oss.str());
@@ -40,55 +40,55 @@ virtual_queue::virtual_queue(node_id new_node_id, virtual_queue_id new_vq_id,
     }
 }
 
-const virtual_queue_node_id &virtual_queue::get_id() const throw() {
+const virtual_queue_node_id &virtual_queue::get_id() const {
     return id;
 }
 
-node_id virtual_queue::get_src_node_id() const throw() {
+node_id virtual_queue::get_src_node_id() const {
     return src_node_id;
 }
 
-ingress_id virtual_queue::get_ingress_id() const throw() { 
+ingress_id virtual_queue::get_ingress_id() const { 
     return parent_ingress_id;
 }
 
-bool virtual_queue::front_is_empty() const throw() {
+bool virtual_queue::front_is_empty() const {
     unique_lock<recursive_mutex> lock(front_mutex);
     return front_head == front_stale_tail;
 }
 
-bool virtual_queue::front_is_head_flit() const throw() {
+bool virtual_queue::front_is_head_flit() const {
     unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     return front_egress_packet_flits_remaining == 0;
 }
 
-node_id virtual_queue::front_node_id() const throw() {
+node_id virtual_queue::front_node_id() const {
     unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     return front_next_hop_node;
 }
 
-virtual_queue_id virtual_queue::front_vq_id() const throw() {
+virtual_queue_id virtual_queue::front_vq_id() const {
     unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     return front_next_hop_vq;
 }
 
-flow_id virtual_queue::front_old_flow_id() const throw() {
+flow_id virtual_queue::front_old_flow_id() const {
     unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     assert(front_old_flow.is_valid());
     return front_old_flow;
 }
 
-flow_id virtual_queue::front_new_flow_id() const throw() {
+flow_id virtual_queue::front_new_flow_id() const {
     unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     return front_next_hop_flow;
 }
 
-uint32_t virtual_queue::front_num_remaining_flits_in_packet() const throw() {
+uint32_t virtual_queue::front_num_remaining_flits_in_packet() const {
     // returns the # of flits past the head flit
     unique_lock<recursive_mutex> lock(front_mutex);
     if (!front_is_empty() && front_is_head_flit()) {
@@ -99,20 +99,20 @@ uint32_t virtual_queue::front_num_remaining_flits_in_packet() const throw() {
     }
 }
 
-const flit &virtual_queue::front_flit() const throw() {
+const flit &virtual_queue::front_flit() const {
     unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     return contents[front_head];
 }
 
 
-uint32_t virtual_queue::front_size() const throw() {
+uint32_t virtual_queue::front_size() const {
     unique_lock<recursive_mutex> lock(front_mutex);
     return (front_stale_tail >= front_head ? front_stale_tail - front_head
             : front_stale_tail + buffer_size - front_head);
 }
 
-void virtual_queue::front_pop() throw() {
+void virtual_queue::front_pop() {
     unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     if (front_egress_packet_flits_remaining == 0) { // head, update flit count
@@ -140,7 +140,7 @@ void virtual_queue::front_pop() throw() {
 }
 
 void virtual_queue::front_set_next_hop(const node_id &nid,
-                                       const flow_id &fid) throw() {
+                                       const flow_id &fid) {
     unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     assert(front_is_head_flit());
@@ -155,7 +155,7 @@ void virtual_queue::front_set_next_hop(const node_id &nid,
     if (h.get_flow_id() != fid) h.set_flow_id(fid);
 }
 
-void virtual_queue::front_set_vq_id(const virtual_queue_id &vqid) throw() {
+void virtual_queue::front_set_vq_id(const virtual_queue_id &vqid) {
     unique_lock<recursive_mutex> lock(front_mutex);
     assert(!front_is_empty());
     assert(front_is_head_flit());
@@ -168,22 +168,22 @@ void virtual_queue::front_set_vq_id(const virtual_queue_id &vqid) throw() {
     front_next_hop_vq = vqid;
 }
 
-void virtual_queue::front_power_on() throw() {
+void virtual_queue::front_power_on() {
     unique_lock<recursive_mutex> lock(front_mutex);
     front_powered = true;
 }
 
-void virtual_queue::front_power_off() throw() {
+void virtual_queue::front_power_off() {
     unique_lock<recursive_mutex> lock(front_mutex);
     front_powered = false;
 }
 
-bool virtual_queue::back_is_full() const throw() {
+bool virtual_queue::back_is_full() const {
     unique_lock<recursive_mutex> lock(back_mutex);
     return ((back_tail + 1) % buffer_size) == back_stale_head;
 }
 
-void virtual_queue::back_push(const flit &f) throw() {
+void virtual_queue::back_push(const flit &f) {
     unique_lock<recursive_mutex> lock(back_mutex);
     assert(!back_is_full());
     contents[back_tail] = f;
@@ -199,17 +199,17 @@ void virtual_queue::back_push(const flit &f) throw() {
     }
 }
 
-bool virtual_queue::back_is_mid_packet() const throw() {
+bool virtual_queue::back_is_mid_packet() const {
     unique_lock<recursive_mutex> lock(back_mutex);
     return back_ingress_packet_flits_remaining != 0;
 }
 
-bool virtual_queue::back_is_empty() const throw() {
+bool virtual_queue::back_is_empty() const {
     unique_lock<recursive_mutex> lock(back_mutex);
     return back_stale_head == back_tail;
 }
 
-bool virtual_queue::back_has_old_flow(const flow_id &f) throw() {
+bool virtual_queue::back_has_old_flow(const flow_id &f) {
     unique_lock<recursive_mutex> lock(back_mutex);
     uint32_t remaining = back_stale_egress_packet_flits_remaining;
     for (virtual_queue::buffer_t::size_type i = back_stale_head;
@@ -228,15 +228,15 @@ bool virtual_queue::back_has_old_flow(const flow_id &f) throw() {
     return false;
 }
 
-bool virtual_queue::back_is_powered_on() const throw() {
+bool virtual_queue::back_is_powered_on() const {
     unique_lock<recursive_mutex> lock(back_mutex);
     return back_powered;
 }
 
-void virtual_queue::tick_positive_edge() throw() { }
+void virtual_queue::tick_positive_edge() { }
 
 // synchronize front and back views of the virtual queue
-void virtual_queue::tick_negative_edge() throw() {
+void virtual_queue::tick_negative_edge() {
     unique_lock<recursive_mutex> front_lock(front_mutex);
     unique_lock<recursive_mutex> back_lock(back_mutex);
     if ((front_head != back_stale_head // head changed
@@ -267,7 +267,7 @@ void virtual_queue::tick_negative_edge() throw() {
     }
 }
 
-bool virtual_queue::is_drained() const throw() {
+bool virtual_queue::is_drained() const {
     unique_lock<recursive_mutex> front_lock(front_mutex);
     unique_lock<recursive_mutex> back_lock(back_mutex);
     return front_is_empty() && back_is_empty();

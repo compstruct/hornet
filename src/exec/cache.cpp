@@ -20,16 +20,16 @@
 #endif
 
 cacheRequest::cacheRequest(maddr_t maddr, cacheReqType_t request_type, uint32_t word_count,
-                           shared_array<uint32_t> data_to_write, shared_ptr<void> coherence_info_to_write) :
+                           shared_array<uint32_t> data_to_write, std::shared_ptr<void> coherence_info_to_write) :
     m_request_type(request_type), 
     m_maddr(maddr), 
     m_word_count(word_count),
     m_status(CACHE_REQ_NEW), 
-    m_line_copy(shared_ptr<cacheLine>()), 
-    m_line_to_evict_copy(shared_ptr<cacheLine>()),
+    m_line_copy(std::shared_ptr<cacheLine>()), 
+    m_line_to_evict_copy(std::shared_ptr<cacheLine>()),
     m_coherence_info_to_write(coherence_info_to_write), 
     m_data_to_write(data_to_write),
-    m_aux_info_for_coherence(shared_ptr<void>()),
+    m_aux_info_for_coherence(std::shared_ptr<void>()),
     m_do_unset_dirty_on_write(false),
     m_do_claim(true), 
     m_do_evict(true)
@@ -37,7 +37,7 @@ cacheRequest::cacheRequest(maddr_t maddr, cacheReqType_t request_type, uint32_t 
 
 cacheRequest::~cacheRequest() {}
 
-cache::cache(uint32_t level, uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, logger &l, shared_ptr<random_gen> r, 
+cache::cache(uint32_t level, uint32_t id, const uint64_t &t, std::shared_ptr<tile_statistics> st, logger &l, std::shared_ptr<random_gen> r, 
              uint32_t words_per_line, uint32_t total_lines, uint32_t associativity, replacementPolicy_t replacement_policy,
              uint32_t hit_test_latency, uint32_t num_read_ports,  uint32_t num_write_ports) : 
     m_level(level), 
@@ -106,13 +106,13 @@ void cache::print_contents() {
     cout << endl;
 }
 
-shared_ptr<cacheLine> cache::copy_cache_line(const cacheLine &line) {
+std::shared_ptr<cacheLine> cache::copy_cache_line(const cacheLine &line) {
 
     /* the cache always returns copies of data, not pointers */
     /* For coherence information, shmem systems decide what to do */
     /* For example, it may do shallow copy to implement some magic hardware, or concurrent snoopy mechanisms */
 
-    shared_ptr<cacheLine> copy(new cacheLine);
+    std::shared_ptr<cacheLine> copy(new cacheLine);
     (*copy) = line;
 
     /* deep copy data */
@@ -132,11 +132,11 @@ shared_ptr<cacheLine> cache::copy_cache_line(const cacheLine &line) {
     return copy;
 }
 
-void cache::request(shared_ptr<cacheRequest> req) {
+void cache::request(std::shared_ptr<cacheRequest> req) {
 
     req->m_status = CACHE_REQ_WAIT;
 
-    shared_ptr<reqEntry> new_entry(new reqEntry);
+    std::shared_ptr<reqEntry> new_entry(new reqEntry);
     new_entry->status = (m_hit_test_latency > 0) ? ENTRY_HIT_TEST : ENTRY_DONE;
     new_entry->request = req;
     new_entry->start_maddr = get_start_maddr_in_line(req->m_maddr);
@@ -172,10 +172,10 @@ void cache::tick_positive_edge() {
     static boost::function<int(int)> rr_fn = bind(&random_gen::random_range, ran, _1);
     random_shuffle(m_ready_requests.begin(), m_ready_requests.end(), rr_fn);
 
-    for (vector<shared_ptr<reqEntry> >::iterator it_req = m_ready_requests.begin(); it_req != m_ready_requests.end(); ) {
+    for (vector<std::shared_ptr<reqEntry> >::iterator it_req = m_ready_requests.begin(); it_req != m_ready_requests.end(); ) {
 
-        shared_ptr<reqEntry> entry = *it_req;
-        shared_ptr<cacheRequest> req = entry->request;
+        std::shared_ptr<reqEntry> entry = *it_req;
+        std::shared_ptr<cacheRequest> req = entry->request;
         uint32_t idx = entry->idx;
         maddr_t& start_maddr = entry->start_maddr;
 
@@ -189,7 +189,7 @@ void cache::tick_positive_edge() {
             for (uint32_t it_way = 0; it_way < m_associativity; ++it_way) {
                 m_cache[idx][it_way].claimed = false;
                 m_cache[idx][it_way].data = shared_array<uint32_t>(new uint32_t[m_words_per_line]);
-                m_cache[idx][it_way].coherence_info = shared_ptr<void>();
+                m_cache[idx][it_way].coherence_info = std::shared_ptr<void>();
             }
         }
 
@@ -438,8 +438,8 @@ void cache::tick_positive_edge() {
 void cache::tick_negative_edge() {
 
     while (m_ready_requests.size()) {
-        shared_ptr<reqEntry> entry = m_ready_requests.front();
-        shared_ptr<cacheRequest> req = entry->request;
+        std::shared_ptr<reqEntry> entry = m_ready_requests.front();
+        std::shared_ptr<cacheRequest> req = entry->request;
         uint32_t idx = entry->idx;
         maddr_t& start_maddr = entry->start_maddr;
 
@@ -515,10 +515,10 @@ void cache::tick_negative_edge() {
     }
 
     while (m_lines_to_invalidate.size()) {
-        uint32_t idx = m_lines_to_invalidate.front().get<0>();
-        uint32_t way = m_lines_to_invalidate.front().get<1>();
-        shared_ptr<reqEntry>& entry = m_lines_to_invalidate.front().get<2>();
-        shared_ptr<cacheRequest>& req = entry->request;
+        uint32_t idx = get<0>(m_lines_to_invalidate.front());
+        uint32_t way = get<1>(m_lines_to_invalidate.front());
+        std::shared_ptr<reqEntry>& entry = get<2>(m_lines_to_invalidate.front());
+        std::shared_ptr<cacheRequest>& req = entry->request;
 
         /* evict line and return a copy */
         cacheLine &line = m_cache[idx][way];
@@ -544,10 +544,10 @@ void cache::tick_negative_edge() {
 
 
     while (m_lines_to_evict.size()) {
-        uint32_t idx = m_lines_to_evict.front().get<0>();
-        uint32_t way = m_lines_to_evict.front().get<1>();
-        shared_ptr<reqEntry>& entry = m_lines_to_evict.front().get<2>();
-        shared_ptr<cacheRequest>& req = entry->request;
+        uint32_t idx = get<0>(m_lines_to_evict.front());
+        uint32_t way = get<1>(m_lines_to_evict.front());
+        std::shared_ptr<reqEntry>& entry = get<2>(m_lines_to_evict.front());
+        std::shared_ptr<cacheRequest>& req = entry->request;
 
         /* evict line and return a copy */
         cacheLine &line = m_cache[idx][way];
@@ -606,7 +606,7 @@ void cache::tick_negative_edge() {
 
     /* advance hit testing */
     for (reqTable::iterator it_q = m_req_table.begin(); it_q != m_req_table.end(); ++it_q) {
-        shared_ptr<reqEntry> &head = it_q->second.front();
+        std::shared_ptr<reqEntry> &head = it_q->second.front();
         if (head->status == ENTRY_HIT_TEST) {
             if (--(head->remaining_hit_test_cycles) == 0) {
                 head->status = ENTRY_DONE;

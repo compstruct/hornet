@@ -7,17 +7,17 @@
 
 using namespace std;
 
-random_gen::random_gen(uint32_t new_id, const uint32_t seed) throw()
+random_gen::random_gen(uint32_t new_id, const uint32_t seed)
     : rng(seed), gen(rng), id(new_id) { }
 
-uint32_t random_gen::get_id() const throw() { return id; }
+uint32_t random_gen::get_id() const { return id; }
 
-int random_gen::random_range(int max) throw() {
+int random_gen::random_range(int max) {
     double uniform_random = gen();
     return static_cast<int>(max * uniform_random);
 }
 
-double random_gen::random_range_double(double max) throw() {
+double random_gen::random_range_double(double max) {
     double uniform_random = gen();
     return max * uniform_random;
 }

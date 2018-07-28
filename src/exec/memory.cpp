@@ -10,10 +10,10 @@
 memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count) :
     m_status(REQ_NEW), m_is_read(true), m_maddr(maddr), m_word_count(word_count),
     m_data(shared_array<uint32_t>()), 
-    m_per_mem_instr_runtime_info(shared_ptr<shared_ptr<void> >())
+    m_per_mem_instr_runtime_info(std::shared_ptr<std::shared_ptr<void> >())
 {}
 
-memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count, shared_ptr<shared_ptr<void> > info) :
+memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count, std::shared_ptr<std::shared_ptr<void> > info) :
     m_status(REQ_NEW), m_is_read(true), m_maddr(maddr), m_word_count(word_count),
     m_data(shared_array<uint32_t>()), 
     m_per_mem_instr_runtime_info(info)
@@ -22,10 +22,10 @@ memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count, shared_ptr<shar
 
 memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count, shared_array<uint32_t> wdata) :
     m_status(REQ_NEW), m_is_read(false), m_maddr(maddr), m_word_count(word_count),m_data(wdata), 
-    m_per_mem_instr_runtime_info(shared_ptr<shared_ptr<void> >())
+    m_per_mem_instr_runtime_info(std::shared_ptr<std::shared_ptr<void> >())
 {}
 
-memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count, shared_array<uint32_t> wdata, shared_ptr<shared_ptr<void> > info) :
+memoryRequest::memoryRequest(maddr_t maddr, uint32_t word_count, shared_array<uint32_t> wdata, std::shared_ptr<std::shared_ptr<void> > info) :
     m_status(REQ_NEW), m_is_read(false), m_maddr(maddr), m_word_count(word_count),m_data(wdata), 
     m_per_mem_instr_runtime_info(info)
 {}
@@ -36,7 +36,7 @@ memoryRequest::~memoryRequest() {}
 /* memory        */
 /*****************/
 
-memory::memory(uint32_t id, const uint64_t &t, shared_ptr<tile_statistics> st, logger &l, shared_ptr<random_gen> r) :
+memory::memory(uint32_t id, const uint64_t &t, std::shared_ptr<tile_statistics> st, logger &l, std::shared_ptr<random_gen> r) :
     m_id(id), system_time(t), stats(st), log(l), ran(r), m_dramctrl(NULL), m_dramctrl_location(id), m_power(true)
 { }
 
@@ -44,7 +44,7 @@ memory::~memory() {
     delete m_dramctrl;
 }
 
-void memory::add_local_dram_controller(shared_ptr<dram> connected_dram,
+void memory::add_local_dram_controller(std::shared_ptr<dram> connected_dram,
                                         uint32_t dram_controller_latency, uint32_t offchip_oneway_latency, uint32_t dram_latency,
                                         uint32_t msg_header_size_in_words, uint32_t max_requests_in_flight,
                                         uint32_t bandwidth_in_words_per_cycle, bool use_lock) {

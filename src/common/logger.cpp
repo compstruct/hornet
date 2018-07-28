@@ -3,24 +3,24 @@
 
 #include "logger.hpp"
 
-logstreambuf::logstreambuf() throw() : streams(), msg_verb(0) { }
-logstreambuf::~logstreambuf() throw() { }
+logstreambuf::logstreambuf() : streams(), msg_verb(0) { }
+logstreambuf::~logstreambuf() { }
 
-void logstreambuf::add(streambuf *s, int v) throw() {
+void logstreambuf::add(streambuf *s, int v) {
     streams.push_back(tuple<int,streambuf *>(v,s));
 }
 
-logger::logger() throw()
+logger::logger()
     : ostream(&buf), max_verbosity(0), buf(), owned_streams() { }
 
-logger::~logger() throw() { }
+logger::~logger() { }
 
-void logger::add(ostream &s, int v) throw() {
+void logger::add(ostream &s, int v) {
     if (v > max_verbosity) max_verbosity = v;
     buf.add(s.rdbuf(), v);
 }
 
-void logger::add(const shared_ptr<ostream> s, int v) throw() {
+void logger::add(const shared_ptr<ostream> s, int v) {
     if (v > max_verbosity) max_verbosity = v;
     owned_streams.push_back(s);
     buf.add(s->rdbuf(), v);

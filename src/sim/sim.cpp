@@ -6,7 +6,6 @@
 #include <numeric>
 #include <boost/function.hpp>
 #include <boost/bind.hpp>
-#include <boost/task/detail/bind_processor.hpp>
 #include "sim.hpp"
 
 /* ad-hoc progressive statistic report for ISCA */
@@ -24,12 +23,12 @@ public:
 };
 
 sim_thread::sim_thread(uint32_t new_thread_index,
-                       shared_ptr<sys> new_sys,
+                       std::shared_ptr<sys> new_sys,
                        const vector<tile_id> &tids,
                        const uint64_t new_num_cycles,
                        const uint64_t new_num_packets,
                        const uint64_t new_sync_period,
-                       shared_ptr<barrier> new_sync_barrier,
+                       std::shared_ptr<barrier> new_sync_barrier,
                        bool &new_global_drained,
                        uint64_t &new_global_next_time,
                        uint64_t &new_global_max_sync_count,
@@ -39,9 +38,9 @@ sim_thread::sim_thread(uint32_t new_thread_index,
                        vector<uint64_t> &new_per_thread_next_time,
                        bool new_enable_fast_forward,
                        int cpu_affinity,
-                       shared_ptr<vcd_writer> new_vcd
+                       std::shared_ptr<vcd_writer> new_vcd
 #ifdef PROGRESSIVE_STATISTICS_REPORT
-                       , shared_ptr<system_statistics> new_stats
+                       , std::shared_ptr<system_statistics> new_stats
 #endif
                        )
     : my_thread_index(new_thread_index), s(new_sys),
@@ -65,9 +64,9 @@ sim_thread::sim_thread(uint32_t new_thread_index,
 
 void sim_thread::operator()() {
     if (my_tile_ids.empty()) return;
-    if (cpu >= 0) {
-        this_thread::bind_to_processor(cpu);
-    }
+    // if (cpu >= 0) {
+    //    this_thread::bind_to_processor(cpu);
+    // }
     sync_barrier->wait();
     uint64_t sync_count = 0; // count only post-negedge syncs
     while (sync_count < global_max_sync_count) {
@@ -166,16 +165,16 @@ void sim_thread::operator()() {
     if (vcd) vcd->commit();
 }
 
-sim::sim(shared_ptr<sys> s,
+sim::sim(std::shared_ptr<sys> s,
          const uint64_t num_cycles, const uint64_t num_packets,
          const uint64_t sync_period, const uint32_t concurrency,
          bool enable_fast_forward,
          tile_mapping_t tile_mapping,
          const vector<unsigned> &cpu_affinities,
-         shared_ptr<vcd_writer> vcd, logger &new_log,
-         shared_ptr<random_gen> new_rng
+         std::shared_ptr<vcd_writer> vcd, logger &new_log,
+         std::shared_ptr<random_gen> new_rng
 #ifdef PROGRESSIVE_STATISTICS_REPORT
-         ,shared_ptr<system_statistics> stats
+         ,std::shared_ptr<system_statistics> stats
 #endif
          )
     : global_drained(false), global_next_time(0),
@@ -242,7 +241,7 @@ sim::sim(shared_ptr<sys> s,
             tiles_per_thread[thr].push_back(*ti);
         }
     }
-    sync_barrier = shared_ptr<barrier>(new barrier(num_threads));
+    sync_barrier = std::shared_ptr<barrier>(new barrier(num_threads));
     for (uint32_t i = 0; i < num_threads; ++i) {
         per_thread_drained.push_back(false);
         per_thread_time_exceeded.push_back(false);
@@ -250,14 +249,14 @@ sim::sim(shared_ptr<sys> s,
         per_thread_next_time.push_back(0);
     }
     for (uint32_t i = 0; i < num_threads; ++i) {
-        shared_ptr<vcd_writer> thr_vcd =
-            i == num_threads - 1 ? vcd : shared_ptr<vcd_writer>();
+        std::shared_ptr<vcd_writer> thr_vcd =
+            i == num_threads - 1 ? vcd : std::shared_ptr<vcd_writer>();
         int cpu_affinity = -1;
         if (cpu_affinities.size() > 0) {
             cpu_affinity = cpu_affinities[i % cpu_affinities.size()];
         }
-        shared_ptr<sim_thread> st = 
-            shared_ptr<sim_thread>(new sim_thread(i, s, tiles_per_thread[i],
+        std::shared_ptr<sim_thread> st = 
+            std::shared_ptr<sim_thread>(new sim_thread(i, s, tiles_per_thread[i],
                                                   num_cycles, num_packets,
                                                   sync_period, sync_barrier,
                                                   global_drained,

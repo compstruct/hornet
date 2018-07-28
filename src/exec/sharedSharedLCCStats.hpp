@@ -15,7 +15,7 @@ public:
     uint64_t total_cost();
     void add(const sharedSharedLCCStatsPerMemInstr& other);
 
-    shared_ptr<sharedSharedLCCStatsPerMemInstr> get_tentative_data(int index);
+    std::shared_ptr<sharedSharedLCCStatsPerMemInstr> get_tentative_data(int index);
     int get_max_tentative_data_index();
     inline void clear_tentative_data() { m_tentative_data.clear(); }
     void discard_tentative_data(int index);
@@ -138,7 +138,7 @@ private:
     uint64_t m_remote_l2_blk_by_checkin;
     uint64_t m_remote_l2_blk_by_ts;
 
-    map<int, shared_ptr<sharedSharedLCCStatsPerMemInstr> > m_tentative_data;
+    map<int, std::shared_ptr<sharedSharedLCCStatsPerMemInstr> > m_tentative_data;
     
 };
 
@@ -249,7 +249,7 @@ public:
 
     void add(const sharedSharedLCCStatsPerTile& other);
     void commit_per_mem_instr_stats(const sharedSharedLCCStatsPerMemInstr& data);
-    inline void commit_per_mem_instr_stats(shared_ptr<sharedSharedLCCStatsPerMemInstr> data) { commit_per_mem_instr_stats(*data); }
+    inline void commit_per_mem_instr_stats(std::shared_ptr<sharedSharedLCCStatsPerMemInstr> data) { commit_per_mem_instr_stats(*data); }
 
     friend class sharedSharedLCCStats;
 

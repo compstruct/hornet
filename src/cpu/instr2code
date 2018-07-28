@@ -183,7 +183,7 @@ def gen_decoder(f, dd):
                     decode(d3, indent + 4)
                     print >>f, ' ' * indent + '    break;'
                 print >>f, ' ' * indent + '}'
-    print >>f, 'inline instr_code decode(uint32_t encoding) throw(exc_bad_instr) {'
+    print >>f, 'inline instr_code decode(uint32_t encoding) {'
     print >>f, '    instr_code ic = NUM_INSTR_CODES;'
     decode(dd, 4)
     print >>f, '    if (ic == NUM_INSTR_CODES) throw exc_bad_instr(encoding);'

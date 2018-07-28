@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <cstdio>
+#include <tuple>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include "version.hpp"
 #include "vcd.hpp"
@@ -14,7 +15,7 @@ const char max_vcd_id_char = '~';
 
 static void insert_node(const vcd_id_t &id,
                         const vector<string> &path, unsigned path_index,
-                        vcd_node::nodes_t &nodes) throw(err) {
+                        vcd_node::nodes_t &nodes) {
     assert(path.size() > path_index);
     vcd_node &n = nodes[path[path_index]];
     if (path_index == path.size() - 1) { // leaf
@@ -26,11 +27,11 @@ static void insert_node(const vcd_id_t &id,
     }
 }
 
-vcd_node::vcd_node() throw() : id(0), children() { }
+vcd_node::vcd_node() : id(0), children() { }
 
 vcd_writer::vcd_writer(const uint64_t &new_time,
-                       const shared_ptr<ofstream> new_out,
-                       uint64_t start, uint64_t end) throw(err)
+                       const std::shared_ptr<ofstream> new_out,
+                       uint64_t start, uint64_t end)
     : time(new_time), start_time(start), end_time(end),
       last_timestamp(0), ids(), widths(),
       cur_values(), last_values(), dirty(), last_id(""), paths(),
@@ -39,14 +40,15 @@ vcd_writer::vcd_writer(const uint64_t &new_time,
     assert(out);
 }
 
-void vcd_writer::finalize() throw(err) {
+void vcd_writer::finalize() {
     unique_lock<recursive_mutex> lock(vcd_mutex);
     assert(!finalized);
     *out << endl;
     // erase definitions for signals that never changed
     for (stream_locs_t::const_iterator sli = def_locs.begin();
          sli != def_locs.end(); ++sli) {
-        streampos start, end; tie(start,end) = sli->second;
+        streampos start = get<0>(sli->second);
+        streampos end = get<1>(sli->second);
         out->seekp(start);
         while (out->tellp() != end) {
             *out << ' ';
@@ -55,7 +57,8 @@ void vcd_writer::finalize() throw(err) {
     // erase initial values for signals that never changed
     for (stream_locs_t::const_iterator sli = init_locs.begin();
          sli != init_locs.end(); ++sli) {
-        streampos start, end; tie(start,end) = sli->second;
+        streampos start = get<0>(sli->second);
+        streampos end = get<1>(sli->second);
         out->seekp(start);
         while (out->tellp() != end) {
             *out << ' ';
@@ -64,7 +67,7 @@ void vcd_writer::finalize() throw(err) {
     finalized = true;
 }
 
-string vcd_writer::get_fresh_id() throw() {
+string vcd_writer::get_fresh_id() {
     unique_lock<recursive_mutex> lock(vcd_mutex);
     for (string::reverse_iterator i = last_id.rbegin();
          i != last_id.rend(); ++i) {
@@ -80,7 +83,7 @@ string vcd_writer::get_fresh_id() throw() {
 }
 
 void vcd_writer::new_signal(const vcd_id_t &id, const vector<string> &path,
-                            unsigned width) throw(err) {
+                            unsigned width) {
     unique_lock<recursive_mutex> lock(vcd_mutex);
     assert(!initialized);
     assert(!finalized);
@@ -95,7 +98,7 @@ void vcd_writer::new_signal(const vcd_id_t &id, const vector<string> &path,
     insert_node(id, path, 0, paths);
 }
 
-void vcd_writer::write_val(const string &id, uint64_t val) throw(err) {
+void vcd_writer::write_val(const string &id, uint64_t val) {
     unique_lock<recursive_mutex> lock(vcd_mutex);
     *out << 'b';
     if (val == 0) {
@@ -115,13 +118,13 @@ void vcd_writer::write_val(const string &id, uint64_t val) throw(err) {
     *out << ' ' << id;
 }
 
-void vcd_writer::writeln_val(const string &id, uint64_t val) throw(err) {
+void vcd_writer::writeln_val(const string &id, uint64_t val) {
     unique_lock<recursive_mutex> lock(vcd_mutex);
     write_val(id, val);
     *out << '\n';
 }
 
-void vcd_writer::add_value(vcd_id_t id, uint64_t val) throw(err) {
+void vcd_writer::add_value(vcd_id_t id, uint64_t val) {
     unique_lock<recursive_mutex> lock(vcd_mutex);
     if (is_sleeping()) return;
     assert(ids.find(id) != ids.end());
@@ -134,7 +137,7 @@ void vcd_writer::add_value(vcd_id_t id, uint64_t val) throw(err) {
     }
 }
 
-void vcd_writer::commit() throw(err) {
+void vcd_writer::commit() {
     unique_lock<recursive_mutex> lock(vcd_mutex);
     if (is_sleeping()) return;
     check_header();
@@ -166,7 +169,7 @@ void vcd_writer::commit() throw(err) {
 }
 
 void vcd_writer::declare_vars(const vcd_node::nodes_t &nodes,
-                              const map<vcd_id_t, string> &ids) throw(err) {
+                              const map<vcd_id_t, string> &ids) {
     unique_lock<recursive_mutex> lock(vcd_mutex);
     assert(out);
     for (vcd_node::nodes_t::const_iterator ni = nodes.begin();
@@ -190,7 +193,7 @@ void vcd_writer::declare_vars(const vcd_node::nodes_t &nodes,
     }
 }
 
-void vcd_writer::check_header() throw(err) {
+void vcd_writer::check_header() {
     unique_lock<recursive_mutex> lock(vcd_mutex);
     if (!initialized) {
         assert(out);
@@ -230,7 +233,7 @@ void vcd_writer::check_header() throw(err) {
     }
 }
 
-void vcd_writer::check_timestamp() throw(err) {
+void vcd_writer::check_timestamp() {
     unique_lock<recursive_mutex> lock(vcd_mutex);
     if (time > last_timestamp) {
         *out << '#' << dec << time << '\n';
@@ -238,25 +241,25 @@ void vcd_writer::check_timestamp() throw(err) {
     }
 }
 
-bool vcd_writer::is_drained() const throw() {
+bool vcd_writer::is_drained() const {
     unique_lock<recursive_mutex> lock(vcd_mutex);
     return cur_values.empty() && dirty.empty();
 }
 
-bool vcd_writer::is_sleeping() const throw() {
+bool vcd_writer::is_sleeping() const {
     unique_lock<recursive_mutex> lock(vcd_mutex);
     return time < start_time || (end_time != 0 && time > end_time);
 }
 
-void vcd_writer::tick() throw() {
+void vcd_writer::tick() {
     ++time;
 }
 
-void vcd_writer::fast_forward_time(uint64_t new_time) throw() {
+void vcd_writer::fast_forward_time(uint64_t new_time) {
     assert(new_time >= time);
     time = new_time;
 }
 
-uint64_t vcd_writer::get_time() const throw() {
+uint64_t vcd_writer::get_time() const {
     return time;
 }

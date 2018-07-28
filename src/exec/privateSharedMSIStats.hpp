@@ -14,7 +14,7 @@ public:
     uint64_t total_cost();
     void add(const privateSharedMSIStatsPerMemInstr& other);
 
-    shared_ptr<privateSharedMSIStatsPerMemInstr> get_tentative_data(int index);
+    std::shared_ptr<privateSharedMSIStatsPerMemInstr> get_tentative_data(int index);
     int get_max_tentative_data_index();
     inline void clear_tentative_data() { m_tentative_data.clear(); }
     void discard_tentative_data(int index);
@@ -195,7 +195,7 @@ private:
     uint64_t m_remote_inv_for_evict;
     uint64_t m_remote_reorder;
 
-    map<int, shared_ptr<privateSharedMSIStatsPerMemInstr> > m_tentative_data;
+    map<int, std::shared_ptr<privateSharedMSIStatsPerMemInstr> > m_tentative_data;
 
 };
 
@@ -265,7 +265,7 @@ public:
 
     void add(const privateSharedMSIStatsPerTile& other);
     void commit_per_mem_instr_stats(const privateSharedMSIStatsPerMemInstr& data);
-    inline void commit_per_mem_instr_stats(shared_ptr<privateSharedMSIStatsPerMemInstr> data) { commit_per_mem_instr_stats(*data); }
+    inline void commit_per_mem_instr_stats(std::shared_ptr<privateSharedMSIStatsPerMemInstr> data) { commit_per_mem_instr_stats(*data); }
 
     friend class privateSharedMSIStats;
 

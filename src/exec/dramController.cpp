@@ -9,20 +9,20 @@
 
 dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count) :
     m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_aux_word_size(0), m_status(DRAM_REQ_NEW), 
-    m_data(shared_array<uint32_t>()), m_aux_data(shared_ptr<void>())
+    m_data(shared_array<uint32_t>()), m_aux_data(std::shared_ptr<void>())
 {
     assert(m_request_type == DRAM_REQ_READ);
 }
 
 dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_array<uint32_t> wdata) :
     m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_aux_word_size(0), m_status(DRAM_REQ_NEW), 
-    m_data(wdata), m_aux_data(shared_ptr<void>())
+    m_data(wdata), m_aux_data(std::shared_ptr<void>())
 {
     assert(m_request_type == DRAM_REQ_WRITE);
 }
 
 dramRequest::dramRequest(maddr_t maddr, dramReqType_t request_type, uint32_t word_count, shared_array<uint32_t> wdata,
-                         uint32_t aux_word_size, shared_ptr<void> aux_data) :
+                         uint32_t aux_word_size, std::shared_ptr<void> aux_data) :
     m_request_type(request_type), m_maddr(maddr), m_word_count(word_count), m_aux_word_size(0), m_status(DRAM_REQ_NEW), 
     m_data(shared_array<uint32_t>()), m_aux_data(aux_data)
 {
@@ -34,8 +34,8 @@ dram::dram() {}
 dram::~dram() {}
 
 dramController::dramController(uint32_t id, const uint64_t &t,
-                               shared_ptr<tile_statistics> st, logger &l, shared_ptr<random_gen> r,
-                               shared_ptr<dram> connected_dram,
+                               std::shared_ptr<tile_statistics> st, logger &l, std::shared_ptr<random_gen> r,
+                               std::shared_ptr<dram> connected_dram,
                                uint32_t dram_controller_latency, uint32_t offchip_oneway_latency, uint32_t dram_latency,
                                uint32_t msg_header_size_in_words,
                                uint32_t max_requests_in_flight, uint32_t bandwidth_in_words_per_cycle, bool use_lock) :
@@ -50,10 +50,10 @@ dramController::dramController(uint32_t id, const uint64_t &t,
 
 dramController::~dramController() {}
 
-void dramController::request(shared_ptr<dramRequest> req) {
+void dramController::request(std::shared_ptr<dramRequest> req) {
     assert(available());
     req->m_status = DRAM_REQ_WAIT;
-    shared_ptr<entry_t> new_entry = shared_ptr<entry_t>(new entry_t);
+    std::shared_ptr<entry_t> new_entry = std::shared_ptr<entry_t>(new entry_t);
     new_entry->status = ENTRY_PORT;
     new_entry->request = req;
     --m_number_of_free_ports;
@@ -107,12 +107,12 @@ void dramController::tick_negative_edge() {
 
 }
 
-void dramController::dram_access_safe(shared_ptr<dramRequest> req) {
+void dramController::dram_access_safe(std::shared_ptr<dramRequest> req) {
     unique_lock<recursive_mutex> lock(m_dram->dram_mutex);
     dram_access(req);
 }
 
-void dramController::dram_access(shared_ptr<dramRequest> req) {
+void dramController::dram_access(std::shared_ptr<dramRequest> req) {
     if (req->is_read() && m_dram->m_aux_memory.count(req->m_maddr) > 0) {
         req->m_aux_data = m_dram->m_aux_memory[req->m_maddr];
     } else if (!req->is_read() && req->m_aux_data) {
@@ -230,7 +230,7 @@ void dram::mem_write_instant(   void * source,
 
 /* This method is used to initialize instruction memory with data from a binary 
 at startup. */
-void dram::mem_write_instant(   shared_ptr<mem> source,
+void dram::mem_write_instant(   std::shared_ptr<mem> source,
                                 uint32_t mem_space,
                                 uint32_t mem_start,
                                 uint32_t mem_size) {

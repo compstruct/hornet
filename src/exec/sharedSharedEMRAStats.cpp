@@ -89,12 +89,12 @@ bool sharedSharedEMRAStatsPerMemInstr::add_new_tentative_data(int index) {
     if (m_tentative_data.count(index)) {
         return false;
     }
-    shared_ptr<sharedSharedEMRAStatsPerMemInstr> new_tentative_set(new sharedSharedEMRAStatsPerMemInstr(m_is_read));
+    std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> new_tentative_set(new sharedSharedEMRAStatsPerMemInstr(m_is_read));
     m_tentative_data[index] = new_tentative_set;
     return true;
 }
 
-shared_ptr<sharedSharedEMRAStatsPerMemInstr> sharedSharedEMRAStatsPerMemInstr::get_tentative_data(int index) {
+std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> sharedSharedEMRAStatsPerMemInstr::get_tentative_data(int index) {
     if (!m_tentative_data.count(index)) {
         add_new_tentative_data(index);
     }
@@ -104,10 +104,10 @@ shared_ptr<sharedSharedEMRAStatsPerMemInstr> sharedSharedEMRAStatsPerMemInstr::g
 int sharedSharedEMRAStatsPerMemInstr::get_max_tentative_data_index() {
     mh_assert(m_tentative_data.size());
     uint64_t value = 0;
-    map<int, shared_ptr<sharedSharedEMRAStatsPerMemInstr> >::iterator it;
+    map<int, std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> >::iterator it;
     int max = 0;
     for (it = m_tentative_data.begin(); it != m_tentative_data.end(); ++it) {
-        shared_ptr<sharedSharedEMRAStatsPerMemInstr> cur = it->second;
+            std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> cur = it->second;
         if (cur->total_cost() > value) {
             value = cur->total_cost();
             max = it->first;
@@ -141,10 +141,10 @@ void sharedSharedEMRAStatsPerMemInstr::commit_max_tentative_data() {
 
 void sharedSharedEMRAStatsPerMemInstr::commit_min_tentative_data() {
     uint64_t value = UINT64_MAX;
-    map<int, shared_ptr<sharedSharedEMRAStatsPerMemInstr> >::iterator it;
-    shared_ptr<sharedSharedEMRAStatsPerMemInstr> min = shared_ptr<sharedSharedEMRAStatsPerMemInstr>();
+    map<int, std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> >::iterator it;
+    std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> min = std::shared_ptr<sharedSharedEMRAStatsPerMemInstr>();
     for (it = m_tentative_data.begin(); it != m_tentative_data.end(); ++it) {
-        shared_ptr<sharedSharedEMRAStatsPerMemInstr> cur = it->second;
+            std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> cur = it->second;
         if (cur->total_cost() < value) {
             value = cur->total_cost();
             min = cur;
@@ -306,7 +306,7 @@ void sharedSharedEMRAStats::print_stats(ostream &out) {
     for (it = m_per_tile_stats.begin(); it != m_per_tile_stats.end(); ++it) {
         ++num_tiles;
         uint32_t id = it->first;
-        shared_ptr<sharedSharedEMRAStatsPerTile> st = static_pointer_cast<sharedSharedEMRAStatsPerTile>(it->second);
+        std::shared_ptr<sharedSharedEMRAStatsPerTile> st = static_pointer_cast<sharedSharedEMRAStatsPerTile>(it->second);
 
         sprintf(str, "[S1S2EMRA:Core %d ] %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld "
                      "%ld %ld %ld %ld %ld %ld %ld %ld %ld %ld "

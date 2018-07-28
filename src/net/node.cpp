@@ -7,11 +7,11 @@
 #include "channel_alloc.hpp"
 #include "node.hpp"
 
-node::node(node_id new_id, uint32_t memsz, shared_ptr<router> new_rt,
-           shared_ptr<channel_alloc> new_vca,
-           shared_ptr<tile_statistics> st,
-           shared_ptr<vcd_writer> v,
-           logger &l, shared_ptr<random_gen> ran) throw()
+node::node(node_id new_id, uint32_t memsz, std::shared_ptr<router> new_rt,
+           std::shared_ptr<channel_alloc> new_vca,
+           std::shared_ptr<tile_statistics> st,
+           std::shared_ptr<vcd_writer> v,
+           logger &l, std::shared_ptr<random_gen> ran)
     : id(new_id), flits_per_queue(memsz), rt(new_rt), vc_alloc(new_vca),
       pressures(new pressure_tracker(new_id, l)), ingresses(), egresses(),
       xbar(new_id, st, v, l, ran), pwr_ctl(new_id, st, v, l),
@@ -20,13 +20,13 @@ node::node(node_id new_id, uint32_t memsz, shared_ptr<router> new_rt,
         << " flit" << (memsz == 1 ? "" : "s") << " per queue" << endl;
 }
 
-void node::add_queue_id(virtual_queue_id q) throw(err) {
+void node::add_queue_id(virtual_queue_id q) {
     if (queue_ids.find(q) != queue_ids.end()) {
         throw err_duplicate_queue(id.get_numeric_id(), q.get_numeric_id());
     }
 }
 
-void node::add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err) {
+void node::add_ingress(node_id src, std::shared_ptr<ingress> ingress) {
     if (ingresses.find(src) != ingresses.end()) {
         throw err_duplicate_ingress(get_id().get_numeric_id(),
                                     src.get_numeric_id());
@@ -44,7 +44,7 @@ void node::add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err) {
                        flits_per_queue);
 }
 
-void node::add_egress(node_id dst, shared_ptr<egress> egress) throw(err) {
+void node::add_egress(node_id dst, std::shared_ptr<egress> egress) {
     if (egresses.find(dst) != egresses.end()) {
         throw err_duplicate_egress(get_id().get_numeric_id(),
                                    dst.get_numeric_id());
@@ -56,7 +56,7 @@ void node::add_egress(node_id dst, shared_ptr<egress> egress) throw(err) {
     stats->add_egress(get_id(), dst, egress->get_bandwidth());
 }
 
-shared_ptr<ingress> node::get_ingress_from(node_id src) throw(err) {
+std::shared_ptr<ingress> node::get_ingress_from(node_id src) {
     assert(src.is_valid());
     if (ingresses.find(src) == ingresses.end()) {
         throw err_bad_neighbor(get_id().get_numeric_id(), src.get_numeric_id());
@@ -64,7 +64,7 @@ shared_ptr<ingress> node::get_ingress_from(node_id src) throw(err) {
     return ingresses[src];
 }
 
-shared_ptr<egress> node::get_egress_to(node_id dst) throw(err) {
+std::shared_ptr<egress> node::get_egress_to(node_id dst) {
     assert(dst.is_valid());
     if (egresses.find(dst) == egresses.end()) {
         throw err_bad_neighbor(get_id().get_numeric_id(), dst.get_numeric_id());
@@ -72,31 +72,31 @@ shared_ptr<egress> node::get_egress_to(node_id dst) throw(err) {
     return egresses[dst];
 }
 
-shared_ptr<router> node::get_router() throw() { return rt; }
+std::shared_ptr<router> node::get_router() { return rt; }
 
-shared_ptr<channel_alloc> node::get_channel_alloc() throw() { return vc_alloc; }
+std::shared_ptr<channel_alloc> node::get_channel_alloc() { return vc_alloc; }
 
-shared_ptr<pressure_tracker> node::get_pressures() throw() { return pressures; }
+std::shared_ptr<pressure_tracker> node::get_pressures() { return pressures; }
 
 void node::connect_from(const string &port_name,
-                        shared_ptr<node> src, const string &src_port_name,
+                        std::shared_ptr<node> src, const string &src_port_name,
                         const set<virtual_queue_id> &vq_ids, unsigned link_bw,
                         unsigned bw_to_xbar)
-    throw(err) {
+    {
     ingress_id dst_id(get_id(), port_name);
-    shared_ptr<ingress> ingr =
-        shared_ptr<ingress>(new ingress(dst_id, src->get_id(), vq_ids,
+    std::shared_ptr<ingress> ingr =
+        std::shared_ptr<ingress>(new ingress(dst_id, src->get_id(), vq_ids,
                                         flits_per_queue, bw_to_xbar,
                                         vc_alloc, pressures, stats, vcd, log));
     egress_id src_id(src->get_id(), src_port_name);
-    shared_ptr<egress> egr =
-        shared_ptr<egress>(new egress(src_id, ingr, src->get_pressures(),
+    std::shared_ptr<egress> egr =
+        std::shared_ptr<egress>(new egress(src_id, ingr, src->get_pressures(),
                                       link_bw, log));
     add_ingress(src->get_id(), ingr);
     src->add_egress(get_id(), egr);
 }
 
-void node::tick_positive_edge() throw(err) {
+void node::tick_positive_edge() {
     for (ingresses_t::iterator n = ingresses.begin();
          n != ingresses.end(); ++n) {
         n->second->tick_positive_edge();
@@ -107,7 +107,7 @@ void node::tick_positive_edge() throw(err) {
     pwr_ctl.adjust_power();
 }
 
-void node::tick_negative_edge() throw(err) {
+void node::tick_negative_edge() {
     for (ingresses_t::iterator n = ingresses.begin();
          n != ingresses.end(); ++n) {
         n->second->tick_negative_edge();
@@ -115,7 +115,7 @@ void node::tick_negative_edge() throw(err) {
     xbar.tick_negative_edge();
 }
 
-bool node::is_drained() const throw() {
+bool node::is_drained() const {
     bool drained = true;
     for (ingresses_t::const_iterator n = ingresses.begin();
          n != ingresses.end(); ++n) {

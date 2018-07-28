@@ -5,55 +5,52 @@
 #define __VIRTUAL_QUEUE_ID_HPP__
 
 #include <iostream>
-#include <boost/tuple/tuple.hpp>
-#include <boost/tuple/tuple_comparison.hpp>
 #include "cstdint.hpp"
 #include "node_id.hpp"
 
 using namespace std;
-using namespace boost;
 
 class virtual_queue_id {
 public:
-    virtual_queue_id() throw();
-    virtual_queue_id(uint32_t new_id) throw();
-    virtual_queue_id operator+(int) const throw();
-    bool is_valid() const throw();
-    bool operator==(const virtual_queue_id &) const throw();
-    bool operator<(const virtual_queue_id &) const throw();
-    uint32_t get_numeric_id() const throw();
+    virtual_queue_id();
+    virtual_queue_id(uint32_t new_id);
+    virtual_queue_id operator+(int) const;
+    bool is_valid() const;
+    bool operator==(const virtual_queue_id &) const;
+    bool operator<(const virtual_queue_id &) const;
+    uint32_t get_numeric_id() const;
     friend ostream &operator<<(ostream &, const virtual_queue_id &);
 private:
     uint32_t id;
 };
 
-typedef tuple<node_id, virtual_queue_id> virtual_queue_node_id;
+typedef std::tuple<node_id, virtual_queue_id> virtual_queue_node_id;
 
-inline virtual_queue_id::virtual_queue_id() throw()
+inline virtual_queue_id::virtual_queue_id()
     : id(0xffffffffUL) { }
 
-inline virtual_queue_id::virtual_queue_id(uint32_t new_id) throw()
+inline virtual_queue_id::virtual_queue_id(uint32_t new_id)
     : id(new_id) { }
 
-inline bool virtual_queue_id::is_valid() const throw() {
+inline bool virtual_queue_id::is_valid() const {
     return id != 0xffffffffUL;
 }
 
-inline virtual_queue_id virtual_queue_id::operator+(int diff) const throw() {
+inline virtual_queue_id virtual_queue_id::operator+(int diff) const {
     return virtual_queue_id(id + diff);
 }
 
 inline bool
-virtual_queue_id::operator==(const virtual_queue_id &o) const throw() {
+virtual_queue_id::operator==(const virtual_queue_id &o) const {
     return id == o.id;
 }
 
 inline bool
-virtual_queue_id::operator<(const virtual_queue_id &o) const throw() {
+virtual_queue_id::operator<(const virtual_queue_id &o) const {
     return id < o.id;
 }
 
-inline uint32_t virtual_queue_id::get_numeric_id() const throw() { return id; }
+inline uint32_t virtual_queue_id::get_numeric_id() const { return id; }
 
 ostream &operator<<(ostream &, const virtual_queue_id &);
 

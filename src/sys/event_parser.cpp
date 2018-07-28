@@ -11,26 +11,26 @@
 #include <iterator>
 #include "event_parser.hpp"
  
-event_parser::event_parser(shared_ptr<vector<string> > events_files,
-                           shared_ptr<injectors_t> injs,
-                           shared_ptr<flow_starts_t> fss) throw(err)
+event_parser::event_parser(std::shared_ptr<vector<string> > events_files,
+                           std::shared_ptr<injectors_t> injs,
+                           std::shared_ptr<flow_starts_t> fss)
     : injectors(injs), flow_starts(fss), input(), line(),
         pos("", 0), cur_tick(0) {
     if (!events_files) return;
     for (vector<string>::const_iterator fi = events_files->begin();
          fi != events_files->end(); ++fi) {
-        input = shared_ptr<istream>(new ifstream(fi->c_str()));
+        input = std::shared_ptr<istream>(new ifstream(fi->c_str()));
         if (input->fail()) throw err_parse(*fi,"cannot open file");
-        for (pos = pos_t(*fi, 1); input->good(); pos.get<1>()++) {
+        for (pos = pos_t(*fi, 1); input->good(); get<1>(pos)++) {
             string l;
             getline(*input, l);
-            line = shared_ptr<istream>(new istringstream(l));
+            line = std::shared_ptr<istream>(new istringstream(l));
             p_line();
         }
     }
 }
 
-uint64_t event_parser::p_nat(uint64_t low) throw(err) {
+uint64_t event_parser::p_nat(uint64_t low) {
     uint64_t n;
     string s;
     *line >> s;
@@ -39,12 +39,12 @@ uint64_t event_parser::p_nat(uint64_t low) throw(err) {
         msg << "found "
             << (s.size() == 0 ? "end of line" : "a comment")
             << " while expecting a number";
-        throw err_parse(pos.get<0>(), pos.get<1>(), msg.str());
+        throw err_parse(get<0>(pos), get<1>(pos), msg.str());
     }
     if (s[0] == '#') {
         ostringstream msg;
         msg << "found a comment while expecting a number";
-        throw err_parse(pos.get<0>(), pos.get<1>(), msg.str());
+        throw err_parse(get<0>(pos), get<1>(pos), msg.str());
     }
     char *end;
     if (s.size() > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
@@ -57,17 +57,17 @@ uint64_t event_parser::p_nat(uint64_t low) throw(err) {
     if (*end != '\0') {
         ostringstream msg;
         msg << "invalid number: \"" << s << "\"";
-        throw err_parse(pos.get<0>(), pos.get<1>(), msg.str());
+        throw err_parse(get<0>(pos), get<1>(pos), msg.str());
     }
     if (n < low) {
         ostringstream msg;
         msg << "number must be at least " << low << ": " << s;
-        throw err_parse(pos.get<0>(), pos.get<1>(), msg.str());
+        throw err_parse(get<0>(pos), get<1>(pos), msg.str());
     }
     return n;
 }
 
-string event_parser::p_kw(const set<string> &kws, bool empty_ok) throw(err) {
+string event_parser::p_kw(const set<string> &kws, bool empty_ok) {
     assert(kws.size() > 0);
     string w;
     *line >> w;
@@ -80,7 +80,7 @@ string event_parser::p_kw(const set<string> &kws, bool empty_ok) throw(err) {
             if (i != kws.begin()) msg << " or ";
             msg << "\"" << *i << "\"";
         }
-        throw err_parse(pos.get<0>(), pos.get<1>(), msg.str());
+        throw err_parse(get<0>(pos), get<1>(pos), msg.str());
     } else if (kws.find(w) == kws.end()) {
         ostringstream msg;
         msg << "found \"" << w << "\" while expecting "
@@ -90,27 +90,27 @@ string event_parser::p_kw(const set<string> &kws, bool empty_ok) throw(err) {
             msg << "\"" << *i << "\"";
         }
         msg << "\"";
-        throw err_parse(pos.get<0>(), pos.get<1>(), msg.str());
+        throw err_parse(get<0>(pos), get<1>(pos), msg.str());
     }
     return w;
 }
 
-string event_parser::p_kw(const string &kw1, bool empty_ok) throw(err) {
+string event_parser::p_kw(const string &kw1, bool empty_ok) {
     set<string> kws; kws.insert(kw1);
     return p_kw(kws, empty_ok);
 }
 
 string event_parser::p_kw(const string &kw1, const string &kw2,
-                          bool empty_ok) throw(err) {
+                          bool empty_ok) {
     set<string> kws; kws.insert(kw1); kws.insert(kw2);
     return p_kw(kws, empty_ok);
 }
 
-void event_parser::p_flow(const flow_id &flow) throw(err) {
+void event_parser::p_flow(const flow_id &flow) {
     if (flow_starts->find(flow) == flow_starts->end()) {
         ostringstream msg;
         msg << "flow " << flow << " is not configured";
-        throw err_parse(pos.get<0>(), pos.get<1>(), msg.str());
+        throw err_parse(get<0>(pos), get<1>(pos), msg.str());
     }
     node_id n = (*flow_starts)[flow];
     if (n < 0 || n.get_numeric_id() >= injectors->size()
@@ -118,7 +118,7 @@ void event_parser::p_flow(const flow_id &flow) throw(err) {
         ostringstream msg;
         msg << "node " << n << ", where flow " << flow << " originates, "
             << " is not an injector";
-        throw err_parse(pos.get<0>(), pos.get<1>(), msg.str());
+        throw err_parse(get<0>(pos), get<1>(pos), msg.str());
     }
     uint32_t packet_size;
     uint64_t period;
@@ -139,7 +139,7 @@ void event_parser::p_flow(const flow_id &flow) throw(err) {
         ->add_event(cur_tick, flow, packet_size, period);
 }
 
-void event_parser::p_line() throw(err) {
+void event_parser::p_line() {
     *line >> skipws;
     string w = p_kw("tick", "flow", true);
     if (w.size() == 0) return;
@@ -149,7 +149,7 @@ void event_parser::p_line() throw(err) {
             ostringstream msg;
             msg << "tick " << dec << t << " precedes previous tick ("
                 << cur_tick << ")";
-            throw err_parse(pos.get<0>(), pos.get<1>(), msg.str());
+            throw err_parse(get<0>(pos), get<1>(pos), msg.str());
         }
         cur_tick = t;
     } else if (w == "flow") {
@@ -157,6 +157,6 @@ void event_parser::p_line() throw(err) {
     } else {
         ostringstream msg;
         msg << "bad command: \"" << w << "\"";
-        throw err_parse(pos.get<0>(), pos.get<1>(), msg.str());
+        throw err_parse(get<0>(pos), get<1>(pos), msg.str());
     }
 }

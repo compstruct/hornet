@@ -9,8 +9,6 @@
 #include <set>
 #include <map>
 #include <queue>
-#include <boost/tuple/tuple.hpp>
-#include <boost/tuple/tuple_comparison.hpp>
 #include <boost/thread.hpp>
 #include "error.hpp"
 #include "flow_id.hpp"
@@ -30,9 +28,9 @@ using namespace boost;
 
 class flow_rename_table {
 public:
-    explicit flow_rename_table() throw();
-    void add_flow_rename(const flow_id &from, const flow_id &to) throw(err);
-    flow_id operator[](flow_id f) const throw();
+    explicit flow_rename_table();
+    void add_flow_rename(const flow_id &from, const flow_id &to);
+    flow_id operator[](flow_id f) const;
 private:
     typedef map<flow_id, flow_id> table_t;
     table_t table;
@@ -40,14 +38,14 @@ private:
 
 class running_stats {
 public:
-    explicit running_stats() throw();
-    void add(double sample, double weight) throw();
-    void reset() throw();
-    double get_min() const throw();
-    double get_max() const throw();
-    double get_mean() const throw();
-    double get_std_dev() const throw();
-    void combine_with(const running_stats &other_stats) throw();
+    explicit running_stats();
+    void add(double sample, double weight);
+    void reset();
+    double get_min() const;
+    double get_max() const;
+    double get_mean() const;
+    double get_std_dev() const;
+    void combine_with(const running_stats &other_stats);
     inline uint64_t sample_count()  {return num_samples;}
 private:
     double minimum;
@@ -60,11 +58,11 @@ private:
 
 class reorder_buffer {
 public:
-    explicit reorder_buffer() throw();
-    void receive_packet(const head_flit &flt) throw();
-    uint32_t get_buffer_length() const throw();
-    uint32_t get_received_count() const throw();
-    uint32_t get_out_of_order_count() const throw();
+    explicit reorder_buffer();
+    void receive_packet(const head_flit &flt);
+    uint32_t get_buffer_length() const;
+    uint32_t get_received_count() const;
+    uint32_t get_out_of_order_count() const;
 private:
     map<flow_id, packet_id> next_packet_ids;
     map<flow_packet_id, uint32_t> buffered_packet_lengths;
@@ -78,58 +76,58 @@ class system_statistics;
 class tile_statistics {
 public:
     tile_statistics(const uint64_t &system_time, const uint64_t &start_time,
-                    shared_ptr<flow_rename_table> flow_renames) throw();
-    bool is_started() throw();
-    void reset() throw();
-    void start_sim() throw();
-    void end_sim() throw();
-    void send_flit(const flow_id &, const flit &) throw();
-    void receive_flit(const flow_id &, const flit &) throw();
+                    std::shared_ptr<flow_rename_table> flow_renames);
+    bool is_started();
+    void reset();
+    void start_sim();
+    void end_sim();
+    void send_flit(const flow_id &, const flit &);
+    void receive_flit(const flow_id &, const flit &);
     void offer_packet(const flow_id &flow, const packet_id &pkt,
-                      uint32_t len) throw();
+                      uint32_t len);
     void send_packet(const flow_id &flow, const packet_id &pkt,
-                     uint32_t len) throw();
-    void receive_packet(const head_flit &flt) throw();
+                     uint32_t len);
+    void receive_packet(const head_flit &flt);
     void switch_links(const egress_id &src, const egress_id &dst,
-                      unsigned min_link, unsigned num_links) throw();
+                      unsigned min_link, unsigned num_links);
     void xbar(node_id id, int transmitted_flits, int requested_flits,
-              double req_frac, double bw_frac) throw();
+              double req_frac, double bw_frac);
     void cxn_xmit(node_id src, node_id dst, unsigned used,
-                  double req_frac, double bw_frac) throw();
+                  double req_frac, double bw_frac);
     void add_ingress(node_id src, node_id dst, uint64_t num_vqs,
                      uint64_t bw2xbar,
-                     uint64_t flits_per_vq) throw();
-    void add_egress(node_id src, node_id dst, uint64_t bandwidth) throw();
+                     uint64_t flits_per_vq);
+    void add_egress(node_id src, node_id dst, uint64_t bandwidth);
     void va_alloc(node_id id, int va_act_stage1_port, double va_req_stage1_port,
                               int va_act_stage2_port, double va_req_stage2_port,
                               int va_act_stage1_bridge, double va_req_stage1_bridge,
-                              int va_act_stage2_bridge, double va_req_stage2_bridge) throw();
+                              int va_act_stage2_bridge, double va_req_stage2_bridge);
     void sw_alloc(node_id id, int sw_act_stage1_port, double sw_req_stage1_port,
                               int sw_act_stage2_port, double sw_req_stage2_port,
                               int sw_act_stage1_bridge, double sw_req_stage1_bridge,
-                              int sw_act_stage2_bridge, double sw_req_stage2_bridge) throw();
-    uint64_t get_received_packet_count() const throw();
-    void vq_wr(const virtual_queue_node_id &vq_id, const ingress_id &ig_id) throw();
-    void vq_rd(const virtual_queue_node_id &vq_id, const ingress_id &ig_id) throw();
-    inline uint64_t get_system_time() const throw();
-    inline uint64_t get_start_time() const throw();
+                              int sw_act_stage2_bridge, double sw_req_stage2_bridge);
+    uint64_t get_received_packet_count() const;
+    void vq_wr(const virtual_queue_node_id &vq_id, const ingress_id &ig_id);
+    void vq_rd(const virtual_queue_node_id &vq_id, const ingress_id &ig_id);
+    inline uint64_t get_system_time() const;
+    inline uint64_t get_start_time() const;
 
 public:
     friend ostream &operator<<(ostream &, const system_statistics &);
 private:
     const uint64_t &system_time;
     const uint64_t &start_time;
-    shared_ptr<flow_rename_table> flow_renames;
+    std::shared_ptr<flow_rename_table> flow_renames;
     typedef map<flow_id, uint64_t> flit_counter_t;
     typedef map<virtual_queue_node_id, uint64_t> vq_counter_t;
     typedef map<node_id, uint64_t> vq_node_counter_t;
-    typedef tuple<egress_id, egress_id, unsigned> sub_link_id;
+    typedef std::tuple<egress_id, egress_id, unsigned> sub_link_id;
     typedef map<sub_link_id, uint64_t> link_switch_counter_t;
     typedef map<node_id, uint64_t> node_counter_t;
     typedef map<node_id, running_stats> node_stats_t;
     typedef map<flow_id, running_stats> flow_stats_t;
     typedef map<int,uint64_t> flit_stats_t;
-    typedef tuple<node_id, node_id> cxn_id;
+    typedef std::tuple<node_id, node_id> cxn_id;
     typedef map<cxn_id, running_stats> cxn_stats_t;
     typedef map<cxn_id, uint64_t> cxn_counter_t;
     flit_counter_t offered_flits;
@@ -216,15 +214,15 @@ protected:
 
 class system_statistics {
 public:
-    explicit system_statistics() throw();
-    uint64_t get_received_packet_count() const throw();
-    void add(uint32_t id, shared_ptr<tile_statistics> new_stats) throw();
-    void reset() throw();
-    void start_sim() throw();
-    void end_sim() throw();
-    inline uint64_t  get_stats_time(uint32_t index) const throw();
-    shared_ptr<tile_statistics> get_tile_stats(uint32_t index) const throw();
-    inline void add_aux_statistics(shared_ptr<aux_statistics> stats) { aux_stats.push_back(stats); }
+    explicit system_statistics();
+    uint64_t get_received_packet_count() const;
+    void add(uint32_t id, std::shared_ptr<tile_statistics> new_stats);
+    void reset();
+    void start_sim();
+    void end_sim();
+    inline uint64_t  get_stats_time(uint32_t index) const;
+    std::shared_ptr<tile_statistics> get_tile_stats(uint32_t index) const;
+    inline void add_aux_statistics(std::shared_ptr<aux_statistics> stats) { aux_stats.push_back(stats); }
 public:
     friend ostream &operator<<(ostream &, const system_statistics &);
 
@@ -233,31 +231,31 @@ public:
 #endif
 
 private:
-    typedef map<uint32_t, shared_ptr<tile_statistics> > tile_stats_t;
-    typedef vector<shared_ptr<aux_statistics> > aux_stats_t;
+    typedef map<uint32_t, std::shared_ptr<tile_statistics> > tile_stats_t;
+    typedef vector<std::shared_ptr<aux_statistics> > aux_stats_t;
 
     tile_stats_t tile_stats;
     aux_stats_t aux_stats;
 };
 
-inline uint64_t tile_statistics::get_system_time() const throw() {
+inline uint64_t tile_statistics::get_system_time() const {
        return system_time; }
 
-inline uint64_t tile_statistics::get_start_time() const throw() {
+inline uint64_t tile_statistics::get_start_time() const {
        return start_time; }
 
-inline uint64_t system_statistics::get_stats_time(uint32_t index) const throw()  {
+inline uint64_t system_statistics::get_stats_time(uint32_t index) const  {
     tile_stats_t::const_iterator ti = tile_stats.find(index);
     assert(ti != tile_stats.end());
-    const shared_ptr<tile_statistics> ts = ti->second;
+    const std::shared_ptr<tile_statistics> ts = ti->second;
     return ts->get_system_time() - ts->get_start_time();
 }
 
-inline shared_ptr<tile_statistics> system_statistics::get_tile_stats(uint32_t index) 
-   const throw() {
+inline std::shared_ptr<tile_statistics> system_statistics::get_tile_stats(uint32_t index) 
+   const {
       tile_stats_t::const_iterator ti = tile_stats.find(index);
       assert(ti != tile_stats.end());
-      const shared_ptr<tile_statistics> ts = ti->second;
+      const std::shared_ptr<tile_statistics> ts = ti->second;
     return ts;
 }    
 

@@ -11,35 +11,35 @@ using namespace std;
 
 class flow_id {
 public:
-    flow_id(uint32_t new_id) throw();
-    flow_id() throw();
-    bool is_valid() const throw();
-    uint32_t get_numeric_id() const throw();
-    bool operator==(const flow_id &) const throw();
-    bool operator!=(const flow_id &) const throw();
-    bool operator<(const flow_id &) const throw();
+    flow_id(uint32_t new_id);
+    flow_id();
+    bool is_valid() const;
+    uint32_t get_numeric_id() const;
+    bool operator==(const flow_id &) const;
+    bool operator!=(const flow_id &) const;
+    bool operator<(const flow_id &) const;
 private:
     friend ostream &operator<<(ostream &, const flow_id &);
     uint32_t id;
 };
 
-inline flow_id::flow_id(uint32_t new_id) throw() : id(new_id) { }
+inline flow_id::flow_id(uint32_t new_id) : id(new_id) { }
 
-inline flow_id::flow_id() throw() : id(0xffffffffUL) { }
+inline flow_id::flow_id() : id(0xffffffffUL) { }
 
-inline bool flow_id::is_valid() const throw() { return id != 0xffffffffUL; }
+inline bool flow_id::is_valid() const { return id != 0xffffffffUL; }
 
-inline uint32_t flow_id::get_numeric_id() const throw() { return id; }
+inline uint32_t flow_id::get_numeric_id() const { return id; }
 
-inline bool flow_id::operator==(const flow_id &o) const throw() {
+inline bool flow_id::operator==(const flow_id &o) const {
     return id == o.id;
 }
 
-inline bool flow_id::operator!=(const flow_id &o) const throw() {
+inline bool flow_id::operator!=(const flow_id &o) const {
     return !operator==(o);
 }
 
-inline bool flow_id::operator<(const flow_id &o) const throw() {
+inline bool flow_id::operator<(const flow_id &o) const {
     return id < o.id;
 }
 

@@ -4,7 +4,7 @@
 #ifndef __CAT_HPP__
 #define __CAT_HPP__
 
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include <boost/thread.hpp>
 #include <vector>
 #include <map>
@@ -38,8 +38,8 @@ public:
     /* LEGACY - remove */
     inline void set_milestone_time(uint64_t time) { m_serialization_begin_time = time; }
     inline uint64_t milestone_time() { return m_serialization_begin_time; }
-    inline void set_stats_info(shared_ptr<void> info) { m_stats_info = info; }
-    inline shared_ptr<void> stats_info() { return m_stats_info; }
+    inline void set_stats_info(std::shared_ptr<void> info) { m_stats_info = info; }
+    inline std::shared_ptr<void> stats_info() { return m_stats_info; }
 
     inline void set_serialization_begin_time(uint64_t time) { m_serialization_begin_time = time; }
     inline uint64_t serialization_begin_time() { return m_serialization_begin_time; }
@@ -59,7 +59,7 @@ private:
     uint64_t m_operation_begin_time;
 
     /* LEGACY - remove */
-    shared_ptr<void> m_stats_info;
+    std::shared_ptr<void> m_stats_info;
 
 };
 
@@ -94,17 +94,17 @@ public:
         uint32_t num_ports, uint32_t latency, uint32_t allocation_unit_in_bytes);
     virtual ~cat();
 
-    virtual void request(shared_ptr<catRequest> req) = 0;
+    virtual void request(std::shared_ptr<catRequest> req) = 0;
     virtual void tick_positive_edge() = 0;
     virtual void tick_negative_edge() = 0;
 
     inline bool available() { return (m_num_ports == 0 || m_num_free_ports > 0); }
 
 protected:
-    inline void set_req_status(shared_ptr<catRequest> req, catReqStatus_t status) { req->m_status = status; }
-    inline void set_req_home(shared_ptr<catRequest> req, uint32_t home) { req->m_home = home; }
-    inline maddr_t req_maddr(shared_ptr<catRequest> req) { return req->m_maddr; }
-    inline uint32_t req_sender(shared_ptr<catRequest> req) { return req->m_sender; }
+    inline void set_req_status(std::shared_ptr<catRequest> req, catReqStatus_t status) { req->m_status = status; }
+    inline void set_req_home(std::shared_ptr<catRequest> req, uint32_t home) { req->m_home = home; }
+    inline maddr_t req_maddr(std::shared_ptr<catRequest> req) { return req->m_maddr; }
+    inline uint32_t req_sender(std::shared_ptr<catRequest> req) { return req->m_sender; }
 
     inline maddr_t get_start_maddr_in_unit(maddr_t maddr) { 
         maddr.address -= maddr.address % m_allocation_unit_in_bytes; 
@@ -126,13 +126,13 @@ public:
               uint32_t latency, uint32_t allocation_unit_in_bytes);
     virtual ~catStripe();
 
-    virtual void request(shared_ptr<catRequest> req);
+    virtual void request(std::shared_ptr<catRequest> req);
     virtual void tick_positive_edge();
     virtual void tick_negative_edge();
 
 protected:
     typedef struct {
-        shared_ptr<catRequest> request;
+        std::shared_ptr<catRequest> request;
         uint64_t available_time;
     } entry_t;
 
@@ -143,10 +143,10 @@ class catStatic : public cat {
 public:
     catStatic(uint32_t num_nodes, const uint64_t& system_time, uint32_t num_ports, 
               uint32_t latency, uint32_t allocation_unit_in_bytes, uint32_t synch_delay,
-              shared_ptr<SynchedCATModel> model);
+              std::shared_ptr<SynchedCATModel> model);
     virtual ~catStatic();
 
-    virtual void request(shared_ptr<catRequest> req);
+    virtual void request(std::shared_ptr<catRequest> req);
     virtual void tick_positive_edge();
     virtual void tick_negative_edge();
 
@@ -154,7 +154,7 @@ public:
 
 protected:
     typedef struct {
-        shared_ptr<catRequest> request;
+            std::shared_ptr<catRequest> request;
         uint64_t available_time;
     } request_entry_t;
 
@@ -163,7 +163,7 @@ protected:
         uint64_t available_time;
     } map_entry_t;
 
-    shared_ptr<SynchedCATModel> m_model;
+    std::shared_ptr<SynchedCATModel> m_model;
     uint32_t m_synch_delay;
     map<maddr_t, map_entry_t> m_map;
     //map<uint32_t/*space*/, map<uint64_t/*index*/, map_entry_t> > m_map;
@@ -175,16 +175,16 @@ class catFirstTouch : public cat {
 public:
     catFirstTouch(uint32_t num_nodes, const uint64_t& system_time, uint32_t num_port, 
                   uint32_t latency, uint32_t allocation_unit_in_bytes, uint32_t synch_delay,
-                  shared_ptr<SynchedCATModel> model);
+                  std::shared_ptr<SynchedCATModel> model);
     virtual ~catFirstTouch();
 
-    virtual void request(shared_ptr<catRequest> req);
+    virtual void request(std::shared_ptr<catRequest> req);
     virtual void tick_positive_edge();
     virtual void tick_negative_edge();
 
 protected:
     typedef struct {
-        shared_ptr<catRequest> request;
+        std::shared_ptr<catRequest> request;
         uint64_t available_time;
     } request_entry_t;
 
@@ -193,7 +193,7 @@ protected:
         uint64_t available_time;
     } map_entry_t;
 
-    shared_ptr<SynchedCATModel> m_model;
+    std::shared_ptr<SynchedCATModel> m_model;
     uint32_t m_synch_delay;
     map<maddr_t, map_entry_t> m_map;
     vector<request_entry_t> m_req_entry_queue;

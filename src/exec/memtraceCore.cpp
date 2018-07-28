@@ -15,17 +15,17 @@
 #endif
 
 memtraceCore::memtraceCore(const pe_id &id, const uint64_t &t,
-                           shared_ptr<id_factory<packet_id> > pif,
-                           shared_ptr<tile_statistics> st, logger &l,
-                           shared_ptr<random_gen> r,
-                           shared_ptr<memtraceThreadPool> pool,
-                           shared_ptr<memory> mem,
+                           std::shared_ptr<id_factory<packet_id> > pif,
+                           std::shared_ptr<tile_statistics> st, logger &l,
+                           std::shared_ptr<random_gen> r,
+                           std::shared_ptr<memtraceThreadPool> pool,
+                           std::shared_ptr<memory> mem,
                            bool support_em,
                            uint32_t msg_queue_size,
                            uint32_t bytes_per_flit,
                            uint32_t flits_per_context,
-                           uint32_t max_threads) throw(err) : 
-    core(id, t, pif, st, l, r, mem, (support_em?2:0), msg_queue_size, bytes_per_flit),
+                           uint32_t max_threads) : 
+    common_core(id, t, pif, st, l, r, mem, (support_em?2:0), msg_queue_size, bytes_per_flit),
     m_support_em(support_em), m_flits_per_context(flits_per_context), m_max_threads(max_threads),
     m_lane_ptr(0), m_num_threads(0), m_num_natives(0), m_num_guests(0), 
     m_threads(pool), m_do_evict(false) 
@@ -41,7 +41,7 @@ memtraceCore::memtraceCore(const pe_id &id, const uint64_t &t,
     m_pending_mig.valid = false;
 }
 
-memtraceCore::~memtraceCore() throw() {}
+memtraceCore::~memtraceCore() {}
 
 void memtraceCore::execute() {
 
@@ -74,7 +74,7 @@ void memtraceCore::execute() {
 #else
                     && m_lanes[cand].evictable) { 
 #endif
-                    shared_ptr<message_t> new_msg(new message_t);
+                    std::shared_ptr<message_t> new_msg(new message_t);
                     new_msg->src = get_id().get_numeric_id();
                     new_msg->dst = m_lanes[cand].thread->native_core();
                     new_msg->flit_count = m_flits_per_context;
@@ -97,7 +97,7 @@ void memtraceCore::execute() {
             for (uint32_t i = 0; i < m_lanes.size(); ++i) {
                 lane_idx_t cand = (start + i)%m_lanes.size();
                 if ( m_lanes[cand].status == LANE_MIG ) {
-                    shared_ptr<message_t> new_msg(new message_t);
+                    std::shared_ptr<message_t> new_msg(new message_t);
                     new_msg->src = get_id().get_numeric_id();
                     new_msg->dst = m_lanes[cand].req->home();
                     new_msg->flit_count = m_flits_per_context;
@@ -161,13 +161,13 @@ void memtraceCore::execute() {
                 /* finished execution */
                 if (cur.thread->type() == memtraceThread::INST_MEMORY) {
                     if (cur.thread->is_read()) {
-                        cur.req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), 
+                        cur.req = std::shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), 
                                                                               cur.thread->word_count(),
                                                                               cur.thread->per_mem_instr_runtime_info()));
                     } else {
                         /* this core model doesn't care data */
                         shared_array<uint32_t> dummy = shared_array<uint32_t>(new uint32_t[cur.thread->word_count()]);
-                        cur.req = shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), 
+                        cur.req = std::shared_ptr<memoryRequest>(new memoryRequest(cur.thread->maddr(), 
                                                                               cur.thread->word_count(), 
                                                                               dummy,
                                                                               cur.thread->per_mem_instr_runtime_info()));
@@ -192,8 +192,8 @@ void memtraceCore::execute() {
 
         /* emulate one queue per each lane - can take all native contexts */
         for (uint32_t i = 0; i < num_arrived_natives; ++i) {
-            shared_ptr<message_t> msg = receive_queue(m_first_core_msg_type)->front();
-            shared_ptr<memtraceThread> new_thread = static_pointer_cast<memtraceThread>(msg->content);
+            std::shared_ptr<message_t> msg = receive_queue(m_first_core_msg_type)->front();
+            std::shared_ptr<memtraceThread> new_thread = static_pointer_cast<memtraceThread>(msg->content);
             load_thread(new_thread);
             new_thread->stats()->did_arrive_destination();
             receive_queue(m_first_core_msg_type)->pop();
@@ -201,8 +201,8 @@ void memtraceCore::execute() {
         /* may take up to num_lanes - num_native_lanes */
         uint32_t max_guests = m_max_threads - m_native_list.size();
         for (uint32_t i = 0; i < num_arrived_guests && m_num_guests < max_guests; ++i) {
-            shared_ptr<message_t> msg = receive_queue(m_first_core_msg_type+1)->front();
-            shared_ptr<memtraceThread> new_thread = static_pointer_cast<memtraceThread>(msg->content);
+            std::shared_ptr<message_t> msg = receive_queue(m_first_core_msg_type+1)->front();
+            std::shared_ptr<memtraceThread> new_thread = static_pointer_cast<memtraceThread>(msg->content);
             load_thread(new_thread);
             new_thread->stats()->did_arrive_destination();
             receive_queue(m_first_core_msg_type+1)->pop();
@@ -255,7 +255,7 @@ void memtraceCore::update_from_memory_requests() {
     }
 }
 
-uint64_t memtraceCore::next_pkt_time() throw(err) { 
+uint64_t memtraceCore::next_pkt_time() { 
     if (is_drained()) {
         m_memory->turn_off();
         return UINT64_MAX;
@@ -264,11 +264,11 @@ uint64_t memtraceCore::next_pkt_time() throw(err) {
     }
 }
 
-bool memtraceCore::is_drained() const throw() { 
+bool memtraceCore::is_drained() const { 
     return m_threads->empty();
 }
 
-void memtraceCore::load_thread(shared_ptr<memtraceThread> thread) {
+void memtraceCore::load_thread(std::shared_ptr<memtraceThread> thread) {
     assert(m_num_threads < m_max_threads);
     for (lane_idx_t i = 0; i < m_lanes.size(); ++i) {
         if (m_lanes[i].status == LANE_EMPTY) {
@@ -307,7 +307,7 @@ void memtraceCore::unload_thread(lane_idx_t idx) {
         << " ] is unloaded on " << get_id().get_numeric_id() << endl;
 }
 
-void memtraceCore::spawn(shared_ptr<memtraceThread> thread) {
+void memtraceCore::spawn(std::shared_ptr<memtraceThread> thread) {
     /* register as a native context */
     m_native_list.insert(thread->get_id());
     thread->set_native_core(get_id().get_numeric_id());

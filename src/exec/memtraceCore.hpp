@@ -14,28 +14,28 @@
 #define APPROVED_VISIT_PERIOD 100
 #endif
 
-class memtraceCore : public core {
+class memtraceCore : public common_core {
 public:
     memtraceCore(const pe_id &id, const uint64_t &system_time,
-                 shared_ptr<id_factory<packet_id> > packet_id_factory,
-                 shared_ptr<tile_statistics> stats, logger &log,
-                 shared_ptr<random_gen> ran,
-                 shared_ptr<memtraceThreadPool> pool,
-                 shared_ptr<memory> mem,
+                 std::shared_ptr<id_factory<packet_id> > packet_id_factory,
+                 std::shared_ptr<tile_statistics> stats, logger &log,
+                 std::shared_ptr<random_gen> ran,
+                 std::shared_ptr<memtraceThreadPool> pool,
+                 std::shared_ptr<memory> mem,
                  bool support_em,
                  uint32_t msg_queue_size,
                  uint32_t bytes_per_flit,
                  uint32_t flits_per_context,
-                 uint32_t max_threads) throw(err);
-    virtual ~memtraceCore() throw();
+                 uint32_t max_threads);
+    virtual ~memtraceCore();
 
     virtual void execute();
     virtual void update_from_memory_requests();
 
-    virtual uint64_t next_pkt_time() throw(err);
-    virtual bool is_drained() const throw();
+    virtual uint64_t next_pkt_time();
+    virtual bool is_drained() const;
 
-    void spawn(shared_ptr<memtraceThread> thread);
+    void spawn(std::shared_ptr<memtraceThread> thread);
 
 private:
     map<uint32_t, flow_id> flow_ids;
@@ -60,8 +60,8 @@ private:
 #ifdef LIVELOCK_PERFORMANCE_STUDY 
         uint64_t evictable_time;
 #endif
-        shared_ptr<memtraceThread> thread;
-        shared_ptr<memoryRequest> req;
+        std::shared_ptr<memtraceThread> thread;
+        std::shared_ptr<memoryRequest> req;
         uint64_t last_memory_issued;
     } lane_entry_t;
 
@@ -76,7 +76,7 @@ private:
 
 private:
     /* Local methods */
-    void load_thread(shared_ptr<memtraceThread> thread);
+    void load_thread(std::shared_ptr<memtraceThread> thread);
     void unload_thread(lane_idx_t idx);
 
 private:
@@ -87,7 +87,7 @@ private:
     uint32_t m_num_guests;
 
     /* Thread pool */
-    shared_ptr<memtraceThreadPool> m_threads;
+    std::shared_ptr<memtraceThreadPool> m_threads;
 
     /* Native contexts */
     set<uint32_t> m_native_list;

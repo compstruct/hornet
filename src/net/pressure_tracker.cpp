@@ -4,11 +4,11 @@
 #include <cassert>
 #include "pressure_tracker.hpp"
 
-pressure_tracker::pressure_tracker(const node_id &parent, logger &l) throw()
+pressure_tracker::pressure_tracker(const node_id &parent, logger &l)
     : id(parent), log(l) { }
 
 void pressure_tracker::inc(const node_id &tgt,
-                           const virtual_queue_id &q) throw(err) {
+                           const virtual_queue_id &q) {
     assert(tgt.is_valid());
     assert(q.is_valid());
     if (pressures.find(tgt) == pressures.end()) {
@@ -18,7 +18,7 @@ void pressure_tracker::inc(const node_id &tgt,
 }
 
 void pressure_tracker::dec(const node_id &tgt,
-                           const virtual_queue_id &q) throw(err) {
+                           const virtual_queue_id &q) {
     assert(tgt.is_valid());
     assert(q.is_valid());
     if (pressures.find(tgt) == pressures.end()) {
@@ -29,7 +29,7 @@ void pressure_tracker::dec(const node_id &tgt,
 }
 
 pressure_tracker::pressure_t pressure_tracker::get(const node_id &tgt)
-    throw(err) {
+    {
     assert(tgt.is_valid());
     if (pressures.find(tgt) == pressures.end()) {
         throw err_bad_neighbor(get_id().get_numeric_id(), tgt.get_numeric_id());
@@ -37,7 +37,7 @@ pressure_tracker::pressure_t pressure_tracker::get(const node_id &tgt)
     return pressures[tgt];
 }
 
-void pressure_tracker::add_egress(const node_id &tgt) throw(err) {
+void pressure_tracker::add_egress(const node_id &tgt) {
     assert(tgt.is_valid());
     if (pressures.find(tgt) != pressures.end())
         throw err_duplicate_egress(get_id().get_numeric_id(),

@@ -13,36 +13,36 @@
 class bogus_channel_alloc : public channel_alloc {
 public:
     bogus_channel_alloc(node_id id, bool one_q_per_f, bool one_f_per_q,
-                        logger &log) throw();
-    virtual ~bogus_channel_alloc() throw();
-    virtual void add_egress(shared_ptr<egress> egress) throw(err);
-    virtual void allocate() throw(err);
+                        logger &log);
+    virtual ~bogus_channel_alloc();
+    virtual void add_egress(std::shared_ptr<egress> egress);
+    virtual void allocate();
 };
 
 bogus_channel_alloc::bogus_channel_alloc(node_id i, bool one_q_per_f,
-                                         bool one_f_per_q, logger &l) throw()
+                                         bool one_f_per_q, logger &l)
     : channel_alloc(i, one_q_per_f, one_f_per_q, l) { }
 
-bogus_channel_alloc::~bogus_channel_alloc() throw() { }
+bogus_channel_alloc::~bogus_channel_alloc() { }
 
-void bogus_channel_alloc::add_egress(shared_ptr<egress> egress) throw(err) {
+void bogus_channel_alloc::add_egress(std::shared_ptr<egress> egress) {
     abort();
 }
 
-void bogus_channel_alloc::allocate() throw(err) {
+void bogus_channel_alloc::allocate() {
     abort();
 }
 
-bridge::bridge(shared_ptr<node> n,
-               shared_ptr<bridge_channel_alloc> bridge_vca,
+bridge::bridge(std::shared_ptr<node> n,
+               std::shared_ptr<bridge_channel_alloc> bridge_vca,
                const set<virtual_queue_id> &n2b_vq_ids, unsigned n2b_bw,
                const set<virtual_queue_id> &b2n_vq_ids, unsigned b2n_bw,
                unsigned flits_per_queue, unsigned b2n_bw_to_xbar,
                bool one_q_per_f, bool one_f_per_q,
-               shared_ptr<id_factory<packet_id> > pif,
-               shared_ptr<tile_statistics> st,
-               shared_ptr<vcd_writer> new_vcd,
-               logger &l) throw(err)
+               std::shared_ptr<id_factory<packet_id> > pif,
+               std::shared_ptr<tile_statistics> st,
+               std::shared_ptr<vcd_writer> new_vcd,
+               logger &l)
     : id(n->get_id()), target(n), vc_alloc(bridge_vca), incoming(), outgoing(),
       ingress_dmas(), egress_dmas(), vqids(), packet_id_factory(pif),
       stats(st), vcd(new_vcd), log(l) {
@@ -54,17 +54,17 @@ bridge::bridge(shared_ptr<node> n,
 
     // bridge -> node: bridge egress and node ingress
     ingress_id node_ingress_id(n->get_id(), "B");
-    shared_ptr<ingress> node_ingress =
-        shared_ptr<ingress>(new ingress(node_ingress_id, n->get_id(),
+    std::shared_ptr<ingress> node_ingress =
+        std::shared_ptr<ingress>(new ingress(node_ingress_id, n->get_id(),
                                         b2n_vq_ids, flits_per_queue,
                                         b2n_bw_to_xbar,
                                         target->get_channel_alloc(),
                                         target->get_pressures(), stats,
                                         vcd, log));
     n->add_ingress(n->get_id(), node_ingress);
-    shared_ptr<pressure_tracker> br_pt(new pressure_tracker(id, log));
+    std::shared_ptr<pressure_tracker> br_pt(new pressure_tracker(id, log));
     egress_id bridge_egress_id(n->get_id(), "X");
-    outgoing = shared_ptr<egress>(new egress(bridge_egress_id, node_ingress,
+    outgoing = std::shared_ptr<egress>(new egress(bridge_egress_id, node_ingress,
                                              br_pt, b2n_bw, log));
     ingress::queues_t node_ingress_queues = node_ingress->get_queues();
     for (ingress::queues_t::const_iterator i = node_ingress_queues.begin();
@@ -72,17 +72,17 @@ bridge::bridge(shared_ptr<node> n,
         egress_dma_channel *p =
             new egress_dma_channel(id, dma_no, b2n_bw, i->second, vc_alloc,
                                    st, log);
-        shared_ptr<egress_dma_channel> d = shared_ptr<egress_dma_channel>(p);
+        std::shared_ptr<egress_dma_channel> d = std::shared_ptr<egress_dma_channel>(p);
         egress_dmas[i->first] = d;
     }
 
     // node -> bridge
-    shared_ptr<channel_alloc> br_vca(new bogus_channel_alloc(id, one_q_per_f,
+    std::shared_ptr<channel_alloc> br_vca(new bogus_channel_alloc(id, one_q_per_f,
                                                              one_f_per_q, log));
     copy(n2b_vq_ids.begin(), n2b_vq_ids.end(),
          back_insert_iterator<vector<virtual_queue_id> >(vqids));
     ingress_id bridge_ingress_id(n->get_id(), "X");
-    incoming = shared_ptr<ingress>(new ingress(bridge_ingress_id, n->get_id(),
+    incoming = std::shared_ptr<ingress>(new ingress(bridge_ingress_id, n->get_id(),
                                                n2b_vq_ids, flits_per_queue,
                                                UINT_MAX, br_vca, br_pt,
                                                stats, vcd, log));
@@ -91,8 +91,8 @@ bridge::bridge(shared_ptr<node> n,
         n->add_queue_id(q->first);
     }
     egress_id node_egress_id(n->get_id(), "B");
-    shared_ptr<egress> node_egress =
-        shared_ptr<egress>(new egress(node_egress_id, incoming,
+    std::shared_ptr<egress> node_egress =
+        std::shared_ptr<egress>(new egress(node_egress_id, incoming,
                                       target->get_pressures(), n2b_bw, log));
     n->add_egress(id, node_egress);
     ingress::queues_t bridge_ingress_queues = incoming->get_queues();
@@ -100,12 +100,12 @@ bridge::bridge(shared_ptr<node> n,
          i != bridge_ingress_queues.end(); ++i, ++dma_no) {
         ingress_dma_channel *p =
             new ingress_dma_channel(id, dma_no, n2b_bw, i->second, st, log);
-        shared_ptr<ingress_dma_channel> d = shared_ptr<ingress_dma_channel>(p);
+        std::shared_ptr<ingress_dma_channel> d = std::shared_ptr<ingress_dma_channel>(p);
         ingress_dmas[i->first] = d;
     }
 }
 
-uint32_t bridge::get_transmission_done(uint32_t xmit_id) throw() {
+uint32_t bridge::get_transmission_done(uint32_t xmit_id) {
     if (xmit_id == 0)
         throw exc_bad_transmission(id.get_numeric_id(), xmit_id);
     virtual_queue_id vq_id(xmit_id - 1);
@@ -125,7 +125,7 @@ uint32_t bridge::get_transmission_done(uint32_t xmit_id) throw() {
     return result;
 }
 
-uint32_t bridge::get_waiting_queues() throw() {
+uint32_t bridge::get_waiting_queues() {
     uint32_t waiting = 0;
     assert(vqids.size() <= 32);
     for (unsigned i = 0; i < vqids.size(); ++i) {
@@ -138,7 +138,7 @@ uint32_t bridge::get_waiting_queues() throw() {
     return waiting;
 }
 
-uint32_t bridge::get_queue_flow_id(uint32_t queue) throw(err) {
+uint32_t bridge::get_queue_flow_id(uint32_t queue) {
     assert(vqids.size() <= 32);
     if (queue >= vqids.size())
         throw exc_bad_queue(id.get_numeric_id(), queue);
@@ -151,7 +151,7 @@ uint32_t bridge::get_queue_flow_id(uint32_t queue) throw(err) {
     return flow.get_numeric_id();
 }
 
-uint32_t bridge::get_queue_length(uint32_t queue) throw(err) {
+uint32_t bridge::get_queue_length(uint32_t queue) {
     assert(vqids.size() <= 32);
     if (queue >= vqids.size())
         throw exc_bad_queue(id.get_numeric_id(), queue);
@@ -166,13 +166,13 @@ uint32_t bridge::get_queue_length(uint32_t queue) throw(err) {
 }
 
 uint32_t bridge::send(uint32_t flow, void *src, uint32_t len,
-                      bool count_in_stats) throw(err) {
+                      bool count_in_stats) {
     return send(flow, src, len, packet_id_factory->get_fresh_id(),
                 count_in_stats);
 }
 
 uint32_t bridge::send(uint32_t flow, void *src, uint32_t len,
-                      packet_id pid, bool count_in_stats) throw(err) {
+                      packet_id pid, bool count_in_stats) {
     LOG(log,3) << "[bridge " << id << "] sending " << dec << len
                << " flits on flow " << flow_id(flow);
     virtual_queue_id q = vc_alloc->request(flow);
@@ -191,7 +191,7 @@ uint32_t bridge::send(uint32_t flow, void *src, uint32_t len,
 }
 
 uint32_t bridge::receive(void *dst, uint32_t queue, uint32_t len,
-                         packet_id *pid_p) throw(err) {
+                         packet_id *pid_p) {
     assert(vqids.size() <= 32);
     if (queue >= vqids.size())
         throw exc_bad_queue(id.get_numeric_id(), queue);
@@ -199,7 +199,7 @@ uint32_t bridge::receive(void *dst, uint32_t queue, uint32_t len,
                << " flits from queue " << virtual_queue_id(queue);
     virtual_queue_id vq_id = vqids[queue];
     assert(ingress_dmas.find(vq_id) != ingress_dmas.end());
-    shared_ptr<ingress_dma_channel> dma = ingress_dmas[vq_id];
+    std::shared_ptr<ingress_dma_channel> dma = ingress_dmas[vq_id];
     if (dma->busy()) {
         LOG(log,3) << ": blocked (channel busy)" << endl;
         return 0;
@@ -211,7 +211,7 @@ uint32_t bridge::receive(void *dst, uint32_t queue, uint32_t len,
     return xmit_id;
 }
 
-void bridge::tick_positive_edge() throw(err) {
+void bridge::tick_positive_edge() {
     for (ingress_dmas_t::iterator i = ingress_dmas.begin();
          i != ingress_dmas.end(); ++i) {
         i->second->tick_positive_edge();
@@ -223,7 +223,7 @@ void bridge::tick_positive_edge() throw(err) {
     }
 }
 
-void bridge::tick_negative_edge() throw(err) {
+void bridge::tick_negative_edge() {
     for (ingress_dmas_t::iterator i = ingress_dmas.begin();
          i != ingress_dmas.end(); ++i) {
         i->second->tick_negative_edge();
@@ -235,7 +235,7 @@ void bridge::tick_negative_edge() throw(err) {
     }
 }
 
-bool bridge::is_drained() const throw() {
+bool bridge::is_drained() const {
     bool drained = true;
     for (ingress_dmas_t::const_iterator i = ingress_dmas.begin();
          i != ingress_dmas.end(); ++i) {
@@ -249,12 +249,12 @@ bool bridge::is_drained() const throw() {
     return drained;
 }
 
-shared_ptr<egress> bridge::get_egress() throw() { return outgoing; }
+std::shared_ptr<egress> bridge::get_egress() { return outgoing; }
 
-shared_ptr<ingress> bridge::get_ingress() throw() { return incoming; }
+std::shared_ptr<ingress> bridge::get_ingress() { return incoming; }
 
-shared_ptr<vector<uint32_t> > bridge::get_ingress_queue_ids() throw() {
-    shared_ptr<vector<uint32_t> > v(new vector<uint32_t>(vqids.size()));
+std::shared_ptr<vector<uint32_t> > bridge::get_ingress_queue_ids() {
+        std::shared_ptr<vector<uint32_t> > v(new vector<uint32_t>(vqids.size()));
     for (uint32_t i = 0; i < vqids.size(); ++i) v->push_back(i);
     return v;
 }

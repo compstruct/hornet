@@ -19,17 +19,17 @@ mcpu::mcpu( const pe_id                         &new_id,
             const uint64_t                      &new_time,
             uint32_t                            entry_point, 
             uint32_t                            stack_ptr,
-            shared_ptr<id_factory<packet_id> >  pif,
-            shared_ptr<tile_statistics>         new_stats,
+            std::shared_ptr<id_factory<packet_id> >  pif,
+            std::shared_ptr<tile_statistics>         new_stats,
             logger                              &l,
-            shared_ptr<random_gen>              r,
-            shared_ptr<memory>                  instruction_memory,
-            shared_ptr<memory>                  data_memory,
-            shared_ptr<dram>                    backingDRAM,
+            std::shared_ptr<random_gen>              r,
+            std::shared_ptr<memory>                  instruction_memory,
+            std::shared_ptr<memory>                  data_memory,
+            std::shared_ptr<dram>                    backingDRAM,
             uint32_t                            msg_queue_size, 
             uint32_t                            bytes_per_flit)
-            throw(err)
-            :   core(                           new_id, 
+           
+            :   common_core(                           new_id, 
                                                 new_time, 
                                                 pif,
                                                 new_stats,
@@ -49,8 +49,8 @@ mcpu::mcpu( const pe_id                         &new_id,
                 interrupts_enabled(false), 
                 stdout_buffer(),
                 i_memory(instruction_memory),
-                pending_request_instruction(shared_ptr<memoryRequest>()),
-                pending_request_data(shared_ptr<memoryRequest>()),
+                pending_request_instruction(std::shared_ptr<memoryRequest>()),
+                pending_request_data(std::shared_ptr<memoryRequest>()),
                 pending_request_read_gpr(false),
                 pending_request_read_fpr(false),
                 pending_request_memory_write(false),
@@ -66,7 +66,7 @@ mcpu::mcpu( const pe_id                         &new_id,
              << setw(8) << stack_ptr << endl;
 }
 
-mcpu::~mcpu() throw() { }
+mcpu::~mcpu() { }
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
@@ -88,21 +88,21 @@ maddr_t mcpu::form_maddr(uint64_t addr) {
 /* These functions should perhaps be moved elsewhere. */
 
 float intBitsToFloat(int x) {
-	union {
-		float f;  // assuming 32-bit IEEE 754 single-precision
-		int i;    // assuming 32-bit 2's complement int
-	} u;
-	u.i = x;
-	return u.f;
+        union {
+                float f;  // assuming 32-bit IEEE 754 single-precision
+                int i;    // assuming 32-bit 2's complement int
+        } u;
+        u.i = x;
+        return u.f;
 }
 
 double intBitsToDouble(uint64_t x) {
-	union {
-		double f;  			// assuming 64-bit IEEE 754 double-precision
-		uint64_t i;    	// assuming 64-bit 2's complement int
-	} u;
-	u.i = x;
-	return u.f;
+        union {
+                double f;                       // assuming 64-bit IEEE 754 double-precision
+                uint64_t i;     // assuming 64-bit 2's complement int
+        } u;
+        u.i = x;
+        return u.f;
 }
 
 uint32_t floatBitsToInt(float x) {
@@ -118,7 +118,7 @@ uint64_t doubleBitsToInt(double x) {
 }
 
 // TODO: Copied from sys.cpp
-inline uint32_t read_word_temp(shared_ptr<ifstream> in) throw(err) {
+inline uint32_t read_word_temp(std::shared_ptr<ifstream> in) {
     uint32_t word = 0xdeadbeef;
     in->read((char *) &word, 4);
     if (in->bad()) throw err_bad_mem_img();
@@ -143,22 +143,22 @@ void mcpu::update_from_memory_requests() {
     }
 }
 
-void mcpu::tick_positive_edge_memory() throw(err) {
-    if (m_memory != shared_ptr<memory>()) {
+void mcpu::tick_positive_edge_memory() {
+    if (m_memory != std::shared_ptr<memory>()) {
         m_memory->tick_positive_edge();
     }
-    /*if (i_memory != shared_ptr<memory>()) {
+    /*if (i_memory != std::shared_ptr<memory>()) {
         i_memory->tick_positive_edge();
     }*/
 }
-void mcpu::tick_negative_edge_memory() throw(err) {
+void mcpu::tick_negative_edge_memory() {
     /* update requests */
     update_from_memory_requests();
 
-    if (m_memory != shared_ptr<memory>()) {
+    if (m_memory != std::shared_ptr<memory>()) {
         m_memory->tick_negative_edge();
     }
-    /*if (i_memory != shared_ptr<memory>()) {
+    /*if (i_memory != std::shared_ptr<memory>()) {
         i_memory->tick_negative_edge();
     }*/
 }
@@ -167,7 +167,7 @@ void mcpu::tick_negative_edge_memory() throw(err) {
 /* Core interface                                                             */
 /* -------------------------------------------------------------------------- */
 
-uint64_t mcpu::next_pkt_time() throw(err) {
+uint64_t mcpu::next_pkt_time() {
     if (running) {
         return system_time;
     } else {
@@ -175,11 +175,11 @@ uint64_t mcpu::next_pkt_time() throw(err) {
     }
 }
 
-bool mcpu::is_drained() const throw() {
+bool mcpu::is_drained() const {
     return !running;
 }
 
-void mcpu::flush_stdout() throw() {
+void mcpu::flush_stdout() {
     if (!stdout_buffer.str().empty()) {
         LOG(log,0) << "[mcpu " << get_id() << " out] " << stdout_buffer.str()
                    << flush;
@@ -191,7 +191,7 @@ void mcpu::execute() {
     if (running) { 
         //cout << "exec_core PID: " << get_id() << ", jump_active: " << jump_active << endl;
         data_complete();
-        shared_ptr<instr> i = instruction_fetch_complete(pc);
+        std::shared_ptr<instr> i = instruction_fetch_complete(pc);
         if (i && !pending_data_memory_request()) {
             instr_count++;
             execute(i);
@@ -212,7 +212,7 @@ void mcpu::execute() {
 
 // Instructions ----------------------------------------------------------------
 
-shared_ptr<instr> mcpu::instruction_fetch_complete(uint32_t pc) {
+std::shared_ptr<instr> mcpu::instruction_fetch_complete(uint32_t pc) {
     if (enable_memory_hierarchy) {
         if (!pending_data_memory_request() &&
             pending_request_instruction && 
@@ -220,8 +220,8 @@ shared_ptr<instr> mcpu::instruction_fetch_complete(uint32_t pc) {
             uint32_t raw = pending_request_instruction->data()[0];
             //printf( "[mcpu 0%d] Completed instruction fetch, address: %x, instr: %x\n", 
             //        get_id().get_numeric_id(), pc, raw);
-            pending_request_instruction = shared_ptr<memoryRequest>(); // reset to null
-            return shared_ptr<instr> (new instr(raw));
+            pending_request_instruction = std::shared_ptr<memoryRequest>(); // reset to null
+            return std::shared_ptr<instr> (new instr(raw));
         }
         if (!pending_data_memory_request() && // TODO: serialize data/instr for now (fix later)
             !pending_request_instruction) {
@@ -229,11 +229,11 @@ shared_ptr<instr> mcpu::instruction_fetch_complete(uint32_t pc) {
             //printf("--------------------------------------------------------------------\n");
             //printf( "[mcpu 0%d] Issued instruction fetch, address: %x (Hornet word address: %x)\n", 
             //        get_id().get_numeric_id(), pc, (uint32_t) maddr.address);
-            shared_ptr<memoryRequest> read_req(new memoryRequest(maddr, 1));
+            std::shared_ptr<memoryRequest> read_req(new memoryRequest(maddr, 1));
             nearest_memory_instruction()->request(read_req);
-            pending_request_instruction = shared_ptr<memoryRequest>(read_req);
+            pending_request_instruction = std::shared_ptr<memoryRequest>(read_req);
         }
-        return shared_ptr<instr>();
+        return std::shared_ptr<instr>();
     } else {
         uint32_t rdata;
         backingDRAM->mem_read_instant(  &rdata,
@@ -241,7 +241,7 @@ shared_ptr<instr> mcpu::instruction_fetch_complete(uint32_t pc) {
                                         false);
         //printf( "[mcpu 0%d] Fetched instruction, address: %x, instruction: %x\n", 
         //        get_id().get_numeric_id(), pc, rdata);
-        return shared_ptr<instr> (new instr(rdata));
+        return std::shared_ptr<instr> (new instr(rdata));
     }
 }
 
@@ -319,7 +319,7 @@ void mcpu::data_complete_helper(shared_array<uint32_t> req_data, uint32_t addres
 void mcpu::data_fetch_to_gpr(   const gpr dst,
                                 const uint32_t &addr, 
                                 const uint32_t &bytes,
-                                bool sign_extend) throw(err) {
+                                bool sign_extend) {
     assert(!pending_data_memory_request());
     
     pending_lw_gpr = dst;
@@ -328,7 +328,7 @@ void mcpu::data_fetch_to_gpr(   const gpr dst,
 }
 void mcpu::data_fetch_to_fpr(   const fpr dst,
                                 const uint32_t &addr, 
-                                const uint32_t &bytes) throw(err) {
+                                const uint32_t &bytes) {
     assert(!pending_data_memory_request());
     
     pending_lw_fpr = dst;
@@ -337,7 +337,7 @@ void mcpu::data_fetch_to_fpr(   const fpr dst,
 }
 void mcpu::data_fetch_read( const uint32_t &addr, 
                             const uint32_t &bytes,
-                            bool sign_extend) throw(err) {
+                            bool sign_extend) {
     //printf("--------------------------------------------------------------------\n");
 
     __BYTES_TO_WORDS__
@@ -347,7 +347,7 @@ void mcpu::data_fetch_read( const uint32_t &addr,
 
     if (enable_memory_hierarchy) {
         //printf("[mcpu 0%d] Memory read at %x\n", get_id().get_numeric_id(), addr);    
-        pending_request_data = shared_ptr<memoryRequest> (new memoryRequest(form_maddr(addr), words));
+        pending_request_data = std::shared_ptr<memoryRequest> (new memoryRequest(form_maddr(addr), words));
         nearest_memory_data()->request(pending_request_data);
     } else {
         uint32_t * read_data_inner = new uint32_t[words];
@@ -370,7 +370,7 @@ void mcpu::data_fetch_read( const uint32_t &addr,
 
 void mcpu::data_fetch_write(    const uint32_t &addr, 
                                 const uint64_t &val,
-                                const uint32_t &bytes) throw(err) {
+                                const uint32_t &bytes) {
     assert(!pending_data_memory_request());
     
     __BYTES_TO_WORDS__
@@ -393,7 +393,7 @@ void mcpu::data_fetch_write(    const uint32_t &addr,
     pending_request_memory_write = true;
 
     if (enable_memory_hierarchy) {
-        pending_request_data = shared_ptr<memoryRequest> (new memoryRequest(form_maddr(addr), words, write_data));
+        pending_request_data = std::shared_ptr<memoryRequest> (new memoryRequest(form_maddr(addr), words, write_data));
         nearest_memory_data()->request(pending_request_data);
     } else {
         backingDRAM->mem_write_instant( write_data_inner,
@@ -407,7 +407,7 @@ void mcpu::data_fetch_write(    const uint32_t &addr,
 /* MIPS scalar                                                                */
 /* -------------------------------------------------------------------------- */
 
-static void unimplemented_instr(instr i, uint32_t addr) throw(err_tbd) {
+static void unimplemented_instr(instr i, uint32_t addr) {
     ostringstream oss;
     oss << "[0x" << hex << setfill('0') << setw(8) << addr << "] " << i;
     throw err_tbd(oss.str());
@@ -474,7 +474,7 @@ inline uint32_t check_align(uint32_t addr, uint32_t mask) {
                             set(gpr(2), bot_o); \
                             set(gpr(3), top_o);
 
-void mcpu::execute(shared_ptr<instr> ip) throw(err) {
+void mcpu::execute(std::shared_ptr<instr> ip) {
     instr i = *ip;
     //cout << "[mcpu " << get_id() << "] "
     //     << hex << setfill('0') << setw(8) << pc << ": "
@@ -893,7 +893,7 @@ void mcpu::execute(shared_ptr<instr> ip) throw(err) {
     }
 }
 
-void mcpu::syscall(uint32_t call_no) throw(err) {
+void mcpu::syscall(uint32_t call_no) {
     //printf("Executing syscall no. %x\n", call_no);
     switch (call_no) {
     // Single precision intrinsics ---------------------------------------------
@@ -1077,7 +1077,7 @@ void mcpu::syscall(uint32_t call_no) throw(err) {
     }
 }
 
-void mcpu::trap() throw(err) {
+void mcpu::trap() {
     err_panic("Trap raised!");
 }
 

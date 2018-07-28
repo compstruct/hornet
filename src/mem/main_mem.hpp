@@ -9,14 +9,14 @@
 class main_mem : public mem {
 public:
     explicit main_mem(uint32_t id, uint32_t start, uint32_t size,
-                      logger &log) throw(err);
-    virtual ~main_mem() throw();
-    virtual shared_ptr<mem_ifc> new_interface() throw();
-    const uint8_t *ptr(const uint32_t &addr) const throw(err);
-    uint8_t *ptr(const uint32_t &addr) throw(err);
-    virtual void tick_positive_edge() throw(err);
-    virtual void tick_negative_edge() throw(err);
-    pe_id get_id() const throw();
+                      logger &log);
+    virtual ~main_mem();
+    virtual shared_ptr<mem_ifc> new_interface();
+    const uint8_t *ptr(const uint32_t &addr) const;
+    uint8_t *ptr(const uint32_t &addr);
+    virtual void tick_positive_edge();
+    virtual void tick_negative_edge();
+    pe_id get_id() const;
 private:
     const pe_id id;
     uint32_t start;
@@ -29,21 +29,21 @@ private:
     main_mem(const mem &); // not implemented
 };
 
-inline uint8_t *main_mem::ptr(const uint32_t &addr) throw(err) {
+inline uint8_t *main_mem::ptr(const uint32_t &addr) {
     if (addr < start || addr + 4 > start + size) {
         throw exc_bus_err(get_id().get_numeric_id(), addr, start, size);
     }
     return contents + addr - start;
 }
 
-inline const uint8_t *main_mem::ptr(const uint32_t &addr) const throw(err) {
+inline const uint8_t *main_mem::ptr(const uint32_t &addr) const {
     if (addr < start || addr + 4 > start + size) {
         throw exc_bus_err(get_id().get_numeric_id(), addr, start, size);
     }
     return contents + addr - start;
 }
 
-inline pe_id main_mem::get_id() const throw() { return id; }
+inline pe_id main_mem::get_id() const { return id; }
 
 #endif // __MAIN_MEM_HPP__
 

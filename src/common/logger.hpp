@@ -6,56 +6,55 @@
 
 #include <vector>
 #include <iostream>
-#include <boost/shared_ptr.hpp>
-#include <boost/tuple/tuple.hpp>
+#include <memory>
+#include <tuple>
 
 using namespace std;
-using namespace boost;
 
 class logstreambuf : public streambuf {
 public:
-    logstreambuf() throw();
-    virtual ~logstreambuf() throw();
-    void add(streambuf *, int verbosity) throw();
-    void set_message_verbosity(int verbosity) throw();
+    logstreambuf();
+    virtual ~logstreambuf();
+    void add(streambuf *, int verbosity);
+    void set_message_verbosity(int verbosity);
 protected:
     virtual int overflow(int);
 private:
-    vector<tuple<int, streambuf *> > streams;
+    vector<std::tuple<int, streambuf *> > streams;
     int msg_verb; // current message verbosity
 };
 
 class logger : public ostream {
 public:
-    logger() throw();
-    virtual ~logger() throw();
-    void add(ostream &, int) throw();
-    void add(shared_ptr<ostream>, int) throw();
-    void set_message_verbosity(int) throw();
-    int get_max_verbosity() const throw();
+    logger();
+    virtual ~logger();
+    void add(ostream &, int);
+    void add(std::shared_ptr<ostream>, int);
+    void set_message_verbosity(int);
+    int get_max_verbosity() const;
 private:
     int max_verbosity;
     logstreambuf buf;
-    vector<shared_ptr<ostream> > owned_streams;
+    vector<std::shared_ptr<ostream> > owned_streams;
 };
 
 inline int logstreambuf::overflow(int ch) {
-    for (vector<tuple<int, streambuf *> >::iterator si = streams.begin();
+    for (vector<std::tuple<int, streambuf *> >::iterator si = streams.begin();
          si != streams.end(); ++si) {
-        if (msg_verb <= si->get<0>()) si->get<1>()->sputc(ch);
+        if (msg_verb <= get<0>(*si)) get<1>(*si)->sputc(ch);
     }
     return 0;
 }
 
-inline void logstreambuf::set_message_verbosity(int v) throw() {
+inline void logstreambuf::set_message_verbosity(int v) {
     msg_verb = v;
 }
 
-inline void logger::set_message_verbosity(int verb) throw() {
+inline void logger::set_message_verbosity(int verb) {
     buf.set_message_verbosity(verb);
 }
 
-inline int logger::get_max_verbosity() const throw() {
+inline int logger::get_max_verbosity() const {
     return max_verbosity;
 }
 

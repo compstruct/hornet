@@ -7,7 +7,7 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include "logger.hpp"
 #include "reg.hpp"
 #include "mem.hpp"
@@ -20,27 +20,27 @@ using namespace boost;
 
 class cpu : public pe {
 public:
-    explicit cpu(const pe_id &id, const uint64_t &time, shared_ptr<mem> ram,
+    explicit cpu(const pe_id &id, const uint64_t &time, std::shared_ptr<mem> ram,
                  uint32_t pc, uint32_t stack_pointer,
-                 shared_ptr<tile_statistics> stats,
-                 logger &log) throw(err);
-    virtual ~cpu() throw();
-    virtual void connect(shared_ptr<bridge> net_bridge) throw();
-    virtual void add_packet(uint64_t time, const flow_id &flow, uint32_t len) throw(err);
-    virtual bool work_queued() throw(err);
-    virtual void tick_positive_edge() throw(err);
-    virtual void tick_negative_edge() throw(err);
-    virtual void set_stop_darsim() throw(err);
-    virtual uint64_t next_pkt_time() throw(err);
-    virtual bool is_ready_to_offer() throw(err);
-    virtual bool is_drained() const throw();
+                 std::shared_ptr<tile_statistics> stats,
+                 logger &log);
+    virtual ~cpu();
+    virtual void connect(std::shared_ptr<bridge> net_bridge);
+    virtual void add_packet(uint64_t time, const flow_id &flow, uint32_t len);
+    virtual bool work_queued();
+    virtual void tick_positive_edge();
+    virtual void tick_negative_edge();
+    virtual void set_stop_darsim();
+    virtual uint64_t next_pkt_time();
+    virtual bool is_ready_to_offer();
+    virtual bool is_drained() const;
 
 private:
-    uint32_t get(const gpr &r) const throw();
-    uint32_t get(const hwr &r) const throw(exc_reserved_hw_reg);
-    void set(const gpr &r, uint32_t val) throw();
-    void set_hi_lo(uint64_t val) throw();
-    void execute() throw(err);
+    uint32_t get(const gpr &r) const;
+    uint32_t get(const hwr &r) const;
+    void set(const gpr &r, uint32_t val);
+    void set_hi_lo(uint64_t val);
+    void execute();
 
 private:
     bool running;
@@ -48,29 +48,29 @@ private:
     uint32_t pc;
     uint32_t gprs[32];
     uint64_t hi_lo;
-    shared_ptr<mem> ram;
-    shared_ptr<bridge> net;
+    std::shared_ptr<mem> ram;
+    std::shared_ptr<bridge> net;
     bool jump_active;
     bool interrupts_enabled;
     unsigned jump_time;
     uint32_t jump_target;
     ostringstream stdout_buffer;
-    shared_ptr<tile_statistics> stats;
+    std::shared_ptr<tile_statistics> stats;
     logger &log;
 private:
-    void syscall(uint32_t syscall_no) throw(err);
-    void flush_stdout() throw();
-    template<class V> V load(const uint32_t &addr) throw(err);
-    template<class V> void store(const uint32_t &addr, const V &val) throw(err);
+    void syscall(uint32_t syscall_no);
+    void flush_stdout();
+    template<class V> V load(const uint32_t &addr);
+    template<class V> void store(const uint32_t &addr, const V &val);
 private:
     cpu(const cpu &); // not permitted
 };
 
-inline uint32_t cpu::get(const gpr &r) const throw() {
+inline uint32_t cpu::get(const gpr &r) const {
     return r.get_no() == 0 ? 0 : gprs[r.get_no()];
 }
 
-inline uint32_t cpu::get(const hwr &r) const throw(exc_reserved_hw_reg) {
+inline uint32_t cpu::get(const hwr &r) const {
     switch (r.get_no()) {
     case 0: return get_id().get_numeric_id();
     case 1: return 0;
@@ -83,7 +83,7 @@ inline uint32_t cpu::get(const hwr &r) const throw(exc_reserved_hw_reg) {
     }
 }
 
-inline void cpu::set(const gpr &r, uint32_t v) throw() {
+inline void cpu::set(const gpr &r, uint32_t v) {
     if (r.get_no() != 0) {
         LOG(log,5) << "[cpu " << get_id() << "]     " << r << " <- "
             << hex << setfill('0') << setw(8) << v << endl;
@@ -91,14 +91,14 @@ inline void cpu::set(const gpr &r, uint32_t v) throw() {
     }
 }
 
-inline void cpu::set_hi_lo(uint64_t v) throw() {
+inline void cpu::set_hi_lo(uint64_t v) {
     LOG(log,5) << "[cpu " << get_id() << "]     hi,lo <- "
         << hex << setfill('0') << setw(16) << v << endl;
     hi_lo = v;
 }
 
 template <class V>
-inline V cpu::load(const uint32_t &addr) throw(err) {
+inline V cpu::load(const uint32_t &addr) {
     V result = ram->load<V>(addr);
     LOG(log,5) << "[cpu " << get_id() << "]     "
         << setfill('0') << setw(2 * sizeof(V)) << result << " <- mem["
@@ -107,7 +107,7 @@ inline V cpu::load(const uint32_t &addr) throw(err) {
 }
 
 template<class V>
-inline void cpu::store(const uint32_t &addr, const V &val) throw(err) {
+inline void cpu::store(const uint32_t &addr, const V &val) {
     LOG(log,5) << "[cpu " << get_id() << "]     mem["
         << hex << setfill('0') << setw(8) << addr << "] <- "
         << setfill('0') << setw(2 * sizeof(V)) << val << endl;

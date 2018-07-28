@@ -36,7 +36,7 @@ void threadStatsPerThread::did_arrive_destination() {
     m_mig_status = NOT_MIGRATING;
 }
 
-void threadStats::add_per_thread_stats(shared_ptr<threadStatsPerThread> stats) {
+void threadStats::add_per_thread_stats(std::shared_ptr<threadStatsPerThread> stats) {
     assert(m_per_thread_stats.count(stats->m_id) == 0);
     m_per_thread_stats[stats->m_id] = stats;
 }
@@ -64,7 +64,7 @@ void threadStats::print_stats(ostream &out) {
     perThreadStats_t::iterator it;
     for (it = m_per_thread_stats.begin(); it != m_per_thread_stats.end(); ++it) {
         uint32_t id = it->first;
-        shared_ptr<threadStatsPerThread> st = it->second;
+        std::shared_ptr<threadStatsPerThread> st = it->second;
         uint64_t cycles;
         if (st->check_if_spawned())  {
             if (st->check_if_completed()) {

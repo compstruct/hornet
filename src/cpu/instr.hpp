@@ -11,66 +11,66 @@
 
 class instr {
 public:
-    explicit instr(uint32_t new_encoded) throw() : encoded(new_encoded) { }
-    gpr get_rd() const throw();
-    gpr get_rs() const throw();
-    gpr get_rt() const throw();
-    fpr get_fd() const throw();
-    fpr get_fs() const throw();
-    fpr get_ft() const throw();
-    fpr get_fr() const throw();
-    c0r get_c0rd() const throw();
-    c2r get_c2rt() const throw();
-    hwr get_hwrd() const throw();
-    unsigned get_imm() const throw();
-    int get_simm() const throw();
-    unsigned get_j_tgt() const throw();
-    unsigned get_sa() const throw();
-    unsigned get_lsb() const throw();
-    unsigned get_msb() const throw();
-    unsigned get_cc() const throw();
-    unsigned get_cond_cc() const throw();
-    unsigned get_sel() const throw();
-    unsigned get_cofun() const throw();
-    unsigned get_cache_op() const throw();
-    unsigned get_cachex_op() const throw();
-    unsigned get_sync_type() const throw();
-    instr_code get_opcode() const throw();
+    explicit instr(uint32_t new_encoded) : encoded(new_encoded) { }
+    gpr get_rd() const;
+    gpr get_rs() const;
+    gpr get_rt() const;
+    fpr get_fd() const;
+    fpr get_fs() const;
+    fpr get_ft() const;
+    fpr get_fr() const;
+    c0r get_c0rd() const;
+    c2r get_c2rt() const;
+    hwr get_hwrd() const;
+    unsigned get_imm() const;
+    int get_simm() const;
+    unsigned get_j_tgt() const;
+    unsigned get_sa() const;
+    unsigned get_lsb() const;
+    unsigned get_msb() const;
+    unsigned get_cc() const;
+    unsigned get_cond_cc() const;
+    unsigned get_sel() const;
+    unsigned get_cofun() const;
+    unsigned get_cache_op() const;
+    unsigned get_cachex_op() const;
+    unsigned get_sync_type() const;
+    instr_code get_opcode() const;
     friend ostream &operator<<(ostream &, const instr &);
 private:
     ostream &show_to(ostream &) const;
 private:
-    unsigned get_bits(unsigned, unsigned) const throw();
+    unsigned get_bits(unsigned, unsigned) const;
     uint32_t encoded;
 };
 
-inline gpr instr::get_rd() const throw() { return gpr(get_bits(15,11)); }
-inline gpr instr::get_rs() const throw() { return gpr(get_bits(25,21)); }
-inline gpr instr::get_rt() const throw() { return gpr(get_bits(20,16)); }
-inline fpr instr::get_fd() const throw() { return fpr(get_bits(10,6)); }
-inline fpr instr::get_fs() const throw() { return fpr(get_bits(15,11)); }
-inline fpr instr::get_ft() const throw() { return fpr(get_bits(20,16)); }
-inline fpr instr::get_fr() const throw() { return fpr(get_bits(25,21)); }
-inline c0r instr::get_c0rd() const throw() { return c0r(get_bits(15,11)); }
-inline c2r instr::get_c2rt() const throw() { return c2r(get_bits(20,16)); }
-inline hwr instr::get_hwrd() const throw() { return hwr(get_bits(15,11)); }
-inline unsigned instr::get_bits(unsigned hi, unsigned lo) const throw() {
+inline gpr instr::get_rd() const { return gpr(get_bits(15,11)); }
+inline gpr instr::get_rs() const { return gpr(get_bits(25,21)); }
+inline gpr instr::get_rt() const { return gpr(get_bits(20,16)); }
+inline fpr instr::get_fd() const { return fpr(get_bits(10,6)); }
+inline fpr instr::get_fs() const { return fpr(get_bits(15,11)); }
+inline fpr instr::get_ft() const { return fpr(get_bits(20,16)); }
+inline fpr instr::get_fr() const { return fpr(get_bits(25,21)); }
+inline c0r instr::get_c0rd() const { return c0r(get_bits(15,11)); }
+inline c2r instr::get_c2rt() const { return c2r(get_bits(20,16)); }
+inline hwr instr::get_hwrd() const { return hwr(get_bits(15,11)); }
+inline unsigned instr::get_bits(unsigned hi, unsigned lo) const {
     return bits(encoded, hi, lo);
 }
-inline instr_code instr::get_opcode() const throw() { return decode(encoded); }
-inline unsigned instr::get_imm() const throw() { return get_bits(15,0); }
-inline int instr::get_simm() const throw() { return (int16_t) get_imm(); }
-inline unsigned instr::get_j_tgt() const throw() { return get_bits(25,0); }
-inline unsigned instr::get_sa() const throw() { return get_bits(10,6); }
-inline unsigned instr::get_sel() const throw() { return get_bits(2,0); }
-inline unsigned instr::get_msb() const throw() { return get_bits(15,11); }
-inline unsigned instr::get_lsb() const throw() { return get_bits(10,6); }
-inline unsigned instr::get_cc() const throw() { return get_bits(20,18); }
-inline unsigned instr::get_cond_cc() const throw() { return get_bits(10,8); }
-inline unsigned instr::get_cache_op() const throw() { return get_bits(20,16); }
-inline unsigned instr::get_cachex_op() const throw() { return get_bits(15,11); }
-inline unsigned instr::get_sync_type() const throw() { return get_bits(10,6); }
-inline unsigned instr::get_cofun() const throw() { return get_bits(24,0); }
+inline instr_code instr::get_opcode() const { return decode(encoded); }
+inline unsigned instr::get_imm() const { return get_bits(15,0); }
+inline int instr::get_simm() const { return (int16_t) get_imm(); }
+inline unsigned instr::get_j_tgt() const { return get_bits(25,0); }
+inline unsigned instr::get_sa() const { return get_bits(10,6); }
+inline unsigned instr::get_sel() const { return get_bits(2,0); }
+inline unsigned instr::get_msb() const { return get_bits(15,11); }
+inline unsigned instr::get_lsb() const { return get_bits(10,6); }
+inline unsigned instr::get_cc() const { return get_bits(20,18); }
+inline unsigned instr::get_cond_cc() const { return get_bits(10,8); }
+inline unsigned instr::get_cache_op() const { return get_bits(20,16); }
+inline unsigned instr::get_cachex_op() const { return get_bits(15,11); }
+inline unsigned instr::get_sync_type() const { return get_bits(10,6); }
+inline unsigned instr::get_cofun() const { return get_bits(24,0); }
 
 ostream &operator<<(ostream &, const instr &);
 

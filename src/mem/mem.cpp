@@ -3,7 +3,7 @@
 
 #include "mem.hpp"
 
-mem_ifc::mem_ifc(shared_ptr<reqs_t> reqs, shared_ptr<resps_t> resps) throw()
+mem_ifc::mem_ifc(shared_ptr<reqs_t> reqs, shared_ptr<resps_t> resps)
     : requests(reqs), responses(resps) {
     assert(requests);
     assert(responses);

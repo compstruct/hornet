@@ -35,12 +35,12 @@ public:
     memStats(const uint64_t &system_time);
     virtual ~memStats();
 
-    void add_per_tile_stats(shared_ptr<memStatsPerTile> stats);
+    void add_per_tile_stats(std::shared_ptr<memStatsPerTile> stats);
 
 protected:
     virtual void print_stats(ostream &out);
 
-    typedef map<uint32_t/*tile id*/, shared_ptr<memStatsPerTile> > perTileStats_t;
+    typedef map<uint32_t/*tile id*/, std::shared_ptr<memStatsPerTile> > perTileStats_t;
 
     perTileStats_t m_per_tile_stats;
 

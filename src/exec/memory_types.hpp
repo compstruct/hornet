@@ -5,12 +5,9 @@
 #define __MEMORY_TYPES_HPP__
 
 #include <stdint.h>
-#include <boost/tuple/tuple.hpp>
-#include <boost/tuple/tuple_comparison.hpp>
 #include <iostream>
 
 using namespace std;
-using namespace boost;
 
 typedef enum {
     MEM_PRIVATE_SHARED_MSI_MESI = 0,

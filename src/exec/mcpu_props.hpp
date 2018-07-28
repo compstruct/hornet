@@ -1,7 +1,7 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include "logger.hpp"
 #include "reg.hpp"
 #include "mem.hpp"
@@ -16,18 +16,18 @@
 #include "instr.hpp"
 
 /* Configures instruction execute stage latency in a pipelined, fully-bypassed 
- 	 MIPS core model. 
-	 @returns: the number of cycles worth of delay the instruction should have,
-						 return -1 means that the instruction is not currently implemented 
-						 (will throw an error) */
-int get_cycle_delay(shared_ptr<instr> ip) throw(err) {
+         MIPS core model. 
+         @returns: the number of cycles worth of delay the instruction should have,
+                                                 return -1 means that the instruction is not currently implemented 
+                                                 (will throw an error) */
+int get_cycle_delay(shared_ptr<instr> ip) {
     instr i = *ip;
     instr_code code = i.get_opcode();
 
     switch (code) {
-		//		
-		// Arithmetic
-		//		
+                //              
+                // Arithmetic
+                //              
     case IC_ADD: 
     case IC_ADDI: 
     case IC_ADDIU: 
@@ -51,9 +51,9 @@ int get_cycle_delay(shared_ptr<instr> ip) throw(err) {
     case IC_SUBU: 
     case IC_XOR:
     case IC_XORI: return 1;
-		//
-		// Mult/Div
-		//
+                //
+                // Mult/Div
+                //
     case IC_DIV: 
     case IC_DIVU: 
     case IC_MUL: 
@@ -63,9 +63,9 @@ int get_cycle_delay(shared_ptr<instr> ip) throw(err) {
     case IC_MADDU: 
     case IC_MSUB: 
     case IC_MSUBU: return 6;
-		//
-		// Branch
-		//
+                //
+                // Branch
+                //
     case IC_B: 
     case IC_BAL: 
     case IC_BC1F: 
@@ -88,18 +88,18 @@ int get_cycle_delay(shared_ptr<instr> ip) throw(err) {
     case IC_BLTZL:
     case IC_BNE: 
     case IC_BNEL: return 1;
-		//		
-		// Jump
-		//
+                //              
+                // Jump
+                //
     case IC_J: 
     case IC_JAL: 
     case IC_JALR:
     case IC_JALR_HB: 
     case IC_JR:
     case IC_JR_HB: return 1;
-		//
-		// Memory
-		//
+                //
+                // Memory
+                //
     case IC_LB: 
     case IC_LBU: 
     case IC_LH:
@@ -107,18 +107,18 @@ int get_cycle_delay(shared_ptr<instr> ip) throw(err) {
     case IC_LUI: 
     case IC_LW: 
     case IC_SW: return 1;
-		//
-		// Floating
-		//
-  	case IC_ADD_D: return 10;
+                //
+                // Floating
+                //
+        case IC_ADD_D: return 10;
     case IC_C_LT_S: 
     case IC_SUB_S: 
     case IC_ADD_S: return 5;
     case IC_CVT_D_S: return 2;
     case IC_CVT_S_D: return 1;
     case IC_DIV_D:
-		case IC_MUL_D: return 20;    
-		case IC_DIV_S: 
+                case IC_MUL_D: return 20;    
+                case IC_DIV_S: 
     case IC_MUL_S: return 10;
     case IC_MOV_S: 
     case IC_MTC1: 
@@ -129,9 +129,9 @@ int get_cycle_delay(shared_ptr<instr> ip) throw(err) {
     case IC_LDC1: 
     case IC_SDC1: return 2;
     case IC_TRUNC_W_S: return 1;
-		//
-		// Misc
-		//
+                //
+                // Misc
+                //
     case IC_DI: 
     case IC_EHB: 
     case IC_EI: 
@@ -155,10 +155,10 @@ int get_cycle_delay(shared_ptr<instr> ip) throw(err) {
     case IC_SH: return 1;
     case IC_CLO: 
     case IC_CLZ: return 32; // TODO: is this implemented in 1 or 32 cycles?
-		//
-		// Unimplemented  
-		//  
-		case IC_ABS_D: return -1;
+                //
+                // Unimplemented  
+                //  
+                case IC_ABS_D: return -1;
     case IC_ABS_PS: return -1;
     case IC_ABS_S: return -1;
     case IC_BC2F: return -1;

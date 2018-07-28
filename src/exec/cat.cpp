@@ -5,7 +5,7 @@
 #include <iostream>
 
 catRequest::catRequest(maddr_t maddr, uint32_t sender) : 
-    m_status(CAT_REQ_NEW), m_maddr(maddr), m_sender(sender), m_stats_info(shared_ptr<void>()) 
+    m_status(CAT_REQ_NEW), m_maddr(maddr), m_sender(sender), m_stats_info(std::shared_ptr<void>()) 
 {}
 
 catRequest::~catRequest() {}
@@ -68,7 +68,7 @@ catStripe::catStripe(uint32_t num_nodes, const uint64_t& t, uint32_t num_ports, 
 
 catStripe::~catStripe() {}
 
-void catStripe::request(shared_ptr<catRequest> req) {
+void catStripe::request(std::shared_ptr<catRequest> req) {
     assert(available());
     if (m_num_ports > 0) {
         --m_num_free_ports;
@@ -82,7 +82,7 @@ void catStripe::tick_positive_edge() {}
 
 void catStripe::tick_negative_edge() {
     while (!m_entry_queue.empty() && m_entry_queue.front().available_time <= system_time) {
-        shared_ptr<catRequest> req = m_entry_queue.front().request;
+        std::shared_ptr<catRequest> req = m_entry_queue.front().request;
         set_req_home(req, (req_maddr(req).address/m_allocation_unit_in_bytes)%m_num_nodes);
         set_req_status(req, CAT_REQ_DONE);
         if (m_num_ports > 0) {
@@ -97,7 +97,7 @@ void catStripe::tick_negative_edge() {
 /*****************/
 
 catStatic::catStatic(uint32_t num_nodes, const uint64_t& t, uint32_t num_ports, uint32_t latency, uint32_t allocation_unit_in_bytes, 
-                     uint32_t synch_delay, shared_ptr<SynchedCATModel> model) : 
+                     uint32_t synch_delay, std::shared_ptr<SynchedCATModel> model) : 
     cat(num_nodes, t, num_ports, latency, allocation_unit_in_bytes), m_model(model), m_synch_delay(synch_delay) {}
 
 catStatic::~catStatic() {}
@@ -109,7 +109,7 @@ void catStatic::set(maddr_t maddr, uint32_t home, bool delay_to_synch) {
     m_model->unlock();
 }
 
-void catStatic::request(shared_ptr<catRequest> req) {
+void catStatic::request(std::shared_ptr<catRequest> req) {
     assert(available());
     if (m_num_ports > 0) {
         --m_num_free_ports;
@@ -164,12 +164,12 @@ void catStatic::tick_negative_edge() {
 /*****************/
 
 catFirstTouch::catFirstTouch(uint32_t num_nodes, const uint64_t& t, uint32_t num_ports, uint32_t latency, 
-                             uint32_t allocation_unit_in_bytes, uint32_t synch_delay, shared_ptr<SynchedCATModel> model) : 
+                             uint32_t allocation_unit_in_bytes, uint32_t synch_delay, std::shared_ptr<SynchedCATModel> model) : 
     cat(num_nodes, t, num_ports, latency, allocation_unit_in_bytes), m_model(model), m_synch_delay(synch_delay) {}
 
 catFirstTouch::~catFirstTouch() {}
 
-void catFirstTouch::request(shared_ptr<catRequest> req) {
+void catFirstTouch::request(std::shared_ptr<catRequest> req) {
     assert(available());
     if (m_num_ports > 0) {
         --m_num_free_ports;

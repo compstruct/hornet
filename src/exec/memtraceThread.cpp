@@ -15,7 +15,7 @@
 #endif
 
 memtraceThread::memtraceThread(uint32_t id, const uint64_t &t, logger &l) : 
-    m_id(id), system_time(t), log(l), m_stats(shared_ptr<memtraceThreadStatsPerThread>())
+    m_id(id), system_time(t), log(l), m_stats(std::shared_ptr<memtraceThreadStatsPerThread>()), m_cur()
 {
     m_cur.type = INST_NONE;
     m_cur.repeats = 0;
@@ -43,7 +43,7 @@ void memtraceThread::add_mem_inst(uint32_t alu_cost, bool write, maddr_t maddr, 
     new_inst.maddr = maddr;
     new_inst.word_count = word_count;
     new_inst.first_memory_issued = false;
-    new_inst.per_mem_instr_runtime_info = shared_ptr<shared_ptr<void> >(new shared_ptr<void>(shared_ptr<void>()));
+    new_inst.per_mem_instr_runtime_info = std::shared_ptr<std::shared_ptr<void> >(new std::shared_ptr<void>(std::shared_ptr<void>()));
     m_insts.push_back(new_inst);
 }
 
@@ -106,27 +106,27 @@ memtraceThreadPool::memtraceThreadPool() {}
 
 memtraceThreadPool::~memtraceThreadPool() {}
 
-void memtraceThreadPool::add_thread(shared_ptr<memtraceThread> p) {
+void memtraceThreadPool::add_thread(std::shared_ptr<memtraceThread> p) {
     unique_lock<recursive_mutex> lock(memtraceThreadPool_mutex);
     assert(m_threads.count(p->get_id()) == 0);
     m_threads[p->get_id()] = p;
 }
 
-shared_ptr<memtraceThread> memtraceThreadPool::find(uint32_t id) {
+std::shared_ptr<memtraceThread> memtraceThreadPool::find(uint32_t id) {
     /* if a thread may be added or removed during simulation, */
     /* it must be protected by a lock (which means slow) */
     if (m_threads.count(id) > 0) {
         return m_threads[id];
     } else {
-        return shared_ptr<memtraceThread>();
+        return std::shared_ptr<memtraceThread>();
     }
 }
 
-shared_ptr<memtraceThread> memtraceThreadPool::thread_at(uint32_t n) {
+std::shared_ptr<memtraceThread> memtraceThreadPool::thread_at(uint32_t n) {
     /* if a thread may be added or removed during simulation, */
     /* it must be protected by a lock (which means slow) */
     assert(m_threads.size() > n);
-    map<uint32_t, shared_ptr<memtraceThread> >::iterator i = m_threads.begin();
+    map<uint32_t, std::shared_ptr<memtraceThread> >::iterator i = m_threads.begin();
     for (; n > 0; ++i, --n) ;
     return i->second;
 }
@@ -138,7 +138,7 @@ unsigned int memtraceThreadPool::size() {
 
 bool memtraceThreadPool::empty() {
     unique_lock<recursive_mutex> lock(memtraceThreadPool_mutex);
-    map<uint32_t, shared_ptr<memtraceThread> >::iterator i;
+    map<uint32_t, std::shared_ptr<memtraceThread> >::iterator i;
     for (i = m_threads.begin(); i != m_threads.end(); ++i) {
         if (!(i->second)->finished()) {
             return false;

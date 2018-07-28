@@ -12,7 +12,7 @@ memStats::memStats(const uint64_t &t) : aux_statistics(t) {}
 
 memStats::~memStats() {}
 
-void memStats::add_per_tile_stats(shared_ptr<memStatsPerTile> stats) {
+void memStats::add_per_tile_stats(std::shared_ptr<memStatsPerTile> stats) {
     assert(m_per_tile_stats.count(stats->m_id) == 0);
     m_per_tile_stats[stats->m_id] = stats;
 }
@@ -32,7 +32,7 @@ void memStats::print_stats(ostream &out) {
     perTileStats_t::iterator it;
     for (it = m_per_tile_stats.begin(); it != m_per_tile_stats.end(); ++it) {
         uint32_t id = it->first;
-        shared_ptr<memStatsPerTile> st = it->second;
+        std::shared_ptr<memStatsPerTile> st = it->second;
         total_reads += st->m_reads;
         total_writes += st->m_writes;
 

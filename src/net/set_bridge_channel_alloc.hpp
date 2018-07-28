@@ -13,20 +13,20 @@ using namespace std;
 class set_bridge_channel_alloc : public bridge_channel_alloc {
 public:
     set_bridge_channel_alloc(node_id src, bool one_q_per_f, bool one_f_per_q,
-                             logger &log, shared_ptr<random_gen> ran) throw();
-    virtual ~set_bridge_channel_alloc() throw();
-    virtual virtual_queue_id request(flow_id flow) throw(err);
-    void add_queue(shared_ptr<virtual_queue> q) throw(err);
+                             logger &log, std::shared_ptr<random_gen> ran);
+    virtual ~set_bridge_channel_alloc();
+    virtual virtual_queue_id request(flow_id flow);
+    void add_queue(std::shared_ptr<virtual_queue> q);
     void add_route(const flow_id &f,
-                   const vector<tuple<virtual_queue_id,double> > &qs)
-        throw(err);
+                   const vector<std::tuple<virtual_queue_id,double> > &qs)
+       ;
 private:
-    typedef map<virtual_queue_id, shared_ptr<virtual_queue> > queues_t;
+    typedef map<virtual_queue_id, std::shared_ptr<virtual_queue> > queues_t;
     queues_t queues;
-    typedef vector<tuple<shared_ptr<virtual_queue>, double> > route_queues_t;
+    typedef vector<std::tuple<std::shared_ptr<virtual_queue>, double> > route_queues_t;
     typedef map<flow_id, route_queues_t> routes_t;
     routes_t routes;
-    shared_ptr<random_gen> ran;
+    std::shared_ptr<random_gen> ran;
 };
 
 #endif // __SET_BRIDGE_CHANNEL_ALLOC_HPP__

@@ -4,9 +4,9 @@
 #include <iomanip>
 #include "pe.hpp"
 
-pe::pe(const pe_id &new_id) throw() : id(new_id) { }
+pe::pe(const pe_id &new_id) : id(new_id) { }
 
-pe::~pe() throw() { }
+pe::~pe() { }
 
 ostream &operator<<(ostream &out, const pe_id &id) {
     return out << hex << setfill('0') << setw(2) << id.id;

@@ -12,25 +12,25 @@
 #include "injector.hpp"
 
 injector::injector(const pe_id &id, const uint64_t &t,
-                   shared_ptr<id_factory<packet_id> > pif,
-                   shared_ptr<tile_statistics> st, logger &l,
-                   shared_ptr<random_gen> r) throw(err)
+                   std::shared_ptr<id_factory<packet_id> > pif,
+                   std::shared_ptr<tile_statistics> st, logger &l,
+                   std::shared_ptr<random_gen> r)
     : pe(id), system_time(t), next_event(events.begin()),
       packet_id_factory(pif), stats(st), log(l), ran(r) { }
 
-injector::~injector() throw() { }
+injector::~injector() { }
 
-void injector::connect(shared_ptr<bridge> net_bridge) throw(err) {
+void injector::connect(std::shared_ptr<bridge> net_bridge) {
     net = net_bridge;
-    shared_ptr<vector<uint32_t> > qs = net->get_ingress_queue_ids();
+    std::shared_ptr<vector<uint32_t> > qs = net->get_ingress_queue_ids();
     queue_ids.clear();
     copy(qs->begin(), qs->end(),
          back_insert_iterator<vector<uint32_t> >(queue_ids));
 }
 
 void injector::add_event(const uint64_t &t, const flow_id &f,
-                         unsigned l, const uint64_t &p) throw(err) {
-    assert(events.empty() || t >= events.back().get<0>());
+                         unsigned l, const uint64_t &p) {
+    assert(events.empty() || t >= get<0>(events.back()));
     events.push_back(make_tuple(t, f, l, p));
     next_event = events.begin();
     if (find(flow_ids.begin(), flow_ids.end(), f) == flow_ids.end()) {
@@ -39,13 +39,14 @@ void injector::add_event(const uint64_t &t, const flow_id &f,
     }
 }
 
-void injector::set_stop_darsim() throw(err) { }
+void injector::set_stop_darsim() { }
 
-void injector::tick_positive_edge() throw(err) {
-    for (; next_event != events.end() && next_event->get<0>() == system_time;
+void injector::tick_positive_edge() {
+    for (; next_event != events.end() && get<0>(*next_event) == system_time;
          ++next_event) {
-        tick_t t; flow_id f; len_t l; period_t p;
-        tie(t, f, l, p) = *next_event;
+        flow_id f = get<1>(*next_event);
+        len_t l = get<2>(*next_event);
+        period_t p = get<3>(*next_event);
         if (p > 0) {
             flows[f] = make_tuple(system_time, l, p);
         } else if (l > 0 ) {
@@ -97,7 +98,9 @@ void injector::tick_positive_edge() throw(err) {
     random_shuffle(flow_ids.begin(), flow_ids.end(), rr_fn);
     for (vector<flow_id>::iterator fi = flow_ids.begin();
          fi != flow_ids.end(); ++fi) {
-        tick_t t; len_t l; period_t p; tie(t, l, p) = flows[*fi];
+        tick_t t = get<0>(flows[*fi]);
+        len_t l = get<1>(flows[*fi]);
+        period_t p = get<2>(flows[*fi]);
         if (l != 0 && t == system_time) {
             waiting_packet pkt = { packet_id_factory->get_fresh_id(), *fi, l,
                                    stats->is_started() };
@@ -107,7 +110,7 @@ void injector::tick_positive_edge() throw(err) {
             if (pkt.count_in_stats) {
                 stats->offer_packet(pkt.flow, pkt.id, pkt.len);
             }
-            flows[*fi].get<0>() = t + p;
+            get<0>(flows[*fi]) = t + p;
         }
     }
     unsigned num_qs = net->get_egress()->get_remote_queues().size();
@@ -115,30 +118,30 @@ void injector::tick_positive_edge() throw(err) {
         for (vector<flow_id>::iterator fi = flow_ids.begin();
              fi != flow_ids.end(); ++fi) {
             queue<waiting_packet> &q = waiting_packets[*fi];
-	    if (!q.empty()) {
-		    waiting_packet &pkt = q.front();
-		    if (net->send(fi->get_numeric_id(), NULL, pkt.len, pkt.id,
-					    pkt.count_in_stats)) {
-			    q.pop();
-		    }
+            if (!q.empty()) {
+                    waiting_packet &pkt = q.front();
+                    if (net->send(fi->get_numeric_id(), NULL, pkt.len, pkt.id,
+                                            pkt.count_in_stats)) {
+                            q.pop();
+                    }
             }
         }
     }
 }
 
-void injector::tick_negative_edge() throw(err) { }
+void injector::tick_negative_edge() { }
 
-void injector::add_packet(uint64_t time, const flow_id &flow, uint32_t len) throw(err) { }
+void injector::add_packet(uint64_t time, const flow_id &flow, uint32_t len) { }
 
-bool injector::work_queued() throw(err) {
+bool injector::work_queued() {
     return 0;
 }
 
-bool injector::is_ready_to_offer() throw(err) {
+bool injector::is_ready_to_offer() {
     return 0;
 }
 
-uint64_t injector::next_pkt_time() throw(err) {
+uint64_t injector::next_pkt_time() {
     uint64_t next_time = UINT64_MAX;
     if (!incoming_packets.empty()) {
         return system_time;
@@ -148,17 +151,17 @@ uint64_t injector::next_pkt_time() throw(err) {
         if (!wpi->second.empty()) return system_time;
     }
     if (next_event != events.end()) {
-        next_time = next_event->get<0>();
+        next_time = get<0>(*next_event);
     }
     for (flows_t::const_iterator fi = flows.begin(); fi != flows.end(); ++fi) {
-        if (fi->second.get<0>() < next_time) {
-            next_time = fi->second.get<0>();
+        if (get<0>(fi->second) < next_time) {
+            next_time = get<0>(fi->second);
         }
     }
     return next_time;
 }
 
-bool injector::is_drained() const throw() {
+bool injector::is_drained() const {
     bool drained = true;
     drained &= net->get_waiting_queues() == 0;
     for (uint32_t i = 0; i < 32; ++i) {

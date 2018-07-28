@@ -9,5 +9,5 @@ ostream &operator<<(ostream &out, const virtual_queue_id &id) {
 }
 
 ostream &operator<<(ostream &out, const virtual_queue_node_id &id) {
-    return out << id.get<0>() << ":" << id.get<1>();
+    return out << get<0>(id) << ":" << get<1>(id);
 }

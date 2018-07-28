@@ -32,17 +32,17 @@
 
 sharedSharedEMRA::sharedSharedEMRA(uint32_t id, 
                                    const uint64_t &t, 
-                                   shared_ptr<tile_statistics> st, 
+                                   std::shared_ptr<tile_statistics> st, 
                                    logger &l, 
-                                   shared_ptr<random_gen> r, 
-                                   shared_ptr<cat> a_cat, 
+                                   std::shared_ptr<random_gen> r, 
+                                   std::shared_ptr<cat> a_cat, 
                                    sharedSharedEMRACfg_t cfg) :
     memory(id, t, st, l, r), 
     m_cfg(cfg), 
     m_l1(NULL), 
     m_l2(NULL), 
     m_cat(a_cat), 
-    m_stats(shared_ptr<sharedSharedEMRAStatsPerTile>()),
+    m_stats(std::shared_ptr<sharedSharedEMRAStatsPerTile>()),
     m_work_table_vacancy(cfg.work_table_size),
     m_available_core_ports(cfg.num_local_core_ports)
 {
@@ -103,7 +103,7 @@ sharedSharedEMRA::~sharedSharedEMRA() {
 
 uint32_t sharedSharedEMRA::number_of_mem_msg_types() { return NUM_MSG_TYPES; }
 
-void sharedSharedEMRA::request(shared_ptr<memoryRequest> req) {
+void sharedSharedEMRA::request(std::shared_ptr<memoryRequest> req) {
 
     /* assumes a request is not across multiple cache lines */
     uint32_t __attribute__((unused)) byte_offset = req->maddr().address%(m_cfg.words_per_cache_line*4);
@@ -114,12 +114,12 @@ void sharedSharedEMRA::request(shared_ptr<memoryRequest> req) {
 
     /* per memory instruction info */
     if (req->per_mem_instr_runtime_info()) {
-        shared_ptr<shared_ptr<void> > p_runtime_info = req->per_mem_instr_runtime_info();
-        shared_ptr<void>& runtime_info = *p_runtime_info;
-        shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
+            std::shared_ptr<std::shared_ptr<void> > p_runtime_info = req->per_mem_instr_runtime_info();
+            std::shared_ptr<void>& runtime_info = *p_runtime_info;
+            std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats;
         if (!runtime_info) {
             /* no per-instr stats: this is the first time this memory instruction is issued */
-            per_mem_instr_stats = shared_ptr<sharedSharedEMRAStatsPerMemInstr>(new sharedSharedEMRAStatsPerMemInstr(req->is_read()));
+            per_mem_instr_stats = std::shared_ptr<sharedSharedEMRAStatsPerMemInstr>(new sharedSharedEMRAStatsPerMemInstr(req->is_read()));
             per_mem_instr_stats->set_serialization_begin_time_at_current_core(system_time);
             runtime_info = per_mem_instr_stats;
         } else {
@@ -185,7 +185,7 @@ void sharedSharedEMRA::update_work_table() {
     for (workTable::iterator it_addr = m_work_table.begin(); it_addr != m_work_table.end(); ) {
 
         maddr_t start_maddr = it_addr->first;
-        shared_ptr<tableEntry>& entry = it_addr->second;
+        std::shared_ptr<tableEntry>& entry = it_addr->second;
 
 #if 0
         if (system_time > 120000) {
@@ -194,28 +194,28 @@ void sharedSharedEMRA::update_work_table() {
         }
 #endif
 
-        shared_ptr<memoryRequest>& core_req = entry->core_req;
-        shared_ptr<catRequest>& cat_req = entry->cat_req;
-        shared_ptr<cacheRequest>& l1_req = entry->l1_req;
-        shared_ptr<cacheRequest>& l2_req = entry->l2_req;
-        shared_ptr<coherenceMsg>& ra_req = entry->ra_req;;
-        shared_ptr<coherenceMsg>& ra_rep = entry->ra_rep; 
-        shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
-        shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
+        std::shared_ptr<memoryRequest>& core_req = entry->core_req;
+        std::shared_ptr<catRequest>& cat_req = entry->cat_req;
+        std::shared_ptr<cacheRequest>& l1_req = entry->l1_req;
+        std::shared_ptr<cacheRequest>& l2_req = entry->l2_req;
+        std::shared_ptr<coherenceMsg>& ra_req = entry->ra_req;;
+        std::shared_ptr<coherenceMsg>& ra_rep = entry->ra_rep; 
+        std::shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
+        std::shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
 
-        shared_ptr<cacheLine> l1_line = (l1_req)? l1_req->line_copy() : shared_ptr<cacheLine>();
-        shared_ptr<cacheLine> l2_line = (l2_req)? l2_req->line_copy() : shared_ptr<cacheLine>();
-        shared_ptr<cacheLine> l1_victim = (l1_req)? l1_req->line_to_evict_copy() : shared_ptr<cacheLine>();
-        shared_ptr<cacheLine> l2_victim = (l2_req)? l2_req->line_to_evict_copy() : shared_ptr<cacheLine>();
+        std::shared_ptr<cacheLine> l1_line = (l1_req)? l1_req->line_copy() : std::shared_ptr<cacheLine>();
+        std::shared_ptr<cacheLine> l2_line = (l2_req)? l2_req->line_copy() : std::shared_ptr<cacheLine>();
+        std::shared_ptr<cacheLine> l1_victim = (l1_req)? l1_req->line_to_evict_copy() : std::shared_ptr<cacheLine>();
+        std::shared_ptr<cacheLine> l2_victim = (l2_req)? l2_req->line_to_evict_copy() : std::shared_ptr<cacheLine>();
 
-        shared_ptr<sharedSharedEMRAStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
+        std::shared_ptr<sharedSharedEMRAStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
 
         if (entry->status == _CAT_AND_L1_FOR_LOCAL) {
 
             if (l1_req->status() == CACHE_REQ_HIT) {
 
                 /* it's for sure that it get's a core hit */
-                cat_req = shared_ptr<catRequest>();
+                cat_req = std::shared_ptr<catRequest>();
 
                 shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
                 uint32_t word_offset = (core_req->maddr().address / 4 ) % m_cfg.words_per_cache_line;
@@ -283,7 +283,7 @@ void sharedSharedEMRA::update_work_table() {
                     uint32_t home = cat_req->home();
                     if (home != m_id) {
                         /* L1 must miss */
-                        l1_req = shared_ptr<cacheRequest>();
+                        l1_req = std::shared_ptr<cacheRequest>();
 
                         mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a core miss for "
                                   << core_req->maddr() << endl;
@@ -319,7 +319,7 @@ void sharedSharedEMRA::update_work_table() {
                             /* FINISHED */
                         }
 
-                        ra_req = shared_ptr<coherenceMsg>(new coherenceMsg);
+                        ra_req = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                         ra_req->sender = m_id;
                         ra_req->receiver = home;
                         if (core_req->is_read()) {
@@ -373,10 +373,10 @@ void sharedSharedEMRA::update_work_table() {
                                   << core_req->maddr() << endl;
 
                         if (core_req->is_read()) {
-                            l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_READ,
+                            l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_READ,
                                                                                m_cfg.words_per_cache_line));
                         } else {
-                            l2_req = shared_ptr<cacheRequest>(new cacheRequest(core_req->maddr(), CACHE_REQ_WRITE,
+                            l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(core_req->maddr(), CACHE_REQ_WRITE,
                                                                                core_req->word_count(), core_req->data()));
                         }
                         l2_req->set_serialization_begin_time(system_time);
@@ -526,7 +526,7 @@ void sharedSharedEMRA::update_work_table() {
                     }
                 }
 
-                ra_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                ra_rep = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                 ra_rep->sender = m_id;
                 ra_rep->sent = false;
                 ra_rep->type = RA_REP;
@@ -565,10 +565,10 @@ void sharedSharedEMRA::update_work_table() {
                 }
 
                 if (ra_req->type == RA_READ_REQ) {
-                    l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_READ,
+                    l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_READ,
                                                                        m_cfg.words_per_cache_line));
                 } else {
-                    l2_req = shared_ptr<cacheRequest>(new cacheRequest(ra_req->maddr, CACHE_REQ_WRITE,
+                    l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(ra_req->maddr, CACHE_REQ_WRITE,
                                                                        ra_req->word_count, ra_req->data));
                 }
                 l2_req->set_serialization_begin_time(system_time);
@@ -654,7 +654,7 @@ void sharedSharedEMRA::update_work_table() {
                 mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] gets an L2 HIT for a request on "
                           << l2_req->maddr() << endl;
 
-                l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+                l1_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                    m_cfg.words_per_cache_line,
                                                                    l2_line->data));
                 l1_req->set_serialization_begin_time(system_time);
@@ -699,11 +699,11 @@ void sharedSharedEMRA::update_work_table() {
                     }
                 }
 
-                dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                dramctrl_req = std::shared_ptr<dramctrlMsg>(new dramctrlMsg);
                 dramctrl_req->sender = m_id;
                 dramctrl_req->receiver = m_dramctrl_location;
                 dramctrl_req->maddr = start_maddr;
-                dramctrl_req->dram_req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
+                dramctrl_req->dram_req = std::shared_ptr<dramRequest>(new dramRequest(start_maddr,
                                                                                  DRAM_REQ_READ,
                                                                                  m_cfg.words_per_cache_line));
                 dramctrl_req->sent = false;
@@ -766,7 +766,7 @@ void sharedSharedEMRA::update_work_table() {
                     }
                     set_req_data(core_req, ret);
                 } else {
-                    ra_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                    ra_rep = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                     ra_rep->sender = m_id;
                     ra_rep->sent = false;
                     ra_rep->type = RA_REP;
@@ -790,7 +790,7 @@ void sharedSharedEMRA::update_work_table() {
                         stats()->writeback_at_l1();
                     }
 
-                    l2_req = shared_ptr<cacheRequest>(new cacheRequest(l1_victim->start_maddr,
+                    l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(l1_victim->start_maddr,
                                                                        CACHE_REQ_UPDATE,
                                                                        m_cfg.words_per_cache_line,
                                                                        l1_victim->data));
@@ -936,11 +936,11 @@ void sharedSharedEMRA::update_work_table() {
 
             } else {
                 /* miss - send writeback to dram */
-                dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                dramctrl_req = std::shared_ptr<dramctrlMsg>(new dramctrlMsg);
                 dramctrl_req->sender = m_id;
                 dramctrl_req->receiver = m_dramctrl_location;
                 dramctrl_req->maddr = l1_victim->start_maddr;
-                dramctrl_req->dram_req = shared_ptr<dramRequest>(new dramRequest(l1_victim->start_maddr,
+                dramctrl_req->dram_req = std::shared_ptr<dramRequest>(new dramRequest(l1_victim->start_maddr,
                                                                                  DRAM_REQ_WRITE,
                                                                                  m_cfg.words_per_cache_line,
                                                                                  l1_victim->data));
@@ -1044,7 +1044,7 @@ void sharedSharedEMRA::update_work_table() {
                 }
             }
 
-            l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+            l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                m_cfg.words_per_cache_line, 
                                                                dramctrl_rep->dram_req->read()));
             l2_req->set_serialization_begin_time(system_time);
@@ -1119,7 +1119,7 @@ void sharedSharedEMRA::update_work_table() {
 
                 /* ready to make l1 fill request first */
 
-                l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+                l1_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                    m_cfg.words_per_cache_line,
                                                                    l2_line->data));
                 l1_req->set_serialization_begin_time(system_time);
@@ -1132,11 +1132,11 @@ void sharedSharedEMRA::update_work_table() {
                 }
 
                 if (l2_victim && l2_victim->data_dirty) {
-                    dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                    dramctrl_req = std::shared_ptr<dramctrlMsg>(new dramctrlMsg);
                     dramctrl_req->sender = m_id;
                     dramctrl_req->receiver = m_dramctrl_location;
                     dramctrl_req->maddr = l2_victim->start_maddr;
-                    dramctrl_req->dram_req = shared_ptr<dramRequest>(new dramRequest(l2_victim->start_maddr,
+                    dramctrl_req->dram_req = std::shared_ptr<dramRequest>(new dramRequest(l2_victim->start_maddr,
                                                                                      DRAM_REQ_WRITE,
                                                                                      m_cfg.words_per_cache_line,
                                                                                      l2_victim->data));
@@ -1218,10 +1218,10 @@ void sharedSharedEMRA::update_work_table() {
 void sharedSharedEMRA::update_dramctrl_work_table() {
 
     for (dramctrlTable::iterator it_addr = m_dramctrl_work_table.begin(); it_addr != m_dramctrl_work_table.end(); ) {
-        shared_ptr<dramctrlTableEntry>& entry = it_addr->second;
-        shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
-        shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
-        shared_ptr<sharedSharedEMRAStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
+            std::shared_ptr<dramctrlTableEntry>& entry = it_addr->second;
+            std::shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
+            std::shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
+            std::shared_ptr<sharedSharedEMRAStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
 
         /* only reads are in the table */
         if (dramctrl_req->dram_req->status() == DRAM_REQ_DONE) {
@@ -1230,7 +1230,7 @@ void sharedSharedEMRA::update_dramctrl_work_table() {
                 if (stats_enabled() && per_mem_instr_stats) {
                     per_mem_instr_stats->add_dram_ops(system_time - entry->operation_begin_time);
                 }
-                dramctrl_rep = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                dramctrl_rep = std::shared_ptr<dramctrlMsg>(new dramctrlMsg);
                 dramctrl_rep->sender = m_id;
                 dramctrl_rep->maddr = dramctrl_req->maddr;
                 dramctrl_rep->dram_req = dramctrl_req->dram_req;
@@ -1259,8 +1259,8 @@ void sharedSharedEMRA::update_dramctrl_work_table() {
 void sharedSharedEMRA::accept_incoming_messages() {
 
     if (m_core_receive_queues[MSG_RA_REP]->size()) {
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_RA_REP]->front();
-        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+            std::shared_ptr<message_t> msg = m_core_receive_queues[MSG_RA_REP]->front();
+            std::shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
         maddr_t msg_start_maddr = get_start_maddr_in_line(data_msg->maddr);
         mh_assert(m_work_table.count(msg_start_maddr) && 
                   (m_work_table[msg_start_maddr]->status == _WAIT_RA_REP));
@@ -1269,21 +1269,21 @@ void sharedSharedEMRA::accept_incoming_messages() {
     }
     
     if (m_core_receive_queues[MSG_RA_REQ]->size()) {
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_RA_REQ]->front();
-        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+            std::shared_ptr<message_t> msg = m_core_receive_queues[MSG_RA_REQ]->front();
+            std::shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
         m_new_work_table_entry_schedule_q.push_back(make_tuple(true, data_msg));
     }
 
     if (m_core_receive_queues[MSG_DRAMCTRL_REQ]->size()) {
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAMCTRL_REQ]->front();
-        shared_ptr<dramctrlMsg> dram_msg = static_pointer_cast<dramctrlMsg>(msg->content);
+            std::shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAMCTRL_REQ]->front();
+            std::shared_ptr<dramctrlMsg> dram_msg = static_pointer_cast<dramctrlMsg>(msg->content);
         m_dramctrl_req_schedule_q.push_back(make_tuple(true, dram_msg));
     }
 
     if (m_core_receive_queues[MSG_DRAMCTRL_REP]->size()) {
         /* note: no replies for DRAM writes */
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAMCTRL_REP]->front();
-        shared_ptr<dramctrlMsg> dramctrl_msg = static_pointer_cast<dramctrlMsg>(msg->content);
+            std::shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAMCTRL_REP]->front();
+            std::shared_ptr<dramctrlMsg> dramctrl_msg = static_pointer_cast<dramctrlMsg>(msg->content);
         maddr_t start_maddr = dramctrl_msg->dram_req->maddr(); /* always access by a cache line */
         mh_assert(m_work_table.count(start_maddr) > 0);
         m_work_table[start_maddr]->dramctrl_rep = dramctrl_msg;
@@ -1305,7 +1305,7 @@ void sharedSharedEMRA::schedule_requests() {
     random_shuffle(m_core_port_schedule_q.begin(), m_core_port_schedule_q.end(), rr_fn);
     uint32_t requested = 0;
     while (m_core_port_schedule_q.size()) {
-        shared_ptr<memoryRequest> req = m_core_port_schedule_q.front();
+            std::shared_ptr<memoryRequest> req = m_core_port_schedule_q.front();
         if (requested < m_available_core_ports) {
             m_new_work_table_entry_schedule_q.push_back(make_tuple(false, req));
             ++requested;
@@ -1321,11 +1321,11 @@ void sharedSharedEMRA::schedule_requests() {
 
     random_shuffle(m_new_work_table_entry_schedule_q.begin(), m_new_work_table_entry_schedule_q.end(), rr_fn);
     while (m_new_work_table_entry_schedule_q.size()) {
-        bool is_remote = m_new_work_table_entry_schedule_q.front().get<0>();
+        bool is_remote = get<0>(m_new_work_table_entry_schedule_q.front());
         if (is_remote) {
-            shared_ptr<coherenceMsg> ra_req = static_pointer_cast<coherenceMsg>(m_new_work_table_entry_schedule_q.front().get<1>());
+                std::shared_ptr<coherenceMsg> ra_req = static_pointer_cast<coherenceMsg>(get<1>(m_new_work_table_entry_schedule_q.front()));
             maddr_t start_maddr = get_start_maddr_in_line(ra_req->maddr);
-            shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats = ra_req->per_mem_instr_stats;
+            std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats = ra_req->per_mem_instr_stats;
 
             if (m_work_table.count(start_maddr) || m_work_table_vacancy == 0) {
                 m_new_work_table_entry_schedule_q.erase(m_new_work_table_entry_schedule_q.begin());
@@ -1334,7 +1334,7 @@ void sharedSharedEMRA::schedule_requests() {
 
             bool is_read = (ra_req->type == RA_READ_REQ);
 
-            shared_ptr<cacheRequest> l1_req (new cacheRequest(ra_req->maddr,
+            std::shared_ptr<cacheRequest> l1_req (new cacheRequest(ra_req->maddr,
                                                               (is_read)? CACHE_REQ_READ : CACHE_REQ_WRITE,
                                                               ra_req->word_count,
                                                               (is_read)? shared_array<uint32_t>() : ra_req->data));
@@ -1343,15 +1343,15 @@ void sharedSharedEMRA::schedule_requests() {
             l1_req->set_claim(false);
             l1_req->set_evict(false);
 
-            shared_ptr<tableEntry> new_entry(new tableEntry);
-            new_entry->core_req = shared_ptr<memoryRequest>();
-            new_entry->cat_req = shared_ptr<catRequest>();
+            std::shared_ptr<tableEntry> new_entry(new tableEntry);
+            new_entry->core_req = std::shared_ptr<memoryRequest>();
+            new_entry->cat_req = std::shared_ptr<catRequest>();
             new_entry->l1_req = l1_req; /* valid */
-            new_entry->l2_req = shared_ptr<cacheRequest>();
+            new_entry->l2_req = std::shared_ptr<cacheRequest>();
             new_entry->ra_req = ra_req; /* valid */
-            new_entry->ra_rep = shared_ptr<coherenceMsg>();
-            new_entry->dramctrl_req = shared_ptr<dramctrlMsg>();
-            new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
+            new_entry->ra_rep = std::shared_ptr<coherenceMsg>();
+            new_entry->dramctrl_req = std::shared_ptr<dramctrlMsg>();
+            new_entry->dramctrl_rep = std::shared_ptr<dramctrlMsg>();
             new_entry->per_mem_instr_stats = per_mem_instr_stats; /* valid */
 
             new_entry->status = _L1_FOR_REMOTE;
@@ -1377,13 +1377,13 @@ void sharedSharedEMRA::schedule_requests() {
                       << " ] A remote request from " << ra_req->sender << " on " << ra_req->maddr << " got into the table " << endl;
 
         } else {
-            shared_ptr<memoryRequest> core_req = static_pointer_cast<memoryRequest>(m_new_work_table_entry_schedule_q.front().get<1>());
+                std::shared_ptr<memoryRequest> core_req = static_pointer_cast<memoryRequest>(get<1>(m_new_work_table_entry_schedule_q.front()));
             maddr_t start_maddr = get_start_maddr_in_line(core_req->maddr());
-            shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats = 
+            std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> per_mem_instr_stats = 
                 (core_req->per_mem_instr_runtime_info()) ? 
                     static_pointer_cast<sharedSharedEMRAStatsPerMemInstr>(*(core_req->per_mem_instr_runtime_info()))
                 :
-                    shared_ptr<sharedSharedEMRAStatsPerMemInstr>();
+                    std::shared_ptr<sharedSharedEMRAStatsPerMemInstr>();
 
             if (m_work_table.count(start_maddr) || m_work_table_vacancy == 0) {
                 set_req_status(core_req, REQ_RETRY);
@@ -1395,10 +1395,10 @@ void sharedSharedEMRA::schedule_requests() {
                 per_mem_instr_stats->add_mem_srz(system_time - per_mem_instr_stats->serialization_begin_time_at_current_core());
             }
 
-            shared_ptr<catRequest> cat_req(new catRequest(core_req->maddr(), m_id));
+            std::shared_ptr<catRequest> cat_req(new catRequest(core_req->maddr(), m_id));
             cat_req->set_serialization_begin_time(system_time);
 
-            shared_ptr<cacheRequest> l1_req(new cacheRequest(core_req->maddr(),
+            std::shared_ptr<cacheRequest> l1_req(new cacheRequest(core_req->maddr(),
                                                              core_req->is_read()? CACHE_REQ_READ : CACHE_REQ_WRITE,
                                                              core_req->word_count(),
                                                              core_req->is_read()? shared_array<uint32_t>() : core_req->data()));
@@ -1407,15 +1407,15 @@ void sharedSharedEMRA::schedule_requests() {
             l1_req->set_claim(false);
             l1_req->set_evict(false);
 
-            shared_ptr<tableEntry> new_entry(new tableEntry);
+            std::shared_ptr<tableEntry> new_entry(new tableEntry);
             new_entry->core_req = core_req; /* valid */
             new_entry->cat_req = cat_req; /* valid */
             new_entry->l1_req = l1_req; /* valid */
-            new_entry->l2_req = shared_ptr<cacheRequest>();
-            new_entry->ra_req = shared_ptr<coherenceMsg>();
-            new_entry->ra_rep = shared_ptr<coherenceMsg>();
-            new_entry->dramctrl_req = shared_ptr<dramctrlMsg>();
-            new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
+            new_entry->l2_req = std::shared_ptr<cacheRequest>();
+            new_entry->ra_req = std::shared_ptr<coherenceMsg>();
+            new_entry->ra_rep = std::shared_ptr<coherenceMsg>();
+            new_entry->dramctrl_req = std::shared_ptr<dramctrlMsg>();
+            new_entry->dramctrl_rep = std::shared_ptr<dramctrlMsg>();
             new_entry->per_mem_instr_stats = per_mem_instr_stats; /* valid */
 
             new_entry->status = _CAT_AND_L1_FOR_LOCAL;
@@ -1445,13 +1445,13 @@ void sharedSharedEMRA::schedule_requests() {
     
     random_shuffle(m_dramctrl_req_schedule_q.begin(), m_dramctrl_req_schedule_q.end(), rr_fn);
     while (m_dramctrl_req_schedule_q.size()) {
-        bool is_remote = m_dramctrl_req_schedule_q.front().get<0>();
-        shared_ptr<tableEntry> entry = shared_ptr<tableEntry>();
-        shared_ptr<dramctrlMsg> dramctrl_msg = shared_ptr<dramctrlMsg>();
+        bool is_remote = get<0>(m_dramctrl_req_schedule_q.front());
+        std::shared_ptr<tableEntry> entry = std::shared_ptr<tableEntry>();
+        std::shared_ptr<dramctrlMsg> dramctrl_msg = std::shared_ptr<dramctrlMsg>();
         if (is_remote) {
-            dramctrl_msg = static_pointer_cast<dramctrlMsg>(m_dramctrl_req_schedule_q.front().get<1>());
+            dramctrl_msg = static_pointer_cast<dramctrlMsg>(get<1>(m_dramctrl_req_schedule_q.front()));
         } else {
-            entry = static_pointer_cast<tableEntry>(m_dramctrl_req_schedule_q.front().get<1>());
+            entry = static_pointer_cast<tableEntry>(get<1>(m_dramctrl_req_schedule_q.front()));
             dramctrl_msg = entry->dramctrl_req;
             if (m_dramctrl_writeback_status.count(entry->dramctrl_req->maddr) && 
                 m_dramctrl_writeback_status[entry->dramctrl_req->maddr] != entry) 
@@ -1471,9 +1471,9 @@ void sharedSharedEMRA::schedule_requests() {
                     continue;
                 }
                 if (dramctrl_msg->dram_req->is_read()) {
-                    shared_ptr<dramctrlTableEntry> new_entry(new dramctrlTableEntry);
+                        std::shared_ptr<dramctrlTableEntry> new_entry(new dramctrlTableEntry);
                     new_entry->dramctrl_req = dramctrl_msg;
-                    new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
+                    new_entry->dramctrl_rep = std::shared_ptr<dramctrlMsg>();
                     new_entry->per_mem_instr_stats = dramctrl_msg->per_mem_instr_stats;
                     new_entry->operation_begin_time= system_time;
 
@@ -1510,7 +1510,7 @@ void sharedSharedEMRA::schedule_requests() {
         } else {
             if (m_core_send_queues[MSG_DRAMCTRL_REQ]->available()) {
 
-                shared_ptr<message_t> msg(new message_t);
+                    std::shared_ptr<message_t> msg(new message_t);
                 msg->src = m_id;
                 msg->dst = m_dramctrl_location;
                 msg->type = MSG_DRAMCTRL_REQ;
@@ -1539,8 +1539,8 @@ void sharedSharedEMRA::schedule_requests() {
 
     random_shuffle(m_cat_req_schedule_q.begin(), m_cat_req_schedule_q.end(), rr_fn);
     while (m_cat->available() && m_cat_req_schedule_q.size()) {
-        shared_ptr<tableEntry> entry = m_cat_req_schedule_q.front();
-        shared_ptr<catRequest> cat_req = entry->cat_req;
+            std::shared_ptr<tableEntry> entry = m_cat_req_schedule_q.front();
+            std::shared_ptr<catRequest> cat_req = entry->cat_req;
 
         if (cat_req->serialization_begin_time() == UINT64_MAX) {
             cat_req->set_operation_begin_time(UINT64_MAX);
@@ -1566,8 +1566,8 @@ void sharedSharedEMRA::schedule_requests() {
 
     random_shuffle(m_l1_read_req_schedule_q.begin(), m_l1_read_req_schedule_q.end(), rr_fn);
     while (m_l1->read_port_available() && m_l1_read_req_schedule_q.size()) {
-        shared_ptr<tableEntry>& entry = m_l1_read_req_schedule_q.front();
-        shared_ptr<cacheRequest>& l1_req = entry->l1_req;
+            std::shared_ptr<tableEntry>& entry = m_l1_read_req_schedule_q.front();
+            std::shared_ptr<cacheRequest>& l1_req = entry->l1_req;
 
         if (l1_req->serialization_begin_time() == UINT64_MAX) {
             l1_req->set_operation_begin_time(UINT64_MAX);
@@ -1592,8 +1592,8 @@ void sharedSharedEMRA::schedule_requests() {
 
     random_shuffle(m_l1_write_req_schedule_q.begin(), m_l1_write_req_schedule_q.end(), rr_fn);
     while (m_l1->write_port_available() && m_l1_write_req_schedule_q.size()) {
-        shared_ptr<tableEntry>& entry = m_l1_write_req_schedule_q.front();
-        shared_ptr<cacheRequest>& l1_req = entry->l1_req;
+            std::shared_ptr<tableEntry>& entry = m_l1_write_req_schedule_q.front();
+            std::shared_ptr<cacheRequest>& l1_req = entry->l1_req;
 
         if (l1_req->serialization_begin_time() == UINT64_MAX) {
             l1_req->set_operation_begin_time(UINT64_MAX);
@@ -1622,8 +1622,8 @@ void sharedSharedEMRA::schedule_requests() {
 
     random_shuffle(m_l2_read_req_schedule_q.begin(), m_l2_read_req_schedule_q.end(), rr_fn);
     while (m_l2->read_port_available() && m_l2_read_req_schedule_q.size()) {
-        shared_ptr<tableEntry>& entry = m_l2_read_req_schedule_q.front();
-        shared_ptr<cacheRequest>& l2_req = entry->l2_req;
+            std::shared_ptr<tableEntry>& entry = m_l2_read_req_schedule_q.front();
+            std::shared_ptr<cacheRequest>& l2_req = entry->l2_req;
 
         if (m_l2_writeback_status.count(get_start_maddr_in_line(l2_req->maddr())) > 0) {
             m_l2_read_req_schedule_q.erase(m_l2_read_req_schedule_q.begin());
@@ -1653,8 +1653,8 @@ void sharedSharedEMRA::schedule_requests() {
 
     random_shuffle(m_l2_write_req_schedule_q.begin(), m_l2_write_req_schedule_q.end(), rr_fn);
     while (m_l2->write_port_available() && m_l2_write_req_schedule_q.size()) {
-        shared_ptr<tableEntry>& entry = m_l2_write_req_schedule_q.front();
-        shared_ptr<cacheRequest>& l2_req = entry->l2_req;
+            std::shared_ptr<tableEntry>& entry = m_l2_write_req_schedule_q.front();
+            std::shared_ptr<cacheRequest>& l2_req = entry->l2_req;
 
         if (m_l2_writeback_status.count(get_start_maddr_in_line(l2_req->maddr())) > 0 &&
             m_l2_writeback_status[get_start_maddr_in_line(l2_req->maddr())] != entry)
@@ -1693,12 +1693,12 @@ void sharedSharedEMRA::schedule_requests() {
 
     random_shuffle(m_ra_req_schedule_q.begin(), m_ra_req_schedule_q.end(), rr_fn);
     while (m_ra_req_schedule_q.size()) {
-        shared_ptr<tableEntry>& entry = m_ra_req_schedule_q.front();
-        shared_ptr<coherenceMsg>& ra_req = entry->ra_req;
+            std::shared_ptr<tableEntry>& entry = m_ra_req_schedule_q.front();
+            std::shared_ptr<coherenceMsg>& ra_req = entry->ra_req;
 
         if (m_core_send_queues[MSG_RA_REQ]->available()) {
 
-            shared_ptr<message_t> msg(new message_t);
+                std::shared_ptr<message_t> msg(new message_t);
             msg->src = m_id;
             msg->dst = ra_req->receiver;
             msg->type = MSG_RA_REQ;
@@ -1729,12 +1729,12 @@ void sharedSharedEMRA::schedule_requests() {
     /*************************************/
     random_shuffle(m_ra_rep_schedule_q.begin(), m_ra_rep_schedule_q.end(), rr_fn);
     while (m_ra_rep_schedule_q.size()) {
-        shared_ptr<tableEntry>& entry = m_ra_rep_schedule_q.front();
-        shared_ptr<coherenceMsg>& ra_rep = entry->ra_rep;
+            std::shared_ptr<tableEntry>& entry = m_ra_rep_schedule_q.front();
+            std::shared_ptr<coherenceMsg>& ra_rep = entry->ra_rep;
 
         if (m_core_send_queues[MSG_RA_REP]->available()) {
 
-            shared_ptr<message_t> msg(new message_t);
+                std::shared_ptr<message_t> msg(new message_t);
             msg->src = m_id;
             msg->dst = ra_rep->receiver;
             msg->type = MSG_RA_REP;
@@ -1761,9 +1761,9 @@ void sharedSharedEMRA::schedule_requests() {
 
     random_shuffle(m_dramctrl_rep_schedule_q.begin(), m_dramctrl_rep_schedule_q.end(), rr_fn);
     while (m_dramctrl_rep_schedule_q.size()) {
-        shared_ptr<dramctrlTableEntry>& entry = m_dramctrl_rep_schedule_q.front();
-        shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
-        shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
+            std::shared_ptr<dramctrlTableEntry>& entry = m_dramctrl_rep_schedule_q.front();
+            std::shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
+            std::shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
 
         if (dramctrl_req->sender == m_id) {
             mh_assert(m_work_table.count(dramctrl_req->maddr));
@@ -1774,7 +1774,7 @@ void sharedSharedEMRA::schedule_requests() {
 
         } else if (m_core_send_queues[MSG_DRAMCTRL_REP]->available()) {
 
-            shared_ptr<message_t> msg(new message_t);
+                std::shared_ptr<message_t> msg(new message_t);
             msg->src = m_id;
             msg->dst = dramctrl_req->sender;
             msg->type = MSG_DRAMCTRL_REP;

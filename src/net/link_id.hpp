@@ -12,12 +12,12 @@ using namespace std;
 
 class link_id {
 public:
-    link_id(const node_id &src, const node_id &dst) throw();
-    link_id() throw();
-    bool is_valid() const throw();
-    void operator=(const link_id &) throw();
-    bool operator==(const link_id &) const throw();
-    bool operator!=(const link_id &) const throw();
+    link_id(const node_id &src, const node_id &dst);
+    link_id();
+    bool is_valid() const;
+    void operator=(const link_id &);
+    bool operator==(const link_id &) const;
+    bool operator!=(const link_id &) const;
     friend ostream &operator<<(ostream &, const link_id &);
 private:
     node_id src;
@@ -25,25 +25,25 @@ private:
 private:
 };
 
-inline link_id::link_id(const node_id &new_src, const node_id &new_dst) throw()
+inline link_id::link_id(const node_id &new_src, const node_id &new_dst)
     : src(new_src), dst(new_dst) { }
 
-inline link_id::link_id() throw() : src(), dst() { }
+inline link_id::link_id() : src(), dst() { }
 
-inline bool link_id::is_valid() const throw() {
+inline bool link_id::is_valid() const {
     return src.is_valid() && dst.is_valid();
 }
 
-inline void link_id::operator=(const link_id &o) throw() {
+inline void link_id::operator=(const link_id &o) {
     src = o.src;
     dst = o.dst;
 }
 
-inline bool link_id::operator==(const link_id &o) const throw() {
+inline bool link_id::operator==(const link_id &o) const {
     return src == o.src && dst == o.dst;
 }
 
-inline bool link_id::operator!=(const link_id &o) const throw() {
+inline bool link_id::operator!=(const link_id &o) const {
     return src != o.src || dst != o.dst;
 }
 

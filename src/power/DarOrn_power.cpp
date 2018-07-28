@@ -126,17 +126,17 @@ void Dar_router_init(SIM_router_info_t *info,
                           info->out_buf_set_b, info->flit_width, 
                           0, info->out_buffer_model_b);
         } 
-	/* central buffer */
-	info->central_buf = PARM(central_buf);
-	if (info->central_buf){
-		info->pipe_depth = PARM(pipe_depth);
-		/* central buffer is no FIFO */
-		SIM_array_init(&info->central_buf_info, 0, PARM(cbuf_rport), 
+        /* central buffer */
+        info->central_buf = PARM(central_buf);
+        if (info->central_buf){
+                info->pipe_depth = PARM(pipe_depth);
+                /* central buffer is no FIFO */
+                SIM_array_init(&info->central_buf_info, 0, PARM(cbuf_rport), 
                                PARM(cbuf_wport), PARM(cbuf_set), 
                                PARM(cbuf_width) * PARM(flit_width), 0, SRAM);
-		/* dirty hack */
-		info->cbuf_ff_model = NEG_DFF;
-	}
+                /* dirty hack */
+                info->cbuf_ff_model = NEG_DFF;
+        }
 
         if (info->in_buf_p) {
            if (info->in_share_buf_p) info->in_n_switch_p = info->in_buf_info_p.read_ports;
@@ -198,7 +198,7 @@ void Dar_router_init(SIM_router_info_t *info,
                   SIM_array_init( &info->sw_in_arb_queue_info_b, 1, 1, 1, 
                                   n_channel_sum_b, SIM_logtwo(n_channel_sum_b), 0, REGISTER);
                   info->sw_in_arb_ff_model_b = SIM_NO_MODEL;
-   	      } else  info->sw_in_arb_ff_model_b = PARM(sw_in_arb_ff_model_b);
+              } else  info->sw_in_arb_ff_model_b = PARM(sw_in_arb_ff_model_b);
            } else  info->sw_in_arb_ff_model_b = SIM_NO_MODEL;
         } else {
                 info->sw_in_arb_model_b = SIM_NO_MODEL;
@@ -287,16 +287,16 @@ void Dar_router_init(SIM_router_info_t *info,
            info->vc_select_buf_type_p = PARM(vc_select_buf_type_p);
            SIM_array_init(&info->vc_select_buf_info_p, 1, 1, 1, info->n_v_channel_p,
                           SIM_logtwo(info->n_v_channel_p), 0, info->vc_select_buf_type_p);
-   	} else info->vc_select_buf_type_p = SIM_NO_MODEL;
+        } else info->vc_select_buf_type_p = SIM_NO_MODEL;
 
        /*virtual channel allocation vc selection model */
        if (info->vc_allocator_type_b == VC_SELECT && info->n_v_channel_b > 1 && (info->n_in_b + info->n_in_p) > 1) {
            info->vc_select_buf_type_b = PARM(vc_select_buf_type_b);
            SIM_array_init(&info->vc_select_buf_info_b, 1, 1, 1, info->n_v_channel_b,
                           SIM_logtwo(info->n_v_channel_b), 0, info->vc_select_buf_type_b);
-   	} else info->vc_select_buf_type_b = SIM_NO_MODEL;
+        } else info->vc_select_buf_type_b = SIM_NO_MODEL;
 
-       /* clock related parameters */	
+       /* clock related parameters */   
        info->pipelined = PARM(pipelined);
        info->H_tree_clock = PARM(H_tree_clock);
        info->router_diagonal = PARM(router_diagonal);
@@ -312,9 +312,9 @@ router_power_d Dar_router_stat_energy(SIM_router_info_t *info,
                               const uint32_t node_id,
                               const double freq) {
 
- 	double Eavg = 0, Estatic = 0;
+        double Eavg = 0, Estatic = 0;
         double Pclock_dyn = 0,    Pclock_static = 0, Pclock = 0;
-	double Pbuf_static_p = 0, Pbuf_static_b = 0, Pbuf_static = 0;
+        double Pbuf_static_p = 0, Pbuf_static_b = 0, Pbuf_static = 0;
         double Pbuf_dyn_p = 0,    Pbuf_dyn_b = 0, Pbuf_dyn = 0;
         double Pbuf_p = 0, Pbuf_b = 0, Pbuf = 0;
         double Pxbar_static = 0,  Pxbar_dyn = 0, Pxbar = 0;
@@ -326,22 +326,22 @@ router_power_d Dar_router_stat_energy(SIM_router_info_t *info,
         double Psw_arbiter_p = 0,        Psw_arbiter_b = 0,        Psw_arbiter = 0;
         double Ptotal = 0;
         router_power_d router_p; 
-	double e_in_buf_r_p, e_in_buf_w_p, 
+        double e_in_buf_r_p, e_in_buf_w_p, 
                e_in_buf_r_b, e_in_buf_w_b,
                e_xbar, 
                e_va_act_stage1_p, e_va_req_stage1_p, e_sw_act_stage1_p, e_sw_req_stage1_p,
                e_va_act_stage2_p, e_va_req_stage2_p, e_sw_act_stage2_p, e_sw_req_stage2_p,
                e_va_act_stage1_b, e_va_req_stage1_b, e_sw_act_stage1_b, e_sw_req_stage1_b,
                e_va_act_stage2_b, e_va_req_stage2_b, e_sw_act_stage2_b, e_sw_req_stage2_b;
-	int vc_allocator_enabled_p = 1;
-	int vc_allocator_enabled_b = 1;
+        int vc_allocator_enabled_p = 1;
+        int vc_allocator_enabled_b = 1;
 
-	/* expected value computation */
-	e_in_buf_r_p     = stats->port_vq_r;
-	e_in_buf_w_p     = stats->port_vq_w;
+        /* expected value computation */
+        e_in_buf_r_p     = stats->port_vq_r;
+        e_in_buf_w_p     = stats->port_vq_w;
         e_in_buf_r_b     = stats->bridge_vq_r; 
         e_in_buf_w_b     = stats->bridge_vq_w;
-	e_xbar           = stats->xbar_trans;
+        e_xbar           = stats->xbar_trans;
         e_va_act_stage1_p  = stats->va_act_stage1_port;
         e_va_req_stage1_p  = stats->va_req_stage1_port;
         e_va_act_stage2_p  = stats->va_act_stage2_port;
@@ -360,11 +360,11 @@ router_power_d Dar_router_stat_energy(SIM_router_info_t *info,
         e_sw_req_stage2_b  = stats->sw_req_stage2_bridge;
 
 
-	/* input port buffers */
+        /* input port buffers */
         int vq_num_p = info->n_in_p * info->n_v_class_p * (info->in_share_buf_p ?
                                                       1 : info->n_v_channel_p);
 
-	if (info->in_buf_p) Eavg += SIM_array_stat_energy( &info->in_buf_info_p, 
+        if (info->in_buf_p) Eavg += SIM_array_stat_energy( &info->in_buf_info_p, 
                                                            &router->in_buf_p, 
                                                            e_in_buf_r_p, 
                                                            e_in_buf_w_p,
@@ -378,11 +378,11 @@ router_power_d Dar_router_stat_energy(SIM_router_info_t *info,
              << dec << Pbuf_p << " dyn : " << Pbuf_dyn_p 
              << " static : " << Pbuf_static_p << endl;
 
-	/* input bridge buffers */
+        /* input bridge buffers */
         int vq_num_b = info->n_in_b * info->n_v_class_b * (info->in_share_buf_b ?
                                                       1 : info->n_v_channel_b);
 
-	if (info->in_buf_b) Eavg += SIM_array_stat_energy( &info->in_buf_info_b, 
+        if (info->in_buf_b) Eavg += SIM_array_stat_energy( &info->in_buf_info_b, 
                                                            &router->in_buf_b, 
                                                            e_in_buf_r_b, 
                                                            e_in_buf_w_b,
@@ -404,55 +404,55 @@ router_power_d Dar_router_stat_energy(SIM_router_info_t *info,
              << dec << Pbuf << " dyn : " << Pbuf_dyn 
              << " static : " << Pbuf_static << endl;
         /* main crossbar */
-	if (info->crossbar_model) Eavg += SIM_crossbar_stat_energy( &router->crossbar, 
+        if (info->crossbar_model) Eavg += SIM_crossbar_stat_energy( &router->crossbar, 
                                                                     0, NULL, 0, 
                                                                     e_xbar);
 
-	Pxbar_dyn = (Eavg * freq - Pbuf_dyn);
-	Pxbar_static = router->I_crossbar_static * Vdd * SCALE_S;
-	Pxbar = Pxbar_dyn + Pxbar_static;
+        Pxbar_dyn = (Eavg * freq - Pbuf_dyn);
+        Pxbar_static = router->I_crossbar_static * Vdd * SCALE_S;
+        Pxbar = Pxbar_dyn + Pxbar_static;
         cout << "xbar in node " << hex << node_id << " power : " 
              << dec << Pxbar << " dyn : " << Pxbar_dyn
              << " static : " << Pxbar_static << endl;
-	/* port switch allocation (arbiter energy only) */
-	/* port input (local) arbiter for switch allocation*/
-	if (info->sw_in_arb_model_p) {
+        /* port switch allocation (arbiter energy only) */
+        /* port input (local) arbiter for switch allocation*/
+        if (info->sw_in_arb_model_p) {
         Eavg += SIM_arbiter_stat_energy( &router->sw_in_arb_p, &info->sw_in_arb_queue_info_p,
                                          e_sw_req_stage1_p, 0, NULL, 0) * e_sw_act_stage1_p;  
-	}
-	/* port output (global) arbiter for switch allocation*/
-	if (info->sw_out_arb_model_p) {
+        }
+        /* port output (global) arbiter for switch allocation*/
+        if (info->sw_out_arb_model_p) {
         Eavg += SIM_arbiter_stat_energy( &router->sw_out_arb_p, &info->sw_out_arb_queue_info_p, 
                                          e_sw_req_stage2_p, 0, NULL, 0) * e_sw_act_stage2_p; 
-	}
+        }
 
-	if(info->sw_in_arb_model_p || info->sw_out_arb_model_p){
-		Psw_arbiter_dyn_p = Eavg * freq - Pbuf_dyn - Pxbar_dyn;
-		Psw_arbiter_static_p = router->I_sw_arbiter_static_p * Vdd * SCALE_S;
-		Psw_arbiter_p = Psw_arbiter_dyn_p + Psw_arbiter_static_p;
-	}
+        if(info->sw_in_arb_model_p || info->sw_out_arb_model_p){
+                Psw_arbiter_dyn_p = Eavg * freq - Pbuf_dyn - Pxbar_dyn;
+                Psw_arbiter_static_p = router->I_sw_arbiter_static_p * Vdd * SCALE_S;
+                Psw_arbiter_p = Psw_arbiter_dyn_p + Psw_arbiter_static_p;
+        }
 //        cout << "port sw in node " << hex << node_id << " power : " 
 //             << dec << Psw_arbiter_p 
 //             << " dyn : " << Psw_arbiter_dyn_p  
 //             << " static : " << Psw_arbiter_static_p << endl;
 
-	/* bridge switch allocation (arbiter energy only) */
-	/* bridge input (local) arbiter for switch allocation*/
-	if (info->sw_in_arb_model_b) {
+        /* bridge switch allocation (arbiter energy only) */
+        /* bridge input (local) arbiter for switch allocation*/
+        if (info->sw_in_arb_model_b) {
         Eavg += SIM_arbiter_stat_energy( &router->sw_in_arb_b, &info->sw_in_arb_queue_info_b,
                                          e_sw_req_stage1_b, 0, NULL, 0) * e_sw_act_stage1_b;  
-	}
-	/* port output (global) arbiter for switch allocation*/
-	if (info->sw_out_arb_model_b) {
+        }
+        /* port output (global) arbiter for switch allocation*/
+        if (info->sw_out_arb_model_b) {
         Eavg += SIM_arbiter_stat_energy( &router->sw_out_arb_b, &info->sw_out_arb_queue_info_b, 
                                          e_sw_req_stage2_b, 0, NULL, 0) * e_sw_act_stage2_b; 
-	}
+        }
 
-	if(info->sw_in_arb_model_b || info->sw_out_arb_model_b){
-		Psw_arbiter_dyn_b = Eavg * freq - Pbuf_dyn - Pxbar_dyn - Psw_arbiter_dyn_p;
-		Psw_arbiter_static_b = router->I_sw_arbiter_static_b * Vdd * SCALE_S;
-		Psw_arbiter_b = Psw_arbiter_dyn_b + Psw_arbiter_static_b;
-	}
+        if(info->sw_in_arb_model_b || info->sw_out_arb_model_b){
+                Psw_arbiter_dyn_b = Eavg * freq - Pbuf_dyn - Pxbar_dyn - Psw_arbiter_dyn_p;
+                Psw_arbiter_static_b = router->I_sw_arbiter_static_b * Vdd * SCALE_S;
+                Psw_arbiter_b = Psw_arbiter_dyn_b + Psw_arbiter_static_b;
+        }
 //        cout << "bridge sw in node " << hex << node_id << " power : " 
 //             << dec << Psw_arbiter_b 
 //             << " dyn : " << Psw_arbiter_dyn_b  
@@ -466,9 +466,9 @@ router_power_d Dar_router_stat_energy(SIM_router_info_t *info,
              << dec << Psw_arbiter 
              << " dyn : " << Psw_arbiter_dyn  
              << " static : " << Psw_arbiter_static << endl;
-	/* port virtual channel allocation (arbiter energy only) */
+        /* port virtual channel allocation (arbiter energy only) */
 
-	if(info->vc_allocator_type_p == ONE_STAGE_ARB && info->vc_out_arb_model_p){
+        if(info->vc_allocator_type_p == ONE_STAGE_ARB && info->vc_out_arb_model_p){
         /* one stage arbitration (vc allocation)*/
         /* This works only if the routing function returns a single virtual channel,  
            otherwise, shoule use the two stages vc allocator , we just assume cost
@@ -477,8 +477,8 @@ router_power_d Dar_router_stat_energy(SIM_router_info_t *info,
                                         &info->vc_out_arb_queue_info_p, 
                                         e_va_req_stage2_p,
                                         0, NULL, 0) * e_va_act_stage2_p;
-	}
-	else if(info->vc_allocator_type_p == TWO_STAGE_ARB && info->vc_in_arb_model_p 
+        }
+        else if(info->vc_allocator_type_p == TWO_STAGE_ARB && info->vc_in_arb_model_p 
                 && info->vc_out_arb_model_p){
                 /* first stage arbitration (vc allocation)*/
                 if (info->vc_in_arb_model_p) {
@@ -487,35 +487,35 @@ router_power_d Dar_router_stat_energy(SIM_router_info_t *info,
                                                   e_va_req_stage1_p, 0, NULL, 0) 
                                                   * e_va_act_stage1_p;}
 
-		/* second stage arbitration (vc allocation)*/
-		if (info->vc_out_arb_model_p) {
+                /* second stage arbitration (vc allocation)*/
+                if (info->vc_out_arb_model_p) {
                   Eavg += SIM_arbiter_stat_energy(&router->vc_out_arb_p, 
                                                   &info->vc_out_arb_queue_info_p, 
                                                   e_va_req_stage2_p, 0, NULL, 0) 
                                                   * e_va_act_stage2_p;}
-	}
-	else if(info->vc_allocator_type_p == VC_SELECT && info->n_v_channel_p > 1 && 
+        }
+        else if(info->vc_allocator_type_p == VC_SELECT && info->n_v_channel_p > 1 && 
                 (info->n_in_p + info->n_in_b) > 1){
-		double n_read_p = e_va_act_stage1_p;
-		double n_write_p = e_va_act_stage2_p;
-		Eavg += SIM_array_stat_energy(&info->vc_select_buf_info_p, 
+                double n_read_p = e_va_act_stage1_p;
+                double n_write_p = e_va_act_stage2_p;
+                Eavg += SIM_array_stat_energy(&info->vc_select_buf_info_p, 
                                               &router->vc_select_buf_p, n_read_p , 
                                               n_write_p, 0, NULL, 0); }
-	else    vc_allocator_enabled_p = 0; //set to 0 means no vc allocator is used
+        else    vc_allocator_enabled_p = 0; //set to 0 means no vc allocator is used
 
-	if(info->n_v_channel_p > 1 && vc_allocator_enabled_p){
-		Pva_arbiter_dyn_p = Eavg * freq - Pbuf_dyn - Pxbar_dyn - Psw_arbiter_dyn; 
-		Pva_arbiter_static_p = router->I_vc_arbiter_static_p * Vdd * SCALE_S;
-		Pva_arbiter_p = Pva_arbiter_dyn_p + Pva_arbiter_static_p;
-	}
+        if(info->n_v_channel_p > 1 && vc_allocator_enabled_p){
+                Pva_arbiter_dyn_p = Eavg * freq - Pbuf_dyn - Pxbar_dyn - Psw_arbiter_dyn; 
+                Pva_arbiter_static_p = router->I_vc_arbiter_static_p * Vdd * SCALE_S;
+                Pva_arbiter_p = Pva_arbiter_dyn_p + Pva_arbiter_static_p;
+        }
 //        cout << "port va in node " << hex << node_id << " power : " 
 //             << dec << Pva_arbiter_p 
 //             << " dyn : " << Pva_arbiter_dyn_p
 //             << " static : " << Pva_arbiter_static_p << endl;
 
-	/* bridge virtual channel allocation (arbiter energy only) */
+        /* bridge virtual channel allocation (arbiter energy only) */
 
-	if(info->vc_allocator_type_b == ONE_STAGE_ARB && info->vc_out_arb_model_b){
+        if(info->vc_allocator_type_b == ONE_STAGE_ARB && info->vc_out_arb_model_b){
         /* one stage arbitration (vc allocation)*/
         /* This works only if the routing function returns a single virtual channel,  
            otherwise, shoule use the two stages vc allocator , we just assume cost
@@ -524,8 +524,8 @@ router_power_d Dar_router_stat_energy(SIM_router_info_t *info,
                                         &info->vc_out_arb_queue_info_b, 
                                         e_va_req_stage2_b,
                                         0, NULL, 0) * e_va_act_stage2_b;
-	}
-	else if(info->vc_allocator_type_b == TWO_STAGE_ARB && info->vc_in_arb_model_b 
+        }
+        else if(info->vc_allocator_type_b == TWO_STAGE_ARB && info->vc_in_arb_model_b 
                 && info->vc_out_arb_model_b) {
                 /* first stage arbitration (vc allocation)*/
                 if (info->vc_in_arb_model_b) {
@@ -534,28 +534,28 @@ router_power_d Dar_router_stat_energy(SIM_router_info_t *info,
                                                   e_va_req_stage1_b, 0, NULL, 0) 
                                                   * e_va_act_stage1_b;}
 
-		/* second stage arbitration (vc allocation)*/
-		if (info->vc_out_arb_model_b) {
+                /* second stage arbitration (vc allocation)*/
+                if (info->vc_out_arb_model_b) {
                   Eavg += SIM_arbiter_stat_energy(&router->vc_out_arb_b, 
                                                   &info->vc_out_arb_queue_info_b, 
                                                   e_va_req_stage2_b, 0, NULL, 0) 
                                                   * e_va_act_stage2_b;}
-	}
-	else if(info->vc_allocator_type_b == VC_SELECT && info->n_v_channel_b > 1 && 
+        }
+        else if(info->vc_allocator_type_b == VC_SELECT && info->n_v_channel_b > 1 && 
                 (info->n_in_b + info->n_in_p) > 1){
-		double n_read_b = e_va_act_stage1_b;
-		double n_write_b = e_va_act_stage2_b;
-		Eavg += SIM_array_stat_energy(&info->vc_select_buf_info_b, 
+                double n_read_b = e_va_act_stage1_b;
+                double n_write_b = e_va_act_stage2_b;
+                Eavg += SIM_array_stat_energy(&info->vc_select_buf_info_b, 
                                               &router->vc_select_buf_b, n_read_b , 
                                               n_write_b, 0, NULL, 0); }
-	else    vc_allocator_enabled_b = 0; //set to 0 means no vc allocator is used
+        else    vc_allocator_enabled_b = 0; //set to 0 means no vc allocator is used
 
-	if(info->n_v_channel_b > 1 && vc_allocator_enabled_b){
-		Pva_arbiter_dyn_b = Eavg * freq - Pbuf_dyn - Pxbar_dyn - Psw_arbiter_dyn -
+        if(info->n_v_channel_b > 1 && vc_allocator_enabled_b){
+                Pva_arbiter_dyn_b = Eavg * freq - Pbuf_dyn - Pxbar_dyn - Psw_arbiter_dyn -
                                     Pva_arbiter_dyn_p; 
-		Pva_arbiter_static_b = router->I_vc_arbiter_static_b * Vdd * SCALE_S;
-		Pva_arbiter_b = Pva_arbiter_dyn_b + Pva_arbiter_static_b;
-	}
+                Pva_arbiter_static_b = router->I_vc_arbiter_static_b * Vdd * SCALE_S;
+                Pva_arbiter_b = Pva_arbiter_dyn_b + Pva_arbiter_static_b;
+        }
 
 //        cout << "bridge va in node " << hex << node_id << " power : " 
 //             << dec << Pva_arbiter_b 
@@ -570,30 +570,30 @@ router_power_d Dar_router_stat_energy(SIM_router_info_t *info,
              << dec << Pva_arbiter 
              << " dyn : " << Pva_arbiter_dyn
              << " static : " << Pva_arbiter_static << endl;
-	/*router clock power (supported for 90nm and below) */
-	if(PARM(TECH_POINT) <=90) {
-		Eavg += SIM_total_clockEnergy(info, router);
-		Pclock_dyn = Eavg * freq - Pbuf_dyn - Pxbar_dyn - Pva_arbiter_dyn - 
+        /*router clock power (supported for 90nm and below) */
+        if(PARM(TECH_POINT) <=90) {
+                Eavg += SIM_total_clockEnergy(info, router);
+                Pclock_dyn = Eavg * freq - Pbuf_dyn - Pxbar_dyn - Pva_arbiter_dyn - 
                              Psw_arbiter_dyn;
-		Pclock_static = router->I_clock_static * Vdd * SCALE_S;
-		Pclock = Pclock_dyn + Pclock_static;
-	}
+                Pclock_static = router->I_clock_static * Vdd * SCALE_S;
+                Pclock = Pclock_dyn + Pclock_static;
+        }
 
         cout << "clk in node " << hex << node_id << " power : " 
              << dec << Pclock 
              << " dyn : " << Pclock_dyn
              << " static : " << Pclock_static << endl;
 
-	/* static power */
-	Estatic = router->I_static * Vdd * Period * SCALE_S;
-	Eavg += Estatic;
-	Ptotal = Eavg * freq;
+        /* static power */
+        Estatic = router->I_static * Vdd * Period * SCALE_S;
+        Eavg += Estatic;
+        Ptotal = Eavg * freq;
         
         router_p.dynamic_p = Pbuf_dyn + Pxbar_dyn + Pva_arbiter_dyn + Psw_arbiter_dyn + Pclock_dyn;
         router_p.static_p = Pbuf_static + Pxbar_static + Pva_arbiter_static +
                             Psw_arbiter_static + Pclock_static;
         router_p.total = Ptotal;
-	return router_p;
+        return router_p;
 }
 
 router_power_d  DarOrn_power(const uint32_t node_id,

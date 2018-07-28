@@ -11,26 +11,26 @@ using namespace std;
 
 class egress_id {
 public:
-    explicit egress_id() throw(); // bogus egress ID
-    explicit egress_id(const node_id parent, const string &name) throw();
-    bool operator==(const egress_id &) const throw();
-    bool operator<(const egress_id &) const throw();
+    explicit egress_id(); // bogus egress ID
+    explicit egress_id(const node_id parent, const string &name);
+    bool operator==(const egress_id &) const;
+    bool operator<(const egress_id &) const;
     friend ostream &operator<<(ostream &, const egress_id &);
 private:
     node_id parent;
     string name;
 };
 
-inline egress_id::egress_id() throw() : parent(), name("?") { }
+inline egress_id::egress_id() : parent(), name("?") { }
 
-inline egress_id::egress_id(const node_id p, const string &n) throw()
+inline egress_id::egress_id(const node_id p, const string &n)
     : parent(p), name(n) { }
 
-inline bool egress_id::operator==(const egress_id &o) const throw() {
+inline bool egress_id::operator==(const egress_id &o) const {
     return parent == o.parent && name == o.name;
 }
 
-inline bool egress_id::operator<(const egress_id &o) const throw() {
+inline bool egress_id::operator<(const egress_id &o) const {
     return parent < o.parent || (parent == o.parent && name < o.name);
 }
 

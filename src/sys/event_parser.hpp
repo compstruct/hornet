@@ -8,8 +8,7 @@
 #include <vector>
 #include <map>
 #include <iostream>
-#include <boost/shared_ptr.hpp>
-#include <boost/tuple/tuple.hpp>
+#include <memory>
 #include "error.hpp"
 #include "flow_id.hpp"
 #include "node_id.hpp"
@@ -20,25 +19,25 @@ using namespace boost;
 
 class event_parser {
 public:
-    typedef vector<shared_ptr<injector> > injectors_t;
+    typedef vector<std::shared_ptr<injector> > injectors_t;
     typedef map<flow_id, node_id> flow_starts_t;
 public:
-    event_parser(shared_ptr<vector<string> > event_files,
-                 shared_ptr<injectors_t> injectors,
-                 shared_ptr<flow_starts_t> flow_starts) throw(err);
+    event_parser(std::shared_ptr<vector<string> > event_files,
+                 std::shared_ptr<injectors_t> injectors,
+                 std::shared_ptr<flow_starts_t> flow_starts);
 private:
-    typedef tuple<string,uint64_t> pos_t;
-    uint64_t p_nat(uint64_t low = 0) throw(err);
-    string p_kw(const set<string> &kws, bool empty_ok) throw(err);
-    string p_kw(const string &kw1, bool empty_ok) throw(err);
-    string p_kw(const string &kw1, const string &kw2, bool empty_ok) throw(err);
-    void p_flow(const flow_id &flow) throw(err);
-    void p_line() throw(err);
+    typedef std::tuple<string,uint64_t> pos_t;
+    uint64_t p_nat(uint64_t low = 0);
+    string p_kw(const set<string> &kws, bool empty_ok);
+    string p_kw(const string &kw1, bool empty_ok);
+    string p_kw(const string &kw1, const string &kw2, bool empty_ok);
+    void p_flow(const flow_id &flow);
+    void p_line();
 private:
-    shared_ptr<injectors_t> injectors;
-    shared_ptr<flow_starts_t> flow_starts;
-    shared_ptr<istream> input;
-    shared_ptr<istream> line;
+    std::shared_ptr<injectors_t> injectors;
+    std::shared_ptr<flow_starts_t> flow_starts;
+    std::shared_ptr<istream> input;
+    std::shared_ptr<istream> line;
     pos_t pos;
     uint64_t cur_tick;
 };

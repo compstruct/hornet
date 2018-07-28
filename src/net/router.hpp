@@ -6,8 +6,7 @@
 
 #include <vector>
 #include <utility>
-#include <boost/shared_ptr.hpp>
-#include <boost/tuple/tuple.hpp>
+#include <memory>
 #include "error.hpp"
 #include "flow_id.hpp"
 #include "node_id.hpp"
@@ -28,30 +27,30 @@ public:
         RT_ADAPTIVE_QUEUE,
         RT_ADAPTIVE_PACKET
     } multi_path_routing_t;
-    virtual ~router() throw();
-    const node_id &get_id() const throw();
-    virtual void add_ingress(shared_ptr<ingress> ingress) throw(err);
-    virtual void add_egress(shared_ptr<egress> egress) throw(err) = 0;
-    virtual void route() throw(err) = 0;
+    virtual ~router();
+    const node_id &get_id() const;
+    virtual void add_ingress(std::shared_ptr<ingress> ingress);
+    virtual void add_egress(std::shared_ptr<egress> egress) = 0;
+    virtual void route() = 0;
 
     inline multi_path_routing_t multi_path_routing() { return m_multi_path_routing; }
     inline void set_multi_path_routing(multi_path_routing_t type) { m_multi_path_routing = type; }
 
-    inline void set_virtual_channel_alloc(shared_ptr<channel_alloc> vca) { m_vca = vca; }
+    inline void set_virtual_channel_alloc(std::shared_ptr<channel_alloc> vca) { m_vca = vca; }
 
 protected:
-    router(node_id id, logger &log) throw();
+    router(node_id id, logger &log);
 protected:
     const node_id id;
-    typedef vector<shared_ptr<ingress> > ingresses_t;
+    typedef vector<std::shared_ptr<ingress> > ingresses_t;
     ingresses_t ingresses;
     logger &log;
 
     multi_path_routing_t m_multi_path_routing;
-    shared_ptr<channel_alloc> m_vca;
+    std::shared_ptr<channel_alloc> m_vca;
 };
 
-inline const node_id &router::get_id() const throw() { return id; }
+inline const node_id &router::get_id() const { return id; }
 
 #endif // __ROUTER_HPP__
 

@@ -9,14 +9,14 @@ ostream &operator<<(ostream &out, const dma_channel_id &id) {
     return out << hex << setfill('0') << setw(2) << id.id;
 }
 
-ostream &operator<<(ostream &out, const tuple<node_id, dma_channel_id> &id) {
-    return out << id.get<0>() << ":" << id.get<1>();
+ostream &operator<<(ostream &out, const std::tuple<node_id, dma_channel_id> &id) {
+    return out << get<0>(id) << ":" << get<1>(id);
 }
 
 dma_channel::dma_channel(node_id n_id, dma_channel_id d_id, uint32_t new_bw,
-                         shared_ptr<virtual_queue> q,
-                         shared_ptr<tile_statistics> new_stats,
-                         logger &l) throw()
+                         std::shared_ptr<virtual_queue> q,
+                         std::shared_ptr<tile_statistics> new_stats,
+                         logger &l)
     : id(make_tuple(n_id, d_id)), bandwidth(new_bw), vq(q), 
       started(false), flow(), remaining_flits(0),
       mem(NULL), stats(new_stats), log(l) { }
@@ -25,14 +25,14 @@ dma_channel::~dma_channel() { }
 
 ingress_dma_channel::
 ingress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned new_bw,
-                    shared_ptr<virtual_queue> q,
-                    shared_ptr<tile_statistics> s, logger &l) throw()
+                    std::shared_ptr<virtual_queue> q,
+                    std::shared_ptr<tile_statistics> s, logger &l)
     : dma_channel(n_id, d_id, new_bw, q, s, l), pid_p(NULL) { }
 
 ingress_dma_channel::~ingress_dma_channel() { }
 
 void ingress_dma_channel::receive(void *dst, packet_id *pid,
-                                  uint32_t len) throw(err) {
+                                  uint32_t len) {
     assert(!busy());
     started = false;
     mem = dst;
@@ -41,30 +41,30 @@ void ingress_dma_channel::receive(void *dst, packet_id *pid,
     if (pid_p) *pid_p = 0xffffffffffffffffULL;
 }
 
-bool ingress_dma_channel::has_waiting_flow() const throw() {
+bool ingress_dma_channel::has_waiting_flow() const {
     return (!vq->front_is_empty() && vq->front_node_id().is_valid()
             && vq->front_vq_id().is_valid());
 }
 
-uint32_t ingress_dma_channel::get_flow_length() const throw(err) {
+uint32_t ingress_dma_channel::get_flow_length() const {
     return vq->front_num_remaining_flits_in_packet();
 }
 
-flow_id ingress_dma_channel::get_flow_id() const throw(err) {
+flow_id ingress_dma_channel::get_flow_id() const {
     return vq->front_new_flow_id();
 }
 
-void ingress_dma_channel::tick_positive_edge() throw(err) {
+void ingress_dma_channel::tick_positive_edge() {
     if (!vq->front_is_empty() && vq->front_is_head_flit()) {
         if (!vq->front_node_id().is_valid()) {
             assert(!vq->front_vq_id().is_valid());
             assert(vq->front_old_flow_id().is_valid());
             assert(!vq->front_new_flow_id().is_valid());
-            vq->front_set_next_hop(vq->get_id().get<0>(),
+            vq->front_set_next_hop(get<0>(vq->get_id()),
                                    vq->front_old_flow_id());
         }
         if (!vq->front_vq_id().is_valid()) {
-            vq->front_set_vq_id(vq->get_id().get<1>());
+            vq->front_set_vq_id(get<1>(vq->get_id()));
         }
     }
     unsigned i;
@@ -76,8 +76,8 @@ void ingress_dma_channel::tick_positive_edge() throw(err) {
             flow = vq->front_new_flow_id();
             if (started) {
                 throw exc_new_flow_mid_dma(flow.get_numeric_id(),
-                                           id.get<0>().get_numeric_id(),
-                                           id.get<1>().get_numeric_id());
+                                           get<0>(id).get_numeric_id(),
+                                           get<1>(id).get_numeric_id());
             }
             const flit f = vq->front_flit();
             const head_flit &h = reinterpret_cast<const head_flit &>(f);
@@ -103,20 +103,20 @@ void ingress_dma_channel::tick_positive_edge() throw(err) {
     }
 }
 
-void ingress_dma_channel::tick_negative_edge() throw(err) { }
+void ingress_dma_channel::tick_negative_edge() { }
 
 egress_dma_channel::
 egress_dma_channel(node_id n_id, dma_channel_id d_id, unsigned new_bw,
-                   shared_ptr<virtual_queue> q,
-                   shared_ptr<bridge_channel_alloc> vca,
-                   shared_ptr<tile_statistics> s, logger &l) throw()
+                   std::shared_ptr<virtual_queue> q,
+                   std::shared_ptr<bridge_channel_alloc> vca,
+                   std::shared_ptr<tile_statistics> s, logger &l)
     : dma_channel(n_id, d_id, new_bw, q, s, l), pid(0), vc_alloc(vca) { }
 
 egress_dma_channel::~egress_dma_channel() { }
 
 void egress_dma_channel::send(flow_id f, void *src, uint32_t len,
                               const packet_id &new_pid,
-                              bool c_in_stats) throw(err) {
+                              bool c_in_stats) {
     assert(!busy());
     started = false;
     flow = f;
@@ -127,7 +127,7 @@ void egress_dma_channel::send(flow_id f, void *src, uint32_t len,
     vc_alloc->claim(vq->get_id());
 }
 
-void egress_dma_channel::tick_positive_edge() throw(err) {
+void egress_dma_channel::tick_positive_edge() {
     unsigned i;
     for (i = 0; ((bandwidth == 0 || i < bandwidth)
                  && remaining_flits > 0 && !vq->back_is_full()
@@ -162,4 +162,4 @@ void egress_dma_channel::tick_positive_edge() throw(err) {
     }
 }
                 
-void egress_dma_channel::tick_negative_edge() throw(err) { }
+void egress_dma_channel::tick_negative_edge() { }

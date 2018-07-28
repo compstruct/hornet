@@ -9,8 +9,8 @@
 #include <set>
 #include <map>
 #include <fstream>
-#include <boost/shared_ptr.hpp>
-#include <boost/tuple/tuple.hpp>
+#include <memory>
+#include <tuple>
 #include <boost/thread.hpp>
 #include "cstdint.hpp"
 #include "error.hpp"
@@ -22,7 +22,7 @@ typedef const void *vcd_id_t;
 
 class vcd_node {
 public:
-    vcd_node() throw();
+    vcd_node();
 public:
     typedef map<string, vcd_node> nodes_t;
 public:
@@ -32,33 +32,33 @@ public:
 
 class vcd_writer {
 public:
-    vcd_writer(const uint64_t &time, const shared_ptr<ofstream> out,
-               uint64_t start, uint64_t end) throw(err);
+    vcd_writer(const uint64_t &time, const std::shared_ptr<ofstream> out,
+               uint64_t start, uint64_t end);
     void new_signal(const vcd_id_t &id, const vector<string> &path,
-                    unsigned width) throw(err);
-    void add_value(vcd_id_t id, uint64_t val) throw(err);
-    void commit() throw(err); // call in the beginning of every tick
+                    unsigned width);
+    void add_value(vcd_id_t id, uint64_t val);
+    void commit(); // call in the beginning of every tick
                               // to flush posedge values to VCD
-    void finalize() throw(err); // call once at end to flush VCD
-    void tick() throw();
-    uint64_t get_time() const throw();
-    void fast_forward_time(uint64_t new_time) throw();
-    bool is_drained() const throw();
+    void finalize(); // call once at end to flush VCD
+    void tick();
+    uint64_t get_time() const;
+    void fast_forward_time(uint64_t new_time);
+    bool is_drained() const;
 private:
     typedef map<vcd_id_t, string> id_map_t;
     typedef map<vcd_id_t, unsigned> widths_t;
     typedef map<vcd_id_t, uint64_t> cur_values_t;
     typedef map<vcd_id_t, uint64_t> last_values_t;
-    typedef map<vcd_id_t, tuple<streampos, streampos> > stream_locs_t;
+    typedef map<vcd_id_t, std::tuple<streampos, streampos> > stream_locs_t;
 private:
-    string get_fresh_id() throw();
-    void check_header() throw(err);
-    void check_timestamp() throw(err);
-    void write_val(const string &id, uint64_t val) throw(err);
-    void writeln_val(const string &id, uint64_t val) throw(err);
+    string get_fresh_id();
+    void check_header();
+    void check_timestamp();
+    void write_val(const string &id, uint64_t val);
+    void writeln_val(const string &id, uint64_t val);
     void declare_vars(const vcd_node::nodes_t &nodes,
-                      const map<vcd_id_t, string> &ids) throw(err);
-    bool is_sleeping() const throw();
+                      const map<vcd_id_t, string> &ids);
+    bool is_sleeping() const;
 private:
     uint64_t time;
     const uint64_t start_time;
@@ -75,7 +75,7 @@ private:
     stream_locs_t init_locs;
     bool initialized;
     bool finalized;
-    shared_ptr<ofstream> out;
+    std::shared_ptr<ofstream> out;
     mutable recursive_mutex vcd_mutex;
 };
 

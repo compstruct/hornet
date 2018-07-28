@@ -4,7 +4,7 @@
 #ifndef __CACHE_HPP__
 #define __CACHE_HPP__
 
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include <boost/shared_array.hpp>
 #include "statistics.hpp"
 #include "logger.hpp"
@@ -28,7 +28,7 @@ typedef struct {
     bool coherence_info_dirty;
     maddr_t start_maddr;;
     shared_array<uint32_t> data;
-    shared_ptr<void> coherence_info;
+    std::shared_ptr<void> coherence_info;
     uint64_t last_access_time;
 } cacheLine;
 
@@ -52,7 +52,7 @@ public:
     explicit cacheRequest(maddr_t maddr, cacheReqType_t request_type, 
                           uint32_t word_count = 0,
                           shared_array<uint32_t> data_to_write = shared_array<uint32_t>(), 
-                          shared_ptr<void> coherence_info_to_write = shared_ptr<void>());
+                          std::shared_ptr<void> coherence_info_to_write = std::shared_ptr<void>());
 
     ~cacheRequest();
 
@@ -64,25 +64,25 @@ public:
     inline maddr_t maddr() { return m_maddr; }
     inline uint32_t word_count() { return m_word_count; }
     inline shared_array<uint32_t> data_to_write() { return m_data_to_write; }
-    inline shared_ptr<void> coherence_info_to_write() { return m_coherence_info_to_write; }
+    inline std::shared_ptr<void> coherence_info_to_write() { return m_coherence_info_to_write; }
 
     /* lines to return */
-    inline shared_ptr<cacheLine> line_copy() { return m_line_copy; }
-    inline shared_ptr<cacheLine> line_to_evict_copy() { return m_line_to_evict_copy; }
+    inline std::shared_ptr<cacheLine> line_copy() { return m_line_copy; }
+    inline std::shared_ptr<cacheLine> line_to_evict_copy() { return m_line_to_evict_copy; }
 
     /* convenient function - to reuse the cache request without making a new request */
     inline void reset() { assert(m_status != CACHE_REQ_WAIT); 
                           m_status = CACHE_REQ_NEW; 
-                          m_line_copy = shared_ptr<cacheLine>();
-                          m_line_to_evict_copy = shared_ptr<cacheLine>(); }
+                          m_line_copy = std::shared_ptr<cacheLine>();
+                          m_line_to_evict_copy = std::shared_ptr<cacheLine>(); }
 
     /* Options */
     inline void set_unset_dirty_on_write(bool enable) { m_do_unset_dirty_on_write = enable; }
     inline void set_claim(bool enable) { m_do_claim = enable; }
     inline void set_evict(bool enable) { m_do_evict = enable; }
 
-    inline void set_aux_info_for_coherence(shared_ptr<void> states) { m_aux_info_for_coherence = states; }
-    inline shared_ptr<void> aux_info_for_coherence() { return m_aux_info_for_coherence; }
+    inline void set_aux_info_for_coherence(std::shared_ptr<void> states) { m_aux_info_for_coherence = states; }
+    inline std::shared_ptr<void> aux_info_for_coherence() { return m_aux_info_for_coherence; }
 
     /* for stats */
     inline void set_serialization_begin_time(uint64_t time) { m_serialization_begin_time = time; }
@@ -98,12 +98,12 @@ private:
     maddr_t m_maddr;
     uint32_t m_word_count;
     cacheReqStatus_t m_status;
-    shared_ptr<cacheLine> m_line_copy;
-    shared_ptr<cacheLine> m_line_to_evict_copy;
-    shared_ptr<void> m_coherence_info_to_write;
+    std::shared_ptr<cacheLine> m_line_copy;
+    std::shared_ptr<cacheLine> m_line_to_evict_copy;
+    std::shared_ptr<void> m_coherence_info_to_write;
     shared_array<uint32_t> m_data_to_write;
 
-    shared_ptr<void> m_aux_info_for_coherence;
+    std::shared_ptr<void> m_aux_info_for_coherence;
 
     bool m_do_unset_dirty_on_write;;
     bool m_do_claim;
@@ -117,14 +117,14 @@ private:
 
 class cache {
 public:
-    typedef shared_ptr<void> (*helperCopyCoherenceInfo) (shared_ptr<void>);
-    typedef bool (*helperIsCoherenceHit) (shared_ptr<cacheRequest>, cacheLine&, const uint64_t& /* system_time */);
+    typedef std::shared_ptr<void> (*helperCopyCoherenceInfo) (std::shared_ptr<void>);
+    typedef bool (*helperIsCoherenceHit) (std::shared_ptr<cacheRequest>, cacheLine&, const uint64_t& /* system_time */);
     typedef bool (*helperTestLineToEvict) (cacheLine&, const uint64_t& /* system_time */);
-    typedef uint32_t (*helperReplacementPolicy) (vector<uint32_t>&, cacheLine const*, const uint64_t&, shared_ptr<random_gen> ran);
-    typedef void (*helperHook) (shared_ptr<cacheRequest>, cacheLine&, const uint64_t& /* system_time */);
+    typedef uint32_t (*helperReplacementPolicy) (vector<uint32_t>&, cacheLine const*, const uint64_t&, std::shared_ptr<random_gen> ran);
+    typedef void (*helperHook) (std::shared_ptr<cacheRequest>, cacheLine&, const uint64_t& /* system_time */);
 
     cache(uint32_t cache_level, uint32_t numeric_id, const uint64_t &system_time, 
-          shared_ptr<tile_statistics> stats, logger &log, shared_ptr<random_gen> ran, 
+          std::shared_ptr<tile_statistics> stats, logger &log, std::shared_ptr<random_gen> ran, 
           uint32_t words_per_line, uint32_t total_lines, uint32_t associativity,
           replacementPolicy_t replacement_policy, 
           uint32_t hit_test_latency, uint32_t num_read_ports, uint32_t num_write_ports);
@@ -133,7 +133,7 @@ public:
     void tick_positive_edge();
     void tick_negative_edge();
 
-    void request(shared_ptr<cacheRequest> req);
+    void request(std::shared_ptr<cacheRequest> req);
 
     inline bool read_port_available() { return m_available_read_ports > 0; }
     inline bool write_port_available() { return m_available_write_ports > 0; }
@@ -167,19 +167,19 @@ private:
     } reqEntryStatus_t;
     typedef struct {
         reqEntryStatus_t status;
-        shared_ptr<cacheRequest> request;
+        std::shared_ptr<cacheRequest> request;
         maddr_t start_maddr;
         uint32_t idx;
         uint32_t remaining_hit_test_cycles;
     } reqEntry;
-    typedef vector<shared_ptr<reqEntry> > reqQueue;
+    typedef vector<std::shared_ptr<reqEntry> > reqQueue;
     typedef map<maddr_t, reqQueue> reqTable;
 
     /* convenient functions */
     inline uint32_t get_index(maddr_t maddr) { return (uint32_t)((maddr.address&m_index_mask)>>m_index_pos); }
     inline uint32_t get_offset(maddr_t maddr) { return (uint32_t)(maddr.address&m_offset_mask); }
     inline maddr_t get_start_maddr_in_line(maddr_t maddr) { maddr.address -= get_offset(maddr); return maddr; }
-    shared_ptr<cacheLine> copy_cache_line(const cacheLine &line);
+    std::shared_ptr<cacheLine> copy_cache_line(const cacheLine &line);
 
     /********************/
     /* member variables */
@@ -189,9 +189,9 @@ private:
     uint32_t m_level;
     uint32_t m_id;
     const uint64_t &system_time;
-    shared_ptr<tile_statistics> stats;
+    std::shared_ptr<tile_statistics> stats;
     logger &log;
-    shared_ptr<random_gen> ran;
+    std::shared_ptr<random_gen> ran;
     uint32_t m_words_per_line;
     uint32_t m_total_lines;
     uint32_t m_associativity;
@@ -218,11 +218,11 @@ private:
     /* states */
     reqTable m_req_table;
     cacheTable m_cache;
-    vector<shared_ptr<reqEntry> > m_ready_requests; /* separated for scheduling */
+    vector<std::shared_ptr<reqEntry> > m_ready_requests; /* separated for scheduling */
 
     /* the follwoing volatile states conveys the positive edge information to the negative edge */
-    vector<tuple<uint32_t/*idx*/, uint32_t/*ways*/, shared_ptr<reqEntry> > > m_lines_to_invalidate; 
-    vector<tuple<uint32_t/*idx*/, uint32_t/*ways*/, shared_ptr<reqEntry> > > m_lines_to_evict; 
+    vector<std::tuple<uint32_t/*idx*/, uint32_t/*ways*/, std::shared_ptr<reqEntry> > > m_lines_to_invalidate; 
+    vector<std::tuple<uint32_t/*idx*/, uint32_t/*ways*/, std::shared_ptr<reqEntry> > > m_lines_to_evict; 
 
 public:
     cacheTable& get_cache_table() { return m_cache; }

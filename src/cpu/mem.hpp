@@ -4,24 +4,23 @@
 #ifndef __MEM_HPP__
 #define __MEM_HPP__
 
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include "cstdint.hpp"
 #include "error.hpp"
 #include "logger.hpp"
 #include "endian.hpp"
 
 using namespace std;
-using namespace boost;
 
 class mem {
 public:
     explicit mem(uint32_t id, uint32_t start, uint32_t size,
-                 logger &log) throw(err);
-    virtual ~mem() throw();
-    template<class V> V load(const uint32_t &addr) throw(err);
-    template<class V> void store(const uint32_t &addr, const V &val) throw(err);
-    const uint8_t *ptr(const uint32_t &addr) const throw(err);
-    uint8_t *ptr(const uint32_t &addr) throw(err);
+                 logger &log);
+    virtual ~mem();
+    template<class V> V load(const uint32_t &addr);
+    template<class V> void store(const uint32_t &addr, const V &val);
+    const uint8_t *ptr(const uint32_t &addr) const;
+    uint8_t *ptr(const uint32_t &addr);
 private:
     uint32_t id;
     uint32_t start;
@@ -33,22 +32,22 @@ private:
 };
 
 template <class V>
-inline V mem::load(const uint32_t &addr) throw(err) {
+inline V mem::load(const uint32_t &addr) {
     return endian(*((V *) ptr(addr)));
 }
 
 template<class V>
-inline void mem::store(const uint32_t &addr, const V &val) throw(err) {
+inline void mem::store(const uint32_t &addr, const V &val) {
     *((V *) ptr(addr)) = endian(val);
 }
 
-inline uint8_t *mem::ptr(const uint32_t &addr) throw(err) {
+inline uint8_t *mem::ptr(const uint32_t &addr) {
     if (addr < start || addr + 4 > start + size)
         throw exc_bus_err(id, addr, start, size);
     return contents + addr - start;
 }
 
-inline const uint8_t *mem::ptr(const uint32_t &addr) const throw(err) {
+inline const uint8_t *mem::ptr(const uint32_t &addr) const {
     if (addr < start || addr + 4 > start + size)
         throw exc_bus_err(id, addr, start, size);
     return contents + addr - start;

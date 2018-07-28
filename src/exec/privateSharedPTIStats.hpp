@@ -44,7 +44,7 @@ public:
     uint64_t total_cost();
     void add(const privateSharedPTIStatsPerMemInstr& other);
 
-    shared_ptr<privateSharedPTIStatsPerMemInstr> get_tentative_data(int index);
+    std::shared_ptr<privateSharedPTIStatsPerMemInstr> get_tentative_data(int index);
     int get_max_tentative_data_index();
     inline void clear_tentative_data() { m_tentative_data.clear(); }
     void discard_tentative_data(int index);
@@ -153,7 +153,7 @@ private:
     uint64_t m_l2_for_feed[PTI_STAT_NUM_REQ_TYPES][PTI_STAT_NUM_SUB_TYPES];
     uint64_t m_l2_for_emptyReq;
 
-    map<int, shared_ptr<privateSharedPTIStatsPerMemInstr> > m_tentative_data;
+    map<int, std::shared_ptr<privateSharedPTIStatsPerMemInstr> > m_tentative_data;
 
 };
 
@@ -212,7 +212,7 @@ public:
 
     void add(const privateSharedPTIStatsPerTile& other);
     void commit_per_mem_instr_stats(const privateSharedPTIStatsPerMemInstr& data);
-    inline void commit_per_mem_instr_stats(shared_ptr<privateSharedPTIStatsPerMemInstr> data) { commit_per_mem_instr_stats(*data); }
+    inline void commit_per_mem_instr_stats(std::shared_ptr<privateSharedPTIStatsPerMemInstr> data) { commit_per_mem_instr_stats(*data); }
 
     friend class privateSharedPTIStats;
 

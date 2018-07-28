@@ -66,23 +66,23 @@ public:
 
     sharedSharedLCC(uint32_t numeric_id, 
                      const uint64_t &system_time, 
-                     shared_ptr<tile_statistics> stats, 
+                     std::shared_ptr<tile_statistics> stats, 
                      logger &log, 
-                     shared_ptr<random_gen> ran, 
-                     shared_ptr<cat> a_cat, 
+                     std::shared_ptr<random_gen> ran, 
+                     std::shared_ptr<cat> a_cat, 
                      sharedSharedLCCCfg_t cfg);
     virtual ~sharedSharedLCC();
 
     virtual uint32_t number_of_mem_msg_types();
 
-    virtual void request(shared_ptr<memoryRequest> req);
+    virtual void request(std::shared_ptr<memoryRequest> req);
     virtual void tick_positive_edge();
     virtual void tick_negative_edge();
 
     /* set stats */
-    inline void set_per_tile_stats(shared_ptr<sharedSharedLCCStatsPerTile> stats) { m_stats = stats; }
-    inline bool stats_enabled() { return (m_stats != shared_ptr<sharedSharedLCCStatsPerTile>()); }
-    inline shared_ptr<sharedSharedLCCStatsPerTile> stats() { return m_stats; }
+    inline void set_per_tile_stats(std::shared_ptr<sharedSharedLCCStatsPerTile> stats) { m_stats = stats; }
+    inline bool stats_enabled() { return (m_stats != std::shared_ptr<sharedSharedLCCStatsPerTile>()); }
+    inline std::shared_ptr<sharedSharedLCCStatsPerTile> stats() { return m_stats; }
 
     typedef enum {
         MSG_DRAMCTRL_REQ = 0,
@@ -99,7 +99,7 @@ public:
         bool away;
 
         uint64_t home;
-        shared_ptr<uint64_t> timestamp;
+        std::shared_ptr<uint64_t> timestamp;
 
         /* used for period prediction */
         uint64_t last_remote_read_time;
@@ -144,7 +144,7 @@ public:
         maddr_t maddr;
         shared_array<uint32_t> data;
 
-        shared_ptr<coherenceInfo> coherence_info;
+        std::shared_ptr<coherenceInfo> coherence_info;
 
         /* status */
         bool sent;
@@ -153,7 +153,7 @@ public:
         uint64_t expired_amount;
 
         /* for stats */
-        shared_ptr<sharedSharedLCCStatsPerMemInstr> per_mem_instr_stats;
+        std::shared_ptr<sharedSharedLCCStatsPerMemInstr> per_mem_instr_stats;
         uint64_t birthtime;
 
     } coherenceMsg;
@@ -161,7 +161,7 @@ public:
     typedef struct {
         uint32_t sender;
         uint32_t receiver;
-        shared_ptr<dramRequest> dram_req;
+        std::shared_ptr<dramRequest> dram_req;
         maddr_t maddr;
 
         /* status */
@@ -169,7 +169,7 @@ public:
 
         /* for stats */
         uint64_t birthtime;
-        shared_ptr<sharedSharedLCCStatsPerMemInstr> per_mem_instr_stats;
+        std::shared_ptr<sharedSharedLCCStatsPerMemInstr> per_mem_instr_stats;
 
     } dramctrlMsg;
 
@@ -215,24 +215,24 @@ private:
         entryStatus status;
         entrySubstatus substatus;
 
-        shared_ptr<memoryRequest> core_req;
-        shared_ptr<catRequest> cat_req;
-        shared_ptr<cacheRequest> l1_req;
-        shared_ptr<cacheRequest> l2_req;
-        shared_ptr<coherenceMsg> remote_req;
-        shared_ptr<coherenceMsg> bypass_remote_req;
-        shared_ptr<memoryRequest> bypass_core_req;;
-        shared_ptr<coherenceMsg> remote_rep;
-        shared_ptr<coherenceMsg> remote_checkin;
-        shared_ptr<dramctrlMsg> dramctrl_req;
-        shared_ptr<dramctrlMsg> dramctrl_rep;
+        std::shared_ptr<memoryRequest> core_req;
+        std::shared_ptr<catRequest> cat_req;
+        std::shared_ptr<cacheRequest> l1_req;
+        std::shared_ptr<cacheRequest> l2_req;
+        std::shared_ptr<coherenceMsg> remote_req;
+        std::shared_ptr<coherenceMsg> bypass_remote_req;
+        std::shared_ptr<memoryRequest> bypass_core_req;;
+        std::shared_ptr<coherenceMsg> remote_rep;
+        std::shared_ptr<coherenceMsg> remote_checkin;
+        std::shared_ptr<dramctrlMsg> dramctrl_req;
+        std::shared_ptr<dramctrlMsg> dramctrl_rep;
 
         /* blocking writes and bypassing reads */
         bool can_bypass_read_req; 
         uint64_t blocking_timestamp;
         /* data & info being blocked are stored in the table to serve bypassable reads */
         shared_array<uint32_t> blocked_data;
-        shared_ptr<coherenceInfo> blocked_line_info;
+        std::shared_ptr<coherenceInfo> blocked_line_info;
                                                
         bool using_read_exclusive_space; 
         bool using_send_checkin_exclusive_space; 
@@ -243,23 +243,23 @@ private:
         uint64_t bypass_core_req_begin_time;
         uint64_t bypass_remote_req_begin_time;
 
-        shared_ptr<sharedSharedLCCStatsPerMemInstr> per_mem_instr_stats;
+        std::shared_ptr<sharedSharedLCCStatsPerMemInstr> per_mem_instr_stats;
 
     } tableEntry;
 
     typedef struct {
-        shared_ptr<dramctrlMsg> dramctrl_req;
-        shared_ptr<dramctrlMsg> dramctrl_rep;
-        shared_ptr<message_t> net_msg_to_send;
+            std::shared_ptr<dramctrlMsg> dramctrl_req;
+            std::shared_ptr<dramctrlMsg> dramctrl_rep;
+            std::shared_ptr<message_t> net_msg_to_send;
 
         /* for stats */
         uint64_t operation_begin_time;
-        shared_ptr<sharedSharedLCCStatsPerMemInstr> per_mem_instr_stats;
+        std::shared_ptr<sharedSharedLCCStatsPerMemInstr> per_mem_instr_stats;
 
     } dramctrlTableEntry;
 
-    typedef map<maddr_t, shared_ptr<tableEntry> > workTable;
-    typedef map<maddr_t, shared_ptr<dramctrlTableEntry> > dramctrlTable;
+    typedef map<maddr_t, std::shared_ptr<tableEntry> > workTable;
+    typedef map<maddr_t, std::shared_ptr<dramctrlTableEntry> > dramctrlTable;
 
     inline maddr_t get_start_maddr_in_line(maddr_t maddr) { 
         maddr.address -= (maddr.address)%(m_cfg.words_per_cache_line*4); return maddr; 
@@ -284,14 +284,14 @@ private:
 
     cache* m_l1;
     cache* m_l2;
-    shared_ptr<cat> m_cat;
+    std::shared_ptr<cat> m_cat;
 
-    shared_ptr<sharedSharedLCCStatsPerTile> m_stats;
+    std::shared_ptr<sharedSharedLCCStatsPerTile> m_stats;
 
     workTable m_work_table;
     dramctrlTable m_dramctrl_work_table;
 
-    vector<tuple<shared_ptr<uint64_t>/*timestamp*/, maddr_t/*start_maddr*/> > m_scheduled_checkin;
+    vector<std::tuple<std::shared_ptr<uint64_t>/*timestamp*/, maddr_t/*start_maddr*/> > m_scheduled_checkin;
 
     uint32_t m_work_table_vacancy_shared;
     uint32_t m_work_table_vacancy_read_exclusive;
@@ -303,23 +303,23 @@ private:
     /* For the cases where the information is updated on the work table not through the cache, */
     /* The work table uses its own helpers */
 
-    typedef shared_ptr<void> (*coherenceInfoCopy) (shared_ptr<void>);
+    typedef std::shared_ptr<void> (*coherenceInfoCopy) (std::shared_ptr<void>);
     coherenceInfoCopy m_copy_coherence_info;
     /* returns true if information is updated (dirty) */
-    typedef bool(*coherenceInfoHandler) (shared_ptr<coherenceInfo>, shared_ptr<auxInfoForCoherence>, const uint64_t&);
+    typedef bool(*coherenceInfoHandler) (std::shared_ptr<coherenceInfo>, std::shared_ptr<auxInfoForCoherence>, const uint64_t&);
     coherenceInfoHandler m_handler_for_dramctrl_rep;
     coherenceInfoHandler m_handler_for_waited_for_timestamp;
     coherenceInfoHandler m_handler_for_remote_rep;
     coherenceInfoHandler m_handler_for_remote_checkin;
 
     /* keep track of writeback requests to priortize it. must hold other reads and writes until writeback finishes */
-    map<maddr_t, shared_ptr<tableEntry> > m_l2_writeback_status;
-    map<maddr_t, shared_ptr<tableEntry> > m_dramctrl_writeback_status;
+    map<maddr_t, std::shared_ptr<tableEntry> > m_l2_writeback_status;
+    map<maddr_t, std::shared_ptr<tableEntry> > m_dramctrl_writeback_status;
 
     /* SCHEDULER QUEUES */
     /* no real hardware... volatile at clock boundaries */
 
-    vector<shared_ptr<memoryRequest> > m_core_port_schedule_q; 
+    vector<std::shared_ptr<memoryRequest> > m_core_port_schedule_q; 
 
     typedef enum {
         FROM_LOCAL_CORE = 0,
@@ -328,17 +328,17 @@ private:
         FROM_CHANNEL_REMOTE_REP
     } work_table_entry_src_t;
 
-    vector<tuple<work_table_entry_src_t, shared_ptr<void> > > m_new_work_table_entry_schedule_q;
+    vector<std::tuple<work_table_entry_src_t, std::shared_ptr<void> > > m_new_work_table_entry_schedule_q;
 
-    vector<shared_ptr<tableEntry> > m_cat_req_schedule_q;
-    vector<shared_ptr<tableEntry> > m_l1_read_req_schedule_q;
-    vector<shared_ptr<tableEntry> > m_l1_write_req_schedule_q;
-    vector<shared_ptr<tableEntry> > m_l2_read_req_schedule_q;
-    vector<shared_ptr<tableEntry> > m_l2_write_req_schedule_q;
-    vector<shared_ptr<tableEntry> > m_remote_req_schedule_q;
-    vector<tuple<bool/* is remote rep*/, shared_ptr<tableEntry> > > m_remote_rep_and_checkin_schedule_q;
-    vector<tuple<bool/* is remote */, shared_ptr<void> > > m_dramctrl_req_schedule_q;
-    vector<shared_ptr<dramctrlTableEntry> > m_dramctrl_rep_schedule_q;
+    vector<std::shared_ptr<tableEntry> > m_cat_req_schedule_q;
+    vector<std::shared_ptr<tableEntry> > m_l1_read_req_schedule_q;
+    vector<std::shared_ptr<tableEntry> > m_l1_write_req_schedule_q;
+    vector<std::shared_ptr<tableEntry> > m_l2_read_req_schedule_q;
+    vector<std::shared_ptr<tableEntry> > m_l2_write_req_schedule_q;
+    vector<std::shared_ptr<tableEntry> > m_remote_req_schedule_q;
+    vector<std::tuple<bool/* is remote rep*/, std::shared_ptr<tableEntry> > > m_remote_rep_and_checkin_schedule_q;
+    vector<std::tuple<bool/* is remote */, std::shared_ptr<void> > > m_dramctrl_req_schedule_q;
+    vector<std::shared_ptr<dramctrlTableEntry> > m_dramctrl_rep_schedule_q;
 
 };
 

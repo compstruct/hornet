@@ -4,7 +4,7 @@
 #ifndef __DRAM_CONTROLLER_HPP__
 #define __DRAM_CONTROLLER_HPP__
 
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include <boost/shared_array.hpp>
 #include "statistics.hpp"
 #include "logger.hpp"
@@ -46,11 +46,11 @@ public:
     /* extended write */
     dramRequest(maddr_t maddr, dramReqType_t request_type, 
                 uint32_t word_count, shared_array<uint32_t> wdata, 
-                uint32_t aux_word_size, shared_ptr<void> aux_data);
+                uint32_t aux_word_size, std::shared_ptr<void> aux_data);
 
     inline dramReqStatus_t status() { return m_status; }
     inline shared_array<uint32_t> read() { return m_data; }
-    inline shared_ptr<void> read_aux() { return m_aux_data; }
+    inline std::shared_ptr<void> read_aux() { return m_aux_data; }
 
     inline bool is_read() { return m_request_type == DRAM_REQ_READ; }
     inline maddr_t maddr() { return m_maddr; }
@@ -68,7 +68,7 @@ private:
     uint32_t m_aux_word_size;
     dramReqStatus_t m_status;
     shared_array<uint32_t> m_data;
-    shared_ptr<void> m_aux_data;
+    std::shared_ptr<void> m_aux_data;
 
     /* cost breakdown study */
     uint64_t m_milestone_time;
@@ -85,7 +85,7 @@ public:
 private:
     typedef map<uint64_t/*start_address*/, shared_array<uint32_t> > memSpace;
     typedef map<uint32_t/*mem space id*/, memSpace> memSpaces;
-    typedef map<maddr_t, shared_ptr<void> > auxMemSpaces;
+    typedef map<maddr_t, std::shared_ptr<void> > auxMemSpaces;
 
     memSpaces m_memory;
     auxMemSpaces m_aux_memory;
@@ -95,14 +95,14 @@ private:
 public:
     void mem_read_instant(uint32_t *, uint32_t, uint32_t, uint32_t, bool);
     void mem_write_instant(void * source, uint32_t mem_space, uint32_t mem_start, uint32_t mem_size, bool endianc);
-    void mem_write_instant(shared_ptr<mem>, uint32_t, uint32_t, uint32_t);
+    void mem_write_instant(std::shared_ptr<mem>, uint32_t, uint32_t, uint32_t);
 };
 
 class dramController {
 public:
     dramController(uint32_t numeric_id, const uint64_t &system_time,
-                   shared_ptr<tile_statistics> stats, logger &log, shared_ptr<random_gen> ran,
-                   shared_ptr<dram> connected_dram,
+                   std::shared_ptr<tile_statistics> stats, logger &log, std::shared_ptr<random_gen> ran,
+                   std::shared_ptr<dram> connected_dram,
                    uint32_t dram_controller_latency, uint32_t offchip_oneway_latency, uint32_t dram_latency,
                    uint32_t msg_header_size_in_words, uint32_t max_requests_in_flight, uint32_t bandwidth_in_words_per_cycle,
                    bool use_lock); 
@@ -111,13 +111,13 @@ public:
     void tick_positive_edge();
     void tick_negative_edge();
 
-    void request(shared_ptr<dramRequest> req);
+    void request(std::shared_ptr<dramRequest> req);
 
     inline bool available() { return m_number_of_free_ports > 0; }
 
 private:
-    void dram_access(shared_ptr<dramRequest> req);
-    void dram_access_safe(shared_ptr<dramRequest> req);
+    void dram_access(std::shared_ptr<dramRequest> req);
+    void dram_access_safe(std::shared_ptr<dramRequest> req);
 
     typedef enum {
         ENTRY_PORT = 0,
@@ -128,21 +128,21 @@ private:
 
     typedef struct {
         entryStatus_t status;
-        shared_ptr<dramRequest> request;
+        std::shared_ptr<dramRequest> request;
         uint32_t port;
         uint32_t remaining_latency_cycles;
         uint32_t remaining_words_to_transfer;
     } entry_t;
 
-    typedef vector<shared_ptr<entry_t> > entryQueue;
+    typedef vector<std::shared_ptr<entry_t> > entryQueue;
 
     uint32_t m_id;
     const uint64_t &system_time;
-    shared_ptr<tile_statistics> stats;
+    std::shared_ptr<tile_statistics> stats;
     logger &log;
-    shared_ptr<random_gen> ran;
+    std::shared_ptr<random_gen> ran;
 
-    shared_ptr<dram> m_dram;
+    std::shared_ptr<dram> m_dram;
 
     bool m_use_lock;
     /* simple latency model */

@@ -41,18 +41,18 @@ static uint32_t network_distance(uint32_t a, uint32_t b, uint32_t w) {
 
 /* copiers */
 
-static shared_ptr<void> copy_coherence_info_ideal(shared_ptr<void> source) { 
-    shared_ptr<sharedSharedLCC::coherenceInfo> ret
+static std::shared_ptr<void> copy_coherence_info_ideal(std::shared_ptr<void> source) { 
+        std::shared_ptr<sharedSharedLCC::coherenceInfo> ret
         (new sharedSharedLCC::coherenceInfo(*static_pointer_cast<sharedSharedLCC::coherenceInfo>(source)));
     /* pointer of timestamp is passed */
     return ret;
 }
 
-static shared_ptr<void> copy_coherence_info_nonideal(shared_ptr<void> source) { 
-    shared_ptr<sharedSharedLCC::coherenceInfo> ret
+static std::shared_ptr<void> copy_coherence_info_nonideal(std::shared_ptr<void> source) { 
+        std::shared_ptr<sharedSharedLCC::coherenceInfo> ret
         (new sharedSharedLCC::coherenceInfo(*static_pointer_cast<sharedSharedLCC::coherenceInfo>(source)));
     /* copy of timestamp value is passed */
-    ret->timestamp = shared_ptr<uint64_t>(new uint64_t(*ret->timestamp));
+    ret->timestamp = std::shared_ptr<uint64_t>(new uint64_t(*ret->timestamp));
     return ret;
 }
 
@@ -61,14 +61,14 @@ static shared_ptr<void> copy_coherence_info_nonideal(shared_ptr<void> source) {
 static uint32_t replacement_away_expired_home_evictable_lru_ideal(vector<uint32_t>& evictables, 
                                                                      cacheLine const* lines,
                                                                      const uint64_t& system_time,
-                                                                     shared_ptr<random_gen> ran) 
+                                                                     std::shared_ptr<random_gen> ran) 
 {
     vector<uint32_t> away_expired;
     vector<uint32_t> home_evictable;
     vector<uint32_t> other;
 
     for (vector<uint32_t>::iterator i = evictables.begin(); i != evictables.end(); ++i) {
-        shared_ptr<sharedSharedLCC::coherenceInfo> info = 
+            std::shared_ptr<sharedSharedLCC::coherenceInfo> info = 
             static_pointer_cast<sharedSharedLCC::coherenceInfo>(lines[*i].coherence_info);
         if (info->away && !info->checked_out && system_time < *info->timestamp) {
             away_expired.push_back(*i);
@@ -97,14 +97,14 @@ static uint32_t replacement_away_expired_home_evictable_lru_ideal(vector<uint32_
 static uint32_t replacement_away_expired_home_evictable_random_ideal(vector<uint32_t>& evictables, 
                                                                         cacheLine const* lines,
                                                                         const uint64_t& system_time,
-                                                                        shared_ptr<random_gen> ran) 
+                                                                        std::shared_ptr<random_gen> ran) 
 {
     vector<uint32_t> away_expired;
     vector<uint32_t> home_evictable;
     vector<uint32_t> other;
 
     for (vector<uint32_t>::iterator i = evictables.begin(); i != evictables.end(); ++i) {
-        shared_ptr<sharedSharedLCC::coherenceInfo> info = 
+            std::shared_ptr<sharedSharedLCC::coherenceInfo> info = 
             static_pointer_cast<sharedSharedLCC::coherenceInfo>(lines[*i].coherence_info);
         if (info->away && !info->checked_out && system_time < *info->timestamp) {
             away_expired.push_back(*i);
@@ -125,14 +125,14 @@ static uint32_t replacement_away_expired_home_evictable_random_ideal(vector<uint
 static uint32_t replacement_away_expired_home_evictable_lru_nonideal_L1(vector<uint32_t>& evictables, 
                                                                         cacheLine const* lines,
                                                                         const uint64_t& system_time,
-                                                                        shared_ptr<random_gen> ran) 
+                                                                        std::shared_ptr<random_gen> ran) 
 {
     vector<uint32_t> away_expired;
     vector<uint32_t> home_evictable;
     vector<uint32_t> other;
 
     for (vector<uint32_t>::iterator i = evictables.begin(); i != evictables.end(); ++i) {
-        shared_ptr<sharedSharedLCC::coherenceInfo> info = 
+            std::shared_ptr<sharedSharedLCC::coherenceInfo> info = 
             static_pointer_cast<sharedSharedLCC::coherenceInfo>(lines[*i].coherence_info);
         if (info->away && !info->checked_out && system_time < *info->timestamp) {
             away_expired.push_back(*i);
@@ -161,14 +161,14 @@ static uint32_t replacement_away_expired_home_evictable_lru_nonideal_L1(vector<u
 static uint32_t replacement_away_expired_home_evictable_random_nonideal_L1(vector<uint32_t>& evictables, 
                                                                            cacheLine const* lines,
                                                                            const uint64_t& system_time,
-                                                                           shared_ptr<random_gen> ran) 
+                                                                           std::shared_ptr<random_gen> ran) 
 {
     vector<uint32_t> away_expired;
     vector<uint32_t> home_evictable;
     vector<uint32_t> other;
 
     for (vector<uint32_t>::iterator i = evictables.begin(); i != evictables.end(); ++i) {
-        shared_ptr<sharedSharedLCC::coherenceInfo> info = 
+            std::shared_ptr<sharedSharedLCC::coherenceInfo> info = 
             static_pointer_cast<sharedSharedLCC::coherenceInfo>(lines[*i].coherence_info);
         if (info->away && !info->checked_out && system_time < *info->timestamp) {
             away_expired.push_back(*i);
@@ -190,13 +190,13 @@ static uint32_t replacement_away_expired_home_evictable_random_nonideal_L1(vecto
 static uint32_t replacement_away_expired_home_evictable_lru_nonideal_L2(vector<uint32_t>& evictables, 
                                                                         cacheLine const* lines,
                                                                         const uint64_t& system_time,
-                                                                        shared_ptr<random_gen> ran) 
+                                                                        std::shared_ptr<random_gen> ran) 
 {
     vector<uint32_t> home_evictable;
     vector<uint32_t> other;
 
     for (vector<uint32_t>::iterator i = evictables.begin(); i != evictables.end(); ++i) {
-        shared_ptr<sharedSharedLCC::coherenceInfo> info = 
+            std::shared_ptr<sharedSharedLCC::coherenceInfo> info = 
             static_pointer_cast<sharedSharedLCC::coherenceInfo>(lines[*i].coherence_info);
         if (!info->checked_out && system_time >= *info->timestamp) {
             home_evictable.push_back(*i);
@@ -221,13 +221,13 @@ static uint32_t replacement_away_expired_home_evictable_lru_nonideal_L2(vector<u
 static uint32_t replacement_away_expired_home_evictable_random_nonideal_L2(vector<uint32_t>& evictables, 
                                                                            cacheLine const* lines,
                                                                            const uint64_t& system_time,
-                                                                           shared_ptr<random_gen> ran) 
+                                                                           std::shared_ptr<random_gen> ran) 
 {
     vector<uint32_t> home_evictable;
     vector<uint32_t> other;
 
     for (vector<uint32_t>::iterator i = evictables.begin(); i != evictables.end(); ++i) {
-        shared_ptr<sharedSharedLCC::coherenceInfo> info = 
+            std::shared_ptr<sharedSharedLCC::coherenceInfo> info = 
             static_pointer_cast<sharedSharedLCC::coherenceInfo>(lines[*i].coherence_info);
         if (!info->checked_out && system_time >= *info->timestamp) {
             home_evictable.push_back(*i);
@@ -243,10 +243,10 @@ static uint32_t replacement_away_expired_home_evictable_random_nonideal_L2(vecto
 
 /* hit checkers */
 
-static bool hit_checker_ideal_LCC(shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
-    shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
+static bool hit_checker_ideal_LCC(std::shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
+        std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
         static_pointer_cast<sharedSharedLCC::coherenceInfo>(line.coherence_info);
-    shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
+        std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
         static_pointer_cast<sharedSharedLCC::auxInfoForCoherence>(req->aux_info_for_coherence());
 
     if (req->request_type() == CACHE_REQ_UPDATE || req->request_type() == CACHE_REQ_INVALIDATE) {
@@ -261,10 +261,10 @@ static bool hit_checker_ideal_LCC(shared_ptr<cacheRequest> req, cacheLine& line,
             } else if (request_info->current_core != request_info->issued_core) {
                 line.coherence_info_dirty = true;
                 if (request_info->cfg.max_timestamp_delta_for_read_copy == 0) {
-                    coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
+                    coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
                 } else {
                     coherence_info->timestamp = 
-                        shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
+                        std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
                 }
             }
         }
@@ -277,10 +277,10 @@ static bool hit_checker_ideal_LCC(shared_ptr<cacheRequest> req, cacheLine& line,
     return true;
 }
 
-static bool hit_checker_ideal_WLCC(shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
-    shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
+static bool hit_checker_ideal_WLCC(std::shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
+        std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
         static_pointer_cast<sharedSharedLCC::coherenceInfo>(line.coherence_info);
-    shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
+        std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
         static_pointer_cast<sharedSharedLCC::auxInfoForCoherence>(req->aux_info_for_coherence());
 
     if (req->request_type() == CACHE_REQ_UPDATE || req->request_type() == CACHE_REQ_INVALIDATE) {
@@ -305,10 +305,10 @@ static bool hit_checker_ideal_WLCC(shared_ptr<cacheRequest> req, cacheLine& line
             } else if (request_info->current_core != request_info->issued_core) {
                 line.coherence_info_dirty = true;
                 if (request_info->cfg.max_timestamp_delta_for_read_copy == 0) {
-                    coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
+                    coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
                 } else {
                     coherence_info->timestamp = 
-                        shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
+                        std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
                 }
             }
         }
@@ -323,20 +323,20 @@ static bool hit_checker_ideal_WLCC(shared_ptr<cacheRequest> req, cacheLine& line
             coherence_info->checked_out = true;
             line.coherence_info_dirty = true;
             if (request_info->cfg.max_timestamp_delta_for_write_copy == 0) {
-                coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
+                coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
             } else {
                 coherence_info->timestamp = 
-                    shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
+                    std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
             }
         }
     }
     return true;
 }
 
-static bool hit_checker_fixed_LCC(shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
-    shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
+static bool hit_checker_fixed_LCC(std::shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
+        std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
         static_pointer_cast<sharedSharedLCC::coherenceInfo>(line.coherence_info);
-    shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
+        std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
         static_pointer_cast<sharedSharedLCC::auxInfoForCoherence>(req->aux_info_for_coherence());
 
     if (req->request_type() == CACHE_REQ_UPDATE || req->request_type() == CACHE_REQ_INVALIDATE) {
@@ -350,7 +350,7 @@ static bool hit_checker_fixed_LCC(shared_ptr<cacheRequest> req, cacheLine& line,
                 return false;
             } else if (request_info->current_core != request_info->issued_core) {
                 coherence_info->timestamp = 
-                    shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
+                    std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
                 line.coherence_info_dirty = true;
             }
         }
@@ -362,10 +362,10 @@ static bool hit_checker_fixed_LCC(shared_ptr<cacheRequest> req, cacheLine& line,
     return true;
 }
 
-static bool hit_checker_fixed_WLCC(shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
-    shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
+static bool hit_checker_fixed_WLCC(std::shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
+        std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
         static_pointer_cast<sharedSharedLCC::coherenceInfo>(line.coherence_info);
-    shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
+        std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
         static_pointer_cast<sharedSharedLCC::auxInfoForCoherence>(req->aux_info_for_coherence());
 
     if (req->request_type() == CACHE_REQ_UPDATE || req->request_type() == CACHE_REQ_INVALIDATE) {
@@ -388,7 +388,7 @@ static bool hit_checker_fixed_WLCC(shared_ptr<cacheRequest> req, cacheLine& line
                 return false;
             } else if (request_info->current_core != request_info->issued_core) {
                 coherence_info->timestamp = 
-                    shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
+                    std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
                 line.coherence_info_dirty = true;
             }
         }
@@ -400,15 +400,15 @@ static bool hit_checker_fixed_WLCC(shared_ptr<cacheRequest> req, cacheLine& line
         coherence_info->checked_out = true;
         line.coherence_info_dirty = true;
         coherence_info->timestamp = 
-            shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
+            std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
     }
     return true;
 }
 
-static bool hit_checker_period_prediction_LCC(shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
-    shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
+static bool hit_checker_period_prediction_LCC(std::shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
+        std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
         static_pointer_cast<sharedSharedLCC::coherenceInfo>(line.coherence_info);
-    shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
+        std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
         static_pointer_cast<sharedSharedLCC::auxInfoForCoherence>(req->aux_info_for_coherence());
 
     if (req->request_type() == CACHE_REQ_UPDATE || req->request_type() == CACHE_REQ_INVALIDATE) {
@@ -448,7 +448,7 @@ static bool hit_checker_period_prediction_LCC(shared_ptr<cacheRequest> req, cach
                     }
                 }
                 line.coherence_info_dirty = true;
-                coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(system_time + delta));
+                coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(system_time + delta));
             }
         }
     } else if (coherence_info->away) {
@@ -459,10 +459,10 @@ static bool hit_checker_period_prediction_LCC(shared_ptr<cacheRequest> req, cach
     return true;
 }
 
-static bool hit_checker_period_prediction_WLCC(shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
-    shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
+static bool hit_checker_period_prediction_WLCC(std::shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
+        std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
         static_pointer_cast<sharedSharedLCC::coherenceInfo>(line.coherence_info);
-    shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
+        std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
         static_pointer_cast<sharedSharedLCC::auxInfoForCoherence>(req->aux_info_for_coherence());
 
     if (req->request_type() == CACHE_REQ_UPDATE || req->request_type() == CACHE_REQ_INVALIDATE) {
@@ -510,7 +510,7 @@ static bool hit_checker_period_prediction_WLCC(shared_ptr<cacheRequest> req, cac
                     }
                 }
                 line.coherence_info_dirty = true;
-                coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(system_time + delta));
+                coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(system_time + delta));
             }
         }
     } else if (coherence_info->away) {
@@ -533,15 +533,15 @@ static bool hit_checker_period_prediction_WLCC(shared_ptr<cacheRequest> req, cac
             coherence_info->checked_out = true;
             line.coherence_info_dirty = true;
         }
-        coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(system_time + delta));
+        coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(system_time + delta));
     }
     return true;
 }
 
-static bool hit_checker_extend_and_cut_LCC(shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
-    shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
+static bool hit_checker_extend_and_cut_LCC(std::shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
+        std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
         static_pointer_cast<sharedSharedLCC::coherenceInfo>(line.coherence_info);
-    shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
+        std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
         static_pointer_cast<sharedSharedLCC::auxInfoForCoherence>(req->aux_info_for_coherence());
 
     if (req->request_type() == CACHE_REQ_UPDATE || req->request_type() == CACHE_REQ_INVALIDATE) {
@@ -574,8 +574,8 @@ static bool hit_checker_extend_and_cut_LCC(shared_ptr<cacheRequest> req, cacheLi
                 if (request_info->current_core != request_info->issued_core) {
                     line.coherence_info_dirty = true;
                     coherence_info->timestamp = (coherence_info->current_delta < request_info->cfg.max_timestamp_delta_for_read_copy) ?
-                        shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta)) :
-                        shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
+                        std::shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta)) :
+                        std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
                 }
             }
         }
@@ -592,10 +592,10 @@ static bool hit_checker_extend_and_cut_LCC(shared_ptr<cacheRequest> req, cacheLi
     return true;
 }
 
-static bool hit_checker_extend_and_cut_WLCC(shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
-    shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
+static bool hit_checker_extend_and_cut_WLCC(std::shared_ptr<cacheRequest> req, cacheLine& line, const uint64_t& system_time) { 
+        std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info = 
         static_pointer_cast<sharedSharedLCC::coherenceInfo>(line.coherence_info);
-    shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
+        std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info = 
         static_pointer_cast<sharedSharedLCC::auxInfoForCoherence>(req->aux_info_for_coherence());
 
     if (req->request_type() == CACHE_REQ_UPDATE || req->request_type() == CACHE_REQ_INVALIDATE) {
@@ -638,16 +638,16 @@ static bool hit_checker_extend_and_cut_WLCC(shared_ptr<cacheRequest> req, cacheL
             if (system_time > *coherence_info->timestamp || request_info->expired_amount > 0) {
                 if (request_info->current_core != request_info->issued_core) {
                     line.coherence_info_dirty = true;
-                    coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta));
+                    coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta));
                     if (!coherence_info->shared) {
                         coherence_info->checked_out = true;
                         coherence_info->timestamp = (coherence_info->current_delta < request_info->cfg.max_timestamp_delta_for_write_copy) ?
-                            shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta)) :
-                            shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
+                            std::shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta)) :
+                            std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
                     } else {
                         coherence_info->timestamp = (coherence_info->current_delta < request_info->cfg.max_timestamp_delta_for_read_copy) ?
-                            shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta)) :
-                            shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
+                            std::shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta)) :
+                            std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
                     }
                 }
             }
@@ -674,8 +674,8 @@ static bool hit_checker_extend_and_cut_WLCC(shared_ptr<cacheRequest> req, cacheL
                 coherence_info->current_delta *= 2;
             }
             coherence_info->timestamp = (coherence_info->current_delta < request_info->cfg.max_timestamp_delta_for_write_copy) ?
-                shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta)) :
-                shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
+                std::shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta)) :
+                std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
         }
     }
     return true;
@@ -685,7 +685,7 @@ static bool hit_checker_extend_and_cut_WLCC(shared_ptr<cacheRequest> req, cacheL
 /* evictable checker */
 
 static bool can_evict_line_L2_ideal(cacheLine &line, const uint64_t& system_time) {
-    shared_ptr<sharedSharedLCC::coherenceInfo> info = 
+        std::shared_ptr<sharedSharedLCC::coherenceInfo> info = 
         static_pointer_cast<sharedSharedLCC::coherenceInfo>(line.coherence_info);
     if (info->home) {
         if (info->checked_out) {
@@ -700,7 +700,7 @@ static bool can_evict_line_L2_ideal(cacheLine &line, const uint64_t& system_time
 
 
 static bool can_evict_line_L2_nonideal(cacheLine &line, const uint64_t& system_time) {
-    shared_ptr<sharedSharedLCC::coherenceInfo> info = 
+        std::shared_ptr<sharedSharedLCC::coherenceInfo> info = 
         static_pointer_cast<sharedSharedLCC::coherenceInfo>(line.coherence_info);
     if (info->home) {
         if (info->checked_out || system_time < *info->timestamp) {
@@ -717,8 +717,8 @@ static bool can_evict_line_L2_nonideal(cacheLine &line, const uint64_t& system_t
 
 /* called before a remote rep is cached at a local L1 */
 
-static bool handler_for_remote_rep(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                   shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_remote_rep(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                   std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                    const uint64_t& system_time)
 {
     coherence_info->away = true;
@@ -727,8 +727,8 @@ static bool handler_for_remote_rep(shared_ptr<sharedSharedLCC::coherenceInfo> co
 
 /* called before a new L2 line is created from a dramctrl reply */
 
-static bool handler_for_dramctrl_rep_ideal_LCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_dramctrl_rep_ideal_LCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     coherence_info->checked_out = false;
@@ -736,16 +736,16 @@ static bool handler_for_dramctrl_rep_ideal_LCC(shared_ptr<sharedSharedLCC::coher
     coherence_info->home = request_info->current_core;
 
     if (request_info->cfg.max_timestamp_delta_for_read_copy == 0) {
-        coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
+        coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
     } else {
         coherence_info->timestamp = 
-            shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
+            std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
     }
     return true;
 }
 
-static bool handler_for_dramctrl_rep_ideal_WLCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_dramctrl_rep_ideal_WLCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     coherence_info->checked_out = false;
@@ -755,29 +755,29 @@ static bool handler_for_dramctrl_rep_ideal_WLCC(shared_ptr<sharedSharedLCC::cohe
     if (request_info->current_core != request_info->issued_core) {
         if (request_info->is_read) {
             if (request_info->cfg.max_timestamp_delta_for_read_copy == 0) {
-                coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
+                coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
             } else {
                 coherence_info->timestamp = 
-                    shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
+                    std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
             }
         } else {
             coherence_info->checked_out = true;
             if (request_info->cfg.max_timestamp_delta_for_write_copy == 0) {
-                coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
+                coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
             } else {
                 coherence_info->timestamp = 
-                    shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
+                    std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
             }
         }
     } else {
-        coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(system_time));
+        coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(system_time));
     }
 
     return true;
 }
 
-static bool handler_for_dramctrl_rep_fixed_LCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_dramctrl_rep_fixed_LCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     coherence_info->checked_out = false;
@@ -785,16 +785,16 @@ static bool handler_for_dramctrl_rep_fixed_LCC(shared_ptr<sharedSharedLCC::coher
     coherence_info->home = request_info->current_core;
     if (request_info->is_read && request_info->issued_core != request_info->current_core) {
         coherence_info->timestamp = 
-            shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
+            std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
     } else {
         coherence_info->timestamp = 
-            shared_ptr<uint64_t>(new uint64_t(system_time));
+            std::shared_ptr<uint64_t>(new uint64_t(system_time));
     }
     return true;
 }
 
-static bool handler_for_dramctrl_rep_fixed_WLCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_dramctrl_rep_fixed_WLCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     coherence_info->checked_out = false;
@@ -803,28 +803,28 @@ static bool handler_for_dramctrl_rep_fixed_WLCC(shared_ptr<sharedSharedLCC::cohe
     if (request_info->issued_core != request_info->current_core) {
         if (request_info->is_read) {
             coherence_info->timestamp = 
-                shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
+                std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
         } else {
             coherence_info->checked_out = true;
             coherence_info->timestamp = 
-                shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
+                std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
         }
     } else {
         coherence_info->timestamp = 
-            shared_ptr<uint64_t>(new uint64_t(system_time));
+            std::shared_ptr<uint64_t>(new uint64_t(system_time));
     }
     return true;
 
 }
 
-static bool handler_for_dramctrl_rep_period_prediction_LCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_dramctrl_rep_period_prediction_LCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     coherence_info->checked_out = false;
     coherence_info->away = false;
     coherence_info->home = request_info->current_core;
-    coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(system_time));
+    coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(system_time));
     coherence_info->last_remote_read_time = 0;
     coherence_info->last_remote_read_period = 0;
     coherence_info->last_write_time = 0;
@@ -833,14 +833,14 @@ static bool handler_for_dramctrl_rep_period_prediction_LCC(shared_ptr<sharedShar
     return true;
 }
 
-static bool handler_for_dramctrl_rep_period_prediction_WLCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_dramctrl_rep_period_prediction_WLCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     coherence_info->checked_out = false;
     coherence_info->away = false;
     coherence_info->home = request_info->current_core;
-    coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(system_time));
+    coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(system_time));
     coherence_info->last_remote_read_time = 0;
     coherence_info->last_remote_read_period = 0;
     coherence_info->last_write_time = 0;
@@ -851,14 +851,14 @@ static bool handler_for_dramctrl_rep_period_prediction_WLCC(shared_ptr<sharedSha
     return true;
 }
 
-static bool handler_for_dramctrl_rep_extend_and_cut_LCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_dramctrl_rep_extend_and_cut_LCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     coherence_info->checked_out = false;
     coherence_info->away = false;
     coherence_info->home = request_info->current_core;
-    coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(system_time));
+    coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(system_time));
     coherence_info->last_remote_read_time = 0;
     coherence_info->last_remote_read_period = 0;
     coherence_info->last_write_time = 0;
@@ -871,14 +871,14 @@ static bool handler_for_dramctrl_rep_extend_and_cut_LCC(shared_ptr<sharedSharedL
     return true;
 }
 
-static bool handler_for_dramctrl_rep_extend_and_cut_WLCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_dramctrl_rep_extend_and_cut_WLCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     coherence_info->checked_out = false;
     coherence_info->away = false;
     coherence_info->home = request_info->current_core;
-    coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(system_time));
+    coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(system_time));
     coherence_info->last_remote_read_time = 0;
     coherence_info->last_remote_read_period = 0;
     coherence_info->last_write_time = 0;
@@ -895,29 +895,29 @@ static bool handler_for_dramctrl_rep_extend_and_cut_WLCC(shared_ptr<sharedShared
 
 /* called before a write on a line finishes waiting for an unexpired timestamp */
 
-static bool handler_for_waited_for_timestamp_LCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_waited_for_timestamp_LCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     /* no action necessary */
     return false;
 }
 
-static bool handler_for_waited_for_timestamp_fixed_WLCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_waited_for_timestamp_fixed_WLCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     if (request_info->current_core != request_info->issued_core) {
         coherence_info->checked_out = true;
         coherence_info->timestamp = 
-            shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
+            std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
         return true;
     }
     return false;
 }
 
-static bool handler_for_waited_for_timestamp_period_prediction_WLCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_waited_for_timestamp_period_prediction_WLCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     if (request_info->current_core != request_info->issued_core) {
@@ -934,14 +934,14 @@ static bool handler_for_waited_for_timestamp_period_prediction_WLCC(shared_ptr<s
                 delta = request_info->cfg.max_timestamp_delta_for_read_copy;
             }
         }
-        coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(system_time + delta));
+        coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(system_time + delta));
         return true;
     }
     return false;
 }
 
-static bool handler_for_waited_for_timestamp_extend_and_cut_WLCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_waited_for_timestamp_extend_and_cut_WLCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     if (request_info->current_core != request_info->issued_core) {
@@ -950,8 +950,8 @@ static bool handler_for_waited_for_timestamp_extend_and_cut_WLCC(shared_ptr<shar
         
         coherence_info->timestamp = 
             (coherence_info->current_delta <= request_info->cfg.max_timestamp_delta_for_write_copy) ?
-            shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta)) :
-            shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
+            std::shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta)) :
+            std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
         return true;
     }
     return false;
@@ -959,8 +959,8 @@ static bool handler_for_waited_for_timestamp_extend_and_cut_WLCC(shared_ptr<shar
 
 /* called before a request on a line finishes waiting for a remote check in */
 
-static bool handler_for_remote_checkin_ideal_WLCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_remote_checkin_ideal_WLCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     coherence_info->away = false;;
@@ -969,17 +969,17 @@ static bool handler_for_remote_checkin_ideal_WLCC(shared_ptr<sharedSharedLCC::co
         if (request_info->is_read) {
             coherence_info->checked_out = false;
             if (request_info->cfg.max_timestamp_delta_for_read_copy == 0) {
-                coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
+                coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
             } else {
                 coherence_info->timestamp = 
-                    shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
+                    std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
             }
         } else {
             if (request_info->cfg.max_timestamp_delta_for_write_copy == 0) {
-                coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
+                coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(UINT64_MAX));
             } else {
                 coherence_info->timestamp = 
-                    shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
+                    std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
             }
         }
     } else {
@@ -989,8 +989,8 @@ static bool handler_for_remote_checkin_ideal_WLCC(shared_ptr<sharedSharedLCC::co
     return true;
 }
 
-static bool handler_for_remote_checkin_fixed_WLCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_remote_checkin_fixed_WLCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     coherence_info->away = false;;
@@ -999,11 +999,11 @@ static bool handler_for_remote_checkin_fixed_WLCC(shared_ptr<sharedSharedLCC::co
         if (request_info->is_read) {
             coherence_info->checked_out = false;
             coherence_info->timestamp = 
-                shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
+                std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
         } else {
             coherence_info->checked_out = true;
             coherence_info->timestamp = 
-                shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
+                std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
         }
     } else {
         coherence_info->checked_out = false;
@@ -1013,8 +1013,8 @@ static bool handler_for_remote_checkin_fixed_WLCC(shared_ptr<sharedSharedLCC::co
 
 }
 
-static bool handler_for_remote_checkin_period_prediction_WLCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_remote_checkin_period_prediction_WLCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     coherence_info->away = false;;
@@ -1033,7 +1033,7 @@ static bool handler_for_remote_checkin_period_prediction_WLCC(shared_ptr<sharedS
                     delta = request_info->cfg.max_timestamp_delta_for_read_copy;
                 }
             }
-            coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(system_time + delta));
+            coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(system_time + delta));
 
         } else {
 
@@ -1049,7 +1049,7 @@ static bool handler_for_remote_checkin_period_prediction_WLCC(shared_ptr<sharedS
                     delta = request_info->cfg.max_timestamp_delta_for_read_copy;
                 }
             }
-            coherence_info->timestamp = shared_ptr<uint64_t>(new uint64_t(system_time + delta));
+            coherence_info->timestamp = std::shared_ptr<uint64_t>(new uint64_t(system_time + delta));
 
         }
     } else {
@@ -1059,8 +1059,8 @@ static bool handler_for_remote_checkin_period_prediction_WLCC(shared_ptr<sharedS
     return true;
 }
 
-static bool handler_for_remote_checkin_extend_and_cut_WLCC(shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
-                                               shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
+static bool handler_for_remote_checkin_extend_and_cut_WLCC(std::shared_ptr<sharedSharedLCC::coherenceInfo> coherence_info, 
+                                               std::shared_ptr<sharedSharedLCC::auxInfoForCoherence> request_info,
                                                const uint64_t& system_time)
 {
     coherence_info->away = false;;
@@ -1072,8 +1072,8 @@ static bool handler_for_remote_checkin_extend_and_cut_WLCC(shared_ptr<sharedShar
 
             coherence_info->timestamp = 
                 (coherence_info->current_delta <= request_info->cfg.max_timestamp_delta_for_read_copy) ?
-                shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta)) :
-                shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
+                std::shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta)) :
+                std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_read_copy));
 
         } else {
 
@@ -1081,8 +1081,8 @@ static bool handler_for_remote_checkin_extend_and_cut_WLCC(shared_ptr<sharedShar
 
             coherence_info->timestamp = 
                 (coherence_info->current_delta <= request_info->cfg.max_timestamp_delta_for_write_copy) ?
-                shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta)) :
-                shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
+                std::shared_ptr<uint64_t>(new uint64_t(system_time + coherence_info->current_delta)) :
+                std::shared_ptr<uint64_t>(new uint64_t(system_time + request_info->cfg.max_timestamp_delta_for_write_copy));
 
         }
     } else {
@@ -1098,17 +1098,17 @@ static bool handler_for_remote_checkin_extend_and_cut_WLCC(shared_ptr<sharedShar
 
 sharedSharedLCC::sharedSharedLCC(uint32_t id, 
                                    const uint64_t &t, 
-                                   shared_ptr<tile_statistics> st, 
+                                   std::shared_ptr<tile_statistics> st, 
                                    logger &l, 
-                                   shared_ptr<random_gen> r, 
-                                   shared_ptr<cat> a_cat, 
+                                   std::shared_ptr<random_gen> r, 
+                                   std::shared_ptr<cat> a_cat, 
                                    sharedSharedLCCCfg_t cfg) :
     memory(id, t, st, l, r), 
     m_cfg(cfg), 
     m_l1(NULL), 
     m_l2(NULL), 
     m_cat(a_cat), 
-    m_stats(shared_ptr<sharedSharedLCCStatsPerTile>()),
+    m_stats(std::shared_ptr<sharedSharedLCCStatsPerTile>()),
     m_work_table_vacancy_shared(cfg.work_table_size_shared),
     m_work_table_vacancy_read_exclusive(cfg.work_table_size_read_exclusive),
     m_work_table_vacancy_send_checkin_exclusive(cfg.work_table_size_send_checkin_exclusive),
@@ -1290,7 +1290,7 @@ sharedSharedLCC::~sharedSharedLCC() {
 
 uint32_t sharedSharedLCC::number_of_mem_msg_types() { return NUM_MSG_TYPES; }
 
-void sharedSharedLCC::request(shared_ptr<memoryRequest> req) {
+void sharedSharedLCC::request(std::shared_ptr<memoryRequest> req) {
 
     /* assumes a request is not across multiple cache lines */
     uint32_t __attribute__((unused)) byte_offset = req->maddr().address%(m_cfg.words_per_cache_line*4);
@@ -1301,12 +1301,12 @@ void sharedSharedLCC::request(shared_ptr<memoryRequest> req) {
 
     /* per memory instruction info */
     if (req->per_mem_instr_runtime_info()) {
-        shared_ptr<shared_ptr<void> > p_runtime_info = req->per_mem_instr_runtime_info();
-        shared_ptr<void>& runtime_info = *p_runtime_info;
-        shared_ptr<sharedSharedLCCStatsPerMemInstr> per_mem_instr_stats;
+            std::shared_ptr<std::shared_ptr<void> > p_runtime_info = req->per_mem_instr_runtime_info();
+            std::shared_ptr<void>& runtime_info = *p_runtime_info;
+            std::shared_ptr<sharedSharedLCCStatsPerMemInstr> per_mem_instr_stats;
         if (!runtime_info) {
             /* no per-instr stats: this is the first time this memory instruction is issued */
-            per_mem_instr_stats = shared_ptr<sharedSharedLCCStatsPerMemInstr>(new sharedSharedLCCStatsPerMemInstr(req->is_read()));
+            per_mem_instr_stats = std::shared_ptr<sharedSharedLCCStatsPerMemInstr>(new sharedSharedLCCStatsPerMemInstr(req->is_read()));
             per_mem_instr_stats->set_serialization_begin_time_at_current_core(system_time);
             runtime_info = per_mem_instr_stats;
         } else {
@@ -1372,7 +1372,7 @@ void sharedSharedLCC::update_work_table() {
     for (workTable::iterator it_addr = m_work_table.begin(); it_addr != m_work_table.end(); ) {
 
         maddr_t start_maddr = it_addr->first;
-        shared_ptr<tableEntry>& entry = it_addr->second;
+        std::shared_ptr<tableEntry>& entry = it_addr->second;
 
 #if 0
         if (system_time > 600) {
@@ -1381,42 +1381,41 @@ void sharedSharedLCC::update_work_table() {
         }
 #endif
 
-        shared_ptr<memoryRequest>& core_req = entry->core_req;
-        shared_ptr<catRequest>& cat_req = entry->cat_req;
+        std::shared_ptr<memoryRequest>& core_req = entry->core_req;
+        std::shared_ptr<catRequest>& cat_req = entry->cat_req;
 
-        shared_ptr<cacheRequest>& l1_req = entry->l1_req;
-        shared_ptr<cacheRequest>& l2_req = entry->l2_req;
-        shared_ptr<coherenceMsg>& remote_req = entry->remote_req;
-        shared_ptr<coherenceMsg>& bypass_remote_req = entry->bypass_remote_req; 
-        shared_ptr<memoryRequest>& bypass_core_req = entry->bypass_core_req; 
-        shared_ptr<coherenceMsg>& remote_rep = entry->remote_rep; 
-        shared_ptr<coherenceMsg>& remote_checkin = entry->remote_checkin; 
-        shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
-        shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
+        std::shared_ptr<cacheRequest>& l1_req = entry->l1_req;
+        std::shared_ptr<cacheRequest>& l2_req = entry->l2_req;
+        std::shared_ptr<coherenceMsg>& remote_req = entry->remote_req;
+        std::shared_ptr<coherenceMsg>& bypass_remote_req = entry->bypass_remote_req; 
+        std::shared_ptr<memoryRequest>& bypass_core_req = entry->bypass_core_req; 
+        std::shared_ptr<coherenceMsg>& remote_rep = entry->remote_rep; 
+        std::shared_ptr<coherenceMsg>& remote_checkin = entry->remote_checkin; 
+        std::shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
+        std::shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
 
-        shared_ptr<cacheLine> l1_line = (l1_req)? l1_req->line_copy() : shared_ptr<cacheLine>();
-        shared_ptr<cacheLine> l2_line = (l2_req)? l2_req->line_copy() : shared_ptr<cacheLine>();
-        shared_ptr<cacheLine> l1_victim = (l1_req)? l1_req->line_to_evict_copy() : shared_ptr<cacheLine>();
-        shared_ptr<cacheLine> l2_victim = (l2_req)? l2_req->line_to_evict_copy() : shared_ptr<cacheLine>();
-        shared_ptr<coherenceInfo> l1_line_info = 
-            (l1_line)? static_pointer_cast<coherenceInfo>(l1_line->coherence_info) : shared_ptr<coherenceInfo>();
-        shared_ptr<coherenceInfo> l2_line_info = 
-            (l2_line)? static_pointer_cast<coherenceInfo>(l2_line->coherence_info) : shared_ptr<coherenceInfo>();
-        shared_ptr<coherenceInfo> l1_victim_info = 
-            (l1_victim)? static_pointer_cast<coherenceInfo>(l1_victim->coherence_info) : shared_ptr<coherenceInfo>();
+        std::shared_ptr<cacheLine> l1_line = (l1_req)? l1_req->line_copy() : std::shared_ptr<cacheLine>();
+        std::shared_ptr<cacheLine> l2_line = (l2_req)? l2_req->line_copy() : std::shared_ptr<cacheLine>();
+        std::shared_ptr<cacheLine> l1_victim = (l1_req)? l1_req->line_to_evict_copy() : std::shared_ptr<cacheLine>();
+        std::shared_ptr<cacheLine> l2_victim = (l2_req)? l2_req->line_to_evict_copy() : std::shared_ptr<cacheLine>();
+        std::shared_ptr<coherenceInfo> l1_line_info = 
+            (l1_line)? static_pointer_cast<coherenceInfo>(l1_line->coherence_info) : std::shared_ptr<coherenceInfo>();
+        std::shared_ptr<coherenceInfo> l2_line_info = 
+            (l2_line)? static_pointer_cast<coherenceInfo>(l2_line->coherence_info) : std::shared_ptr<coherenceInfo>();
+        std::shared_ptr<coherenceInfo> l1_victim_info = 
+            (l1_victim)? static_pointer_cast<coherenceInfo>(l1_victim->coherence_info) : std::shared_ptr<coherenceInfo>();
 
-        shared_ptr<sharedSharedLCCStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
+        std::shared_ptr<sharedSharedLCCStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
 
         if (entry->status == _CAT_AND_L1_FOR_LOCAL) {
 
             uint32_t home;
-            uint64_t expired_amount = 0;
 
             if (l1_req->status() == CACHE_REQ_HIT) {
 
                 home = l1_line_info->home;
 
-                cat_req = shared_ptr<catRequest>();
+                cat_req = std::shared_ptr<catRequest>();
 
                 shared_array<uint32_t> ret(new uint32_t[core_req->word_count()]);
                 uint32_t word_offset = (core_req->maddr().address / 4 ) % m_cfg.words_per_cache_line;
@@ -1476,7 +1475,7 @@ void sharedSharedLCC::update_work_table() {
             } else if (l1_req->status() == CACHE_REQ_MISS && l1_line) {
 
                 home = l1_line_info->home;
-                cat_req = shared_ptr<catRequest>();
+                cat_req = std::shared_ptr<catRequest>();
 
                 if (per_mem_instr_stats) {
                     if (stats_enabled()) {
@@ -1543,7 +1542,6 @@ void sharedSharedLCC::update_work_table() {
                         /* a read copy is expired */
                         mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a local L1 MISS as a read copy is expired "
                                   << "on address " << core_req->maddr() << endl;
-                        expired_amount = system_time - *(l1_line_info->timestamp);
                         mh_assert(system_time > *(l1_line_info->timestamp));
                         if (stats_enabled()) {
                             stats()->ts_expired_miss_for_read_instr_at_away_l1();
@@ -1614,10 +1612,10 @@ void sharedSharedLCC::update_work_table() {
                                       << core_req->maddr() << endl;
 
                             if (core_req->is_read()) {
-                                l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_READ,
+                                l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_READ,
                                                                                    m_cfg.words_per_cache_line));
                             } else {
-                                l2_req = shared_ptr<cacheRequest>(new cacheRequest(core_req->maddr(), CACHE_REQ_WRITE,
+                                l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(core_req->maddr(), CACHE_REQ_WRITE,
                                                                                    core_req->word_count(), core_req->data()));
                             }
                             l2_req->set_serialization_begin_time(system_time);
@@ -1625,7 +1623,7 @@ void sharedSharedLCC::update_work_table() {
                             l2_req->set_claim(false);
                             l2_req->set_evict(false);
                             l2_req->set_aux_info_for_coherence(
-                                shared_ptr<auxInfoForCoherence>(new auxInfoForCoherence(m_id, m_id, core_req->is_read(), m_cfg))
+                                std::shared_ptr<auxInfoForCoherence>(new auxInfoForCoherence(m_id, m_id, core_req->is_read(), m_cfg))
                             );
 
                             if (l2_req->use_read_ports()) {
@@ -1657,7 +1655,7 @@ void sharedSharedLCC::update_work_table() {
                             /* If not W-LCC, an away write always misses */
                             mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] gets a core miss for a write request "
                                       << "on address " << core_req->maddr() << endl;
-                            l1_req = shared_ptr<cacheRequest>();
+                            l1_req = std::shared_ptr<cacheRequest>();
                             if (stats_enabled()) {
                                 if (per_mem_instr_stats) {
                                     per_mem_instr_stats->commit_tentative_data(T_IDX_CAT);
@@ -1752,14 +1750,14 @@ void sharedSharedLCC::update_work_table() {
                 per_mem_instr_stats->core_missed();
             }
 
-            remote_req = shared_ptr<coherenceMsg>(new coherenceMsg);
+            remote_req = std::shared_ptr<coherenceMsg>(new coherenceMsg);
             remote_req->sender = m_id;
             remote_req->receiver = home;
             remote_req->type = (core_req->is_read())? REMOTE_READ_REQ : REMOTE_WRITE_REQ;
             remote_req->word_count = core_req->word_count();
             remote_req->maddr = core_req->maddr();
             remote_req->data = (core_req->is_read())? shared_array<uint32_t>() : core_req->data();
-            remote_req->coherence_info = shared_ptr<coherenceInfo>();
+            remote_req->coherence_info = std::shared_ptr<coherenceInfo>();
             remote_req->sent = false;
             remote_req->per_mem_instr_stats = per_mem_instr_stats;
             remote_req->birthtime = system_time;
@@ -1818,7 +1816,7 @@ void sharedSharedLCC::update_work_table() {
                     }
                 }
 
-                remote_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                remote_rep = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                 remote_rep->sender = m_id;
                 remote_rep->sent = false;
                 remote_rep->type = REMOTE_REP;
@@ -1905,10 +1903,10 @@ void sharedSharedLCC::update_work_table() {
                               << remote_req->maddr << endl;
 
                     if (remote_req->type == REMOTE_READ_REQ) {
-                        l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_READ,
+                        l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_READ,
                                                                            m_cfg.words_per_cache_line));
                     } else {
-                        l2_req = shared_ptr<cacheRequest>(new cacheRequest(remote_req->maddr, CACHE_REQ_WRITE,
+                        l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(remote_req->maddr, CACHE_REQ_WRITE,
                                                                            remote_req->word_count, remote_req->data));
                     }
                     l2_req->set_serialization_begin_time(system_time);
@@ -1916,7 +1914,7 @@ void sharedSharedLCC::update_work_table() {
                     l2_req->set_claim(false);
                     l2_req->set_evict(false);
                     l2_req->set_aux_info_for_coherence(
-                        shared_ptr<auxInfoForCoherence>(new auxInfoForCoherence(m_id, 
+                        std::shared_ptr<auxInfoForCoherence>(new auxInfoForCoherence(m_id, 
                                                                                 remote_req->sender, 
                                                                                 remote_req->type == REMOTE_READ_REQ, m_cfg))
                     );
@@ -1997,7 +1995,7 @@ void sharedSharedLCC::update_work_table() {
                 mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] gets an L2 HIT for a request on "
                           << l2_req->maddr() << endl;
 
-                l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+                l1_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                    m_cfg.words_per_cache_line,
                                                                    l2_line->data, l2_line_info));
                 l1_req->set_serialization_begin_time(system_time);
@@ -2041,11 +2039,11 @@ void sharedSharedLCC::update_work_table() {
                         }
                     }
 
-                    dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                    dramctrl_req = std::shared_ptr<dramctrlMsg>(new dramctrlMsg);
                     dramctrl_req->sender = m_id;
                     dramctrl_req->receiver = m_dramctrl_location;
                     dramctrl_req->maddr = start_maddr;
-                    dramctrl_req->dram_req = shared_ptr<dramRequest>(new dramRequest(start_maddr,
+                    dramctrl_req->dram_req = std::shared_ptr<dramRequest>(new dramRequest(start_maddr,
                                                                                      DRAM_REQ_READ,
                                                                                      m_cfg.words_per_cache_line));
                     dramctrl_req->sent = false;
@@ -2147,7 +2145,7 @@ void sharedSharedLCC::update_work_table() {
                       << "on address " << start_maddr << endl;
 
             mh_assert(m_handler_for_remote_checkin);
-            shared_ptr<auxInfoForCoherence> req_info(
+            std::shared_ptr<auxInfoForCoherence> req_info(
                 new auxInfoForCoherence(m_id, (core_req)? m_id : remote_req->sender,
                                         (core_req && core_req->is_read()) || (remote_req && remote_req->type==REMOTE_READ_REQ),
                                         m_cfg)
@@ -2155,7 +2153,7 @@ void sharedSharedLCC::update_work_table() {
             (*m_handler_for_remote_checkin)(remote_checkin->coherence_info, req_info, system_time);
 
             if (entry->substatus == _WAIT_CHECKIN__L1) {
-                l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+                l1_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                    (remote_checkin->data)? m_cfg.words_per_cache_line : 0,
                                                                    (remote_checkin->data)? remote_checkin->data:shared_array<uint32_t>(),
                                                                    remote_checkin->coherence_info));
@@ -2170,7 +2168,7 @@ void sharedSharedLCC::update_work_table() {
                 continue;
                 /* TRANSITION */
             } else {
-                l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+                l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                    (remote_checkin->data)? m_cfg.words_per_cache_line : 0,
                                                                    (remote_checkin->data)? remote_checkin->data:shared_array<uint32_t>(),
                                                                    remote_checkin->coherence_info));
@@ -2258,13 +2256,13 @@ void sharedSharedLCC::update_work_table() {
                     }
                     mh_log(4) << " (TIMESTAMP: " << *(remote_rep->coherence_info->timestamp) << " ) "  << endl;
                     mh_assert(m_handler_for_remote_rep);
-                    shared_ptr<auxInfoForCoherence> req_info(new auxInfoForCoherence(m_id, m_id, core_req->is_read(), m_cfg));
+                    std::shared_ptr<auxInfoForCoherence> req_info(new auxInfoForCoherence(m_id, m_id, core_req->is_read(), m_cfg));
                     (*m_handler_for_remote_rep)(remote_rep->coherence_info, req_info, system_time);
 
                     if (remote_rep->coherence_info->checked_out && *(remote_rep->coherence_info->timestamp) <= system_time) {
                         mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] cannot cache a checked-out line as expired on "
                                   << core_req->maddr() << endl;
-                        remote_checkin = shared_ptr<coherenceMsg>(new coherenceMsg);
+                        remote_checkin = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                         remote_checkin->sender = m_id;
                         remote_checkin->sent = false;
                         remote_checkin->type = REMOTE_CHECKIN;
@@ -2292,7 +2290,7 @@ void sharedSharedLCC::update_work_table() {
                         /* TRANSITION */
                     }
 
-                    l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+                    l1_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                        m_cfg.words_per_cache_line,
                                                                        remote_rep->data,
                                                                        remote_rep->coherence_info));
@@ -2344,7 +2342,7 @@ void sharedSharedLCC::update_work_table() {
 
                 if (stats_enabled()) {
                     if (bypass_core_req->per_mem_instr_runtime_info()) {
-                        shared_ptr<sharedSharedLCCStatsPerMemInstr> bypass_per_mem_instr_stats =
+                            std::shared_ptr<sharedSharedLCCStatsPerMemInstr> bypass_per_mem_instr_stats =
                             static_pointer_cast<sharedSharedLCCStatsPerMemInstr>(*bypass_core_req->per_mem_instr_runtime_info());
                         bypass_per_mem_instr_stats->add_bypass(system_time - entry->bypass_core_req_begin_time);
                         bypass_per_mem_instr_stats->add_local_bypass(system_time - entry->bypass_core_req_begin_time);
@@ -2353,7 +2351,7 @@ void sharedSharedLCC::update_work_table() {
                     stats()->bypass_for_read_instr(true/*local*/);
                     stats()->did_finish_read();
                 }
-                bypass_core_req = shared_ptr<memoryRequest>();
+                bypass_core_req = std::shared_ptr<memoryRequest>();
                 ++it_addr;
                 continue;
                 /* SPIN */
@@ -2363,7 +2361,7 @@ void sharedSharedLCC::update_work_table() {
                           << bypass_remote_req->maddr << " for core " << bypass_remote_req->sender << endl;
 
                 if (stats_enabled()) {
-                    shared_ptr<sharedSharedLCCStatsPerMemInstr> bypass_per_mem_instr_stats = bypass_remote_req->per_mem_instr_stats;
+                        std::shared_ptr<sharedSharedLCCStatsPerMemInstr> bypass_per_mem_instr_stats = bypass_remote_req->per_mem_instr_stats;
                     if (bypass_per_mem_instr_stats) {
                         bypass_per_mem_instr_stats->add_bypass(system_time - entry->bypass_remote_req_begin_time);
                         bypass_per_mem_instr_stats->add_remote_bypass(system_time - entry->bypass_core_req_begin_time);
@@ -2371,7 +2369,7 @@ void sharedSharedLCC::update_work_table() {
                     stats()->bypass_for_read_instr(false/*remote*/);
                 }
 
-                remote_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+                remote_rep = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                 remote_rep->sender = m_id;
                 remote_rep->sent = false;
                 remote_rep->type = REMOTE_REP;
@@ -2385,7 +2383,7 @@ void sharedSharedLCC::update_work_table() {
                 entry->status = _SEND_REMOTE_REP;
                 entry->substatus = (entry->substatus == _WAIT_TIMESTAMP__L1)? _SEND_REMOTE_REP__BYPASS_L1 : _SEND_REMOTE_REP__BYPASS_L2;
 
-                bypass_remote_req = shared_ptr<coherenceMsg>();
+                bypass_remote_req = std::shared_ptr<coherenceMsg>();
 
                 ++it_addr;
                 continue;
@@ -2433,7 +2431,7 @@ void sharedSharedLCC::update_work_table() {
 
             mh_assert((core_req && !core_req->is_read()) || (remote_req && remote_req->type==REMOTE_WRITE_REQ));
             mh_assert(m_handler_for_waited_for_timestamp);
-            shared_ptr<auxInfoForCoherence> req_info(new auxInfoForCoherence(m_id, 
+            std::shared_ptr<auxInfoForCoherence> req_info(new auxInfoForCoherence(m_id, 
                                                                              (core_req)? m_id : remote_req->sender, 
                                                                              false, m_cfg));
 
@@ -2449,7 +2447,7 @@ void sharedSharedLCC::update_work_table() {
                     entry->blocked_data[i + word_offset] = data[i];
                 }
 
-                l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+                l1_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                    m_cfg.words_per_cache_line,
                                                                    entry->blocked_data,
                                                                    entry->blocked_line_info 
@@ -2481,7 +2479,7 @@ void sharedSharedLCC::update_work_table() {
                     entry->blocked_data[i + word_offset] = data[i];
                 }
 
-                l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+                l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                    m_cfg.words_per_cache_line,
                                                                    entry->blocked_data,
                                                                    entry->blocked_line_info 
@@ -2610,7 +2608,7 @@ void sharedSharedLCC::update_work_table() {
                 if (l1_victim_info->checked_out && l1_victim_info->away) {
                     mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] evicted an away checked-out line on address "
                               << l1_victim->start_maddr << " ( home : " << l1_victim_info->home << " ) " << endl;
-                    remote_checkin = shared_ptr<coherenceMsg>(new coherenceMsg);
+                    remote_checkin = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                     remote_checkin->sender = m_id;
                     remote_checkin->sent = false;
                     remote_checkin->type = REMOTE_CHECKIN;
@@ -2631,7 +2629,7 @@ void sharedSharedLCC::update_work_table() {
                     entry->status = _SEND_CHECKIN;
                     entry->substatus = _SEND_CHECKIN__VICTIM;
 
-                    for (vector<tuple<shared_ptr<uint64_t>, maddr_t> >::iterator it = m_scheduled_checkin.begin();
+                    for (vector<std::tuple<std::shared_ptr<uint64_t>, maddr_t> >::iterator it = m_scheduled_checkin.begin();
                          it != m_scheduled_checkin.end(); ++it)
                     {
                         if (l1_victim->start_maddr == get<1>(*it)) {
@@ -2659,8 +2657,8 @@ void sharedSharedLCC::update_work_table() {
                     //shared_ptr<coherenceInfo> c_info = 
                     //    (l1_victim->coherence_info_dirty)? l1_victim_info : shared_ptr<coherenceInfo>();
                     shared_array<uint32_t> data = l1_victim->data;
-                    shared_ptr<coherenceInfo> c_info = l1_victim_info;
-                    l2_req = shared_ptr<cacheRequest>(new cacheRequest(l1_victim->start_maddr,
+                    std::shared_ptr<coherenceInfo> c_info = l1_victim_info;
+                    l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(l1_victim->start_maddr,
                                                                        CACHE_REQ_UPDATE,
                                                                        word_count, data, c_info));
                     l2_req->set_serialization_begin_time(system_time);
@@ -2744,7 +2742,7 @@ void sharedSharedLCC::update_work_table() {
 
             /* ready to make l1 fill request first */
 
-            l1_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+            l1_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                m_cfg.words_per_cache_line,
                                                                l2_line->data,
                                                                l2_line_info));
@@ -2765,11 +2763,11 @@ void sharedSharedLCC::update_work_table() {
                         stats()->writeback_at_l2();
                     }
 
-                    dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                    dramctrl_req = std::shared_ptr<dramctrlMsg>(new dramctrlMsg);
                     dramctrl_req->sender = m_id;
                     dramctrl_req->receiver = m_dramctrl_location;
                     dramctrl_req->maddr = l2_victim->start_maddr;
-                    dramctrl_req->dram_req = shared_ptr<dramRequest>(new dramRequest(l2_victim->start_maddr,
+                    dramctrl_req->dram_req = std::shared_ptr<dramRequest>(new dramRequest(l2_victim->start_maddr,
                                                                                      DRAM_REQ_WRITE,
                                                                                      m_cfg.words_per_cache_line,
                                                                                      l2_victim->data));
@@ -2847,7 +2845,7 @@ void sharedSharedLCC::update_work_table() {
                           << endl;
             }
 
-            l2_req = shared_ptr<cacheRequest>(new cacheRequest(remote_checkin->maddr, /* always be a start_maddr */
+            l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(remote_checkin->maddr, /* always be a start_maddr */
                                                                CACHE_REQ_UPDATE,
                                                                (remote_checkin->data)?m_cfg.words_per_cache_line:0,
                                                                (remote_checkin->data)?remote_checkin->data:shared_array<uint32_t>(),
@@ -2953,11 +2951,11 @@ void sharedSharedLCC::update_work_table() {
                     if (l2_victim->data_dirty) {
                         mh_log(4) << "[L2 " << m_id << " @ " << system_time << " ] writeback evicted a dirty L2 line of "
                                   << l2_victim->start_maddr << endl;
-                        dramctrl_req = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                        dramctrl_req = std::shared_ptr<dramctrlMsg>(new dramctrlMsg);
                         dramctrl_req->sender = m_id;
                         dramctrl_req->receiver = m_dramctrl_location;
                         dramctrl_req->maddr = l2_victim->start_maddr;
-                        dramctrl_req->dram_req = shared_ptr<dramRequest>(new dramRequest(l2_victim->start_maddr,
+                        dramctrl_req->dram_req = std::shared_ptr<dramRequest>(new dramRequest(l2_victim->start_maddr,
                                                                                          DRAM_REQ_WRITE,
                                                                                          m_cfg.words_per_cache_line,
                                                                                          l2_victim->data));
@@ -3059,7 +3057,7 @@ void sharedSharedLCC::update_work_table() {
                     mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] a checked-out line invalidated on address "
                               << l1_line->start_maddr << endl;
                     mh_log(4) << "[L1 " << m_id << " @ " << system_time << " ] sending a checkin to " << l1_line_info->home << endl;
-                    remote_checkin = shared_ptr<coherenceMsg>(new coherenceMsg);
+                    remote_checkin = std::shared_ptr<coherenceMsg>(new coherenceMsg);
                     remote_checkin->sender = m_id;
                     remote_checkin->sent = false;
                     remote_checkin->type = REMOTE_CHECKIN;
@@ -3182,7 +3180,7 @@ void sharedSharedLCC::update_work_table() {
                 per_mem_instr_stats->add_dramctrl_rep_nas(system_time - dramctrl_rep->birthtime);
             }
 
-            shared_ptr<coherenceInfo> new_coherence_info(new coherenceInfo);
+            std::shared_ptr<coherenceInfo> new_coherence_info(new coherenceInfo);
             mh_assert(m_handler_for_dramctrl_rep);
             bool for_read = (core_req && core_req->is_read()) || (remote_req && remote_req->type==REMOTE_READ_REQ);
             uint32_t requester = (core_req)? m_id : remote_req->sender;
@@ -3195,7 +3193,7 @@ void sharedSharedLCC::update_work_table() {
                 mh_log(4) << " write ) " << endl;
             }
 
-            shared_ptr<auxInfoForCoherence> req_info(
+            std::shared_ptr<auxInfoForCoherence> req_info(
                 new auxInfoForCoherence(m_id, (core_req)? m_id : remote_req->sender, for_read, m_cfg));
             (*m_handler_for_dramctrl_rep)(new_coherence_info, req_info, system_time);
 
@@ -3206,7 +3204,7 @@ void sharedSharedLCC::update_work_table() {
                 }
             }
 
-            l2_req = shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
+            l2_req = std::shared_ptr<cacheRequest>(new cacheRequest(start_maddr, CACHE_REQ_UPDATE,
                                                                m_cfg.words_per_cache_line, 
                                                                dramctrl_rep->dram_req->read(),
                                                                new_coherence_info));
@@ -3267,7 +3265,7 @@ void sharedSharedLCC::update_work_table() {
             /* FINISH */
         } else {
             mh_assert(remote_req);
-            remote_rep = shared_ptr<coherenceMsg>(new coherenceMsg);
+            remote_rep = std::shared_ptr<coherenceMsg>(new coherenceMsg);
             remote_rep->sender = m_id;
             remote_rep->sent = false;
             remote_rep->type = REMOTE_REP;
@@ -3300,10 +3298,10 @@ void sharedSharedLCC::update_work_table() {
 void sharedSharedLCC::update_dramctrl_work_table() {
 
     for (dramctrlTable::iterator it_addr = m_dramctrl_work_table.begin(); it_addr != m_dramctrl_work_table.end(); ) {
-        shared_ptr<dramctrlTableEntry>& entry = it_addr->second;
-        shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
-        shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
-        shared_ptr<sharedSharedLCCStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
+            std::shared_ptr<dramctrlTableEntry>& entry = it_addr->second;
+            std::shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
+            std::shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
+            std::shared_ptr<sharedSharedLCCStatsPerMemInstr>& per_mem_instr_stats = entry->per_mem_instr_stats;
 
         /* only reads are in the table */
         if (dramctrl_req->dram_req->status() == DRAM_REQ_DONE) {
@@ -3312,7 +3310,7 @@ void sharedSharedLCC::update_dramctrl_work_table() {
                 if (stats_enabled() && per_mem_instr_stats) {
                     per_mem_instr_stats->add_dram_ops(system_time - entry->operation_begin_time);
                 }
-                dramctrl_rep = shared_ptr<dramctrlMsg>(new dramctrlMsg);
+                dramctrl_rep = std::shared_ptr<dramctrlMsg>(new dramctrlMsg);
                 dramctrl_rep->sender = m_id;
                 dramctrl_rep->maddr = dramctrl_req->maddr;
                 dramctrl_rep->dram_req = dramctrl_req->dram_req;
@@ -3341,21 +3339,21 @@ void sharedSharedLCC::update_dramctrl_work_table() {
 void sharedSharedLCC::accept_incoming_messages() {
 
     if (m_core_receive_queues[MSG_REMOTE_REQ]->size()) {
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_REMOTE_REQ]->front();
-        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+            std::shared_ptr<message_t> msg = m_core_receive_queues[MSG_REMOTE_REQ]->front();
+            std::shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
         m_new_work_table_entry_schedule_q.push_back(make_tuple(FROM_CHANNEL_REMOTE_REQ, data_msg));
     }
 
     if (m_core_receive_queues[MSG_REMOTE_WRITE_REQ]->size()) {
         /* only when using a separate VCset for write requests */
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_REMOTE_WRITE_REQ]->front();
-        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+            std::shared_ptr<message_t> msg = m_core_receive_queues[MSG_REMOTE_WRITE_REQ]->front();
+            std::shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
         m_new_work_table_entry_schedule_q.push_back(make_tuple(FROM_CHANNEL_REMOTE_WRITE_REQ, data_msg));
     }
 
     if (m_core_receive_queues[MSG_REMOTE_REP]->size()) {
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_REMOTE_REP]->front();
-        shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
+            std::shared_ptr<message_t> msg = m_core_receive_queues[MSG_REMOTE_REP]->front();
+            std::shared_ptr<coherenceMsg> data_msg = static_pointer_cast<coherenceMsg>(msg->content);
         maddr_t msg_start_maddr = get_start_maddr_in_line(data_msg->maddr);
         if (data_msg->type == REMOTE_REP) {
             mh_assert(m_work_table.count(msg_start_maddr) && 
@@ -3378,15 +3376,15 @@ void sharedSharedLCC::accept_incoming_messages() {
     }
 
     if (m_core_receive_queues[MSG_DRAMCTRL_REQ]->size()) {
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAMCTRL_REQ]->front();
-        shared_ptr<dramctrlMsg> dram_msg = static_pointer_cast<dramctrlMsg>(msg->content);
+            std::shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAMCTRL_REQ]->front();
+            std::shared_ptr<dramctrlMsg> dram_msg = static_pointer_cast<dramctrlMsg>(msg->content);
         m_dramctrl_req_schedule_q.push_back(make_tuple(true, dram_msg));
     }
 
     if (m_core_receive_queues[MSG_DRAMCTRL_REP]->size()) {
         /* note: no replies for DRAM writes */
-        shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAMCTRL_REP]->front();
-        shared_ptr<dramctrlMsg> dramctrl_msg = static_pointer_cast<dramctrlMsg>(msg->content);
+            std::shared_ptr<message_t> msg = m_core_receive_queues[MSG_DRAMCTRL_REP]->front();
+            std::shared_ptr<dramctrlMsg> dramctrl_msg = static_pointer_cast<dramctrlMsg>(msg->content);
         maddr_t start_maddr = dramctrl_msg->dram_req->maddr(); /* always access by a cache line */
         mh_assert(m_work_table.count(start_maddr) > 0 &&
                   m_work_table[dramctrl_msg->maddr]->status == _WAIT_DRAMCTRL_REP);
@@ -3404,7 +3402,7 @@ void sharedSharedLCC::schedule_requests() {
     /* scheduling for sending checkin */
     /**********************************/
     /* checkins have highest priority in work table arbitration */
-    for (vector<tuple<shared_ptr<uint64_t>, maddr_t> >::iterator it = m_scheduled_checkin.begin(); it != m_scheduled_checkin.end();) {
+    for (vector<std::tuple<std::shared_ptr<uint64_t>, maddr_t> >::iterator it = m_scheduled_checkin.begin(); it != m_scheduled_checkin.end();) {
         uint64_t scheduled_time = *(get<0>(*it));
         maddr_t start_maddr = get<1>(*it);
         if (system_time < scheduled_time) {
@@ -3418,25 +3416,25 @@ void sharedSharedLCC::schedule_requests() {
         }
         bool use_exclusive = m_work_table_vacancy_send_checkin_exclusive > 0;
 
-        shared_ptr<cacheRequest> l1_req (new cacheRequest(start_maddr, CACHE_REQ_INVALIDATE, m_cfg.words_per_cache_line));
+        std::shared_ptr<cacheRequest> l1_req (new cacheRequest(start_maddr, CACHE_REQ_INVALIDATE, m_cfg.words_per_cache_line));
         l1_req->set_serialization_begin_time(UINT64_MAX);
         l1_req->set_unset_dirty_on_write(false);
         l1_req->set_claim(false);
         l1_req->set_evict(false);
 
-        shared_ptr<tableEntry> new_entry(new tableEntry);
-        new_entry->core_req = shared_ptr<memoryRequest>();
-        new_entry->cat_req = shared_ptr<catRequest>();
+        std::shared_ptr<tableEntry> new_entry(new tableEntry);
+        new_entry->core_req = std::shared_ptr<memoryRequest>();
+        new_entry->cat_req = std::shared_ptr<catRequest>();
         new_entry->l1_req = l1_req; /* valid */
-        new_entry->l2_req = shared_ptr<cacheRequest>();
-        new_entry->remote_req = shared_ptr<coherenceMsg>();
-        new_entry->remote_rep = shared_ptr<coherenceMsg>();
-        new_entry->bypass_remote_req = shared_ptr<coherenceMsg>();
-        new_entry->bypass_core_req = shared_ptr<memoryRequest>();
-        new_entry->remote_checkin = shared_ptr<coherenceMsg>();
-        new_entry->dramctrl_req = shared_ptr<dramctrlMsg>();
-        new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
-        new_entry->per_mem_instr_stats = shared_ptr<sharedSharedLCCStatsPerMemInstr>();
+        new_entry->l2_req = std::shared_ptr<cacheRequest>();
+        new_entry->remote_req = std::shared_ptr<coherenceMsg>();
+        new_entry->remote_rep = std::shared_ptr<coherenceMsg>();
+        new_entry->bypass_remote_req = std::shared_ptr<coherenceMsg>();
+        new_entry->bypass_core_req = std::shared_ptr<memoryRequest>();
+        new_entry->remote_checkin = std::shared_ptr<coherenceMsg>();
+        new_entry->dramctrl_req = std::shared_ptr<dramctrlMsg>();
+        new_entry->dramctrl_rep = std::shared_ptr<dramctrlMsg>();
+        new_entry->per_mem_instr_stats = std::shared_ptr<sharedSharedLCCStatsPerMemInstr>();
 
         new_entry->can_bypass_read_req = false;
 
@@ -3474,7 +3472,7 @@ void sharedSharedLCC::schedule_requests() {
     random_shuffle(m_core_port_schedule_q.begin(), m_core_port_schedule_q.end(), rr_fn);
     uint32_t requested = 0;
     while (m_core_port_schedule_q.size()) {
-        shared_ptr<memoryRequest> req = m_core_port_schedule_q.front();
+            std::shared_ptr<memoryRequest> req = m_core_port_schedule_q.front();
         if (requested < m_available_core_ports) {
             m_new_work_table_entry_schedule_q.push_back(make_tuple(FROM_LOCAL_CORE, req));
             ++requested;
@@ -3487,11 +3485,11 @@ void sharedSharedLCC::schedule_requests() {
     /* schedule for work table space */
     random_shuffle(m_new_work_table_entry_schedule_q.begin(), m_new_work_table_entry_schedule_q.end(), rr_fn);
     while (m_new_work_table_entry_schedule_q.size()) {
-        work_table_entry_src_t req_from = m_new_work_table_entry_schedule_q.front().get<0>();
+        work_table_entry_src_t req_from = get<0>(m_new_work_table_entry_schedule_q.front());
         if (req_from == FROM_CHANNEL_REMOTE_REQ || req_from == FROM_CHANNEL_REMOTE_WRITE_REQ) {
-            shared_ptr<coherenceMsg> remote_req = static_pointer_cast<coherenceMsg>(m_new_work_table_entry_schedule_q.front().get<1>());
+                std::shared_ptr<coherenceMsg> remote_req = static_pointer_cast<coherenceMsg>(get<1>(m_new_work_table_entry_schedule_q.front()));
             maddr_t start_maddr = get_start_maddr_in_line(remote_req->maddr);
-            shared_ptr<sharedSharedLCCStatsPerMemInstr> per_mem_instr_stats = remote_req->per_mem_instr_stats;
+            std::shared_ptr<sharedSharedLCCStatsPerMemInstr> per_mem_instr_stats = remote_req->per_mem_instr_stats;
 
             bool is_read = (remote_req->type == REMOTE_READ_REQ);
             bool has_space = ( m_work_table_vacancy_shared > 0) || (is_read && m_work_table_vacancy_read_exclusive);
@@ -3516,7 +3514,7 @@ void sharedSharedLCC::schedule_requests() {
                 continue;
             } 
 
-            shared_ptr<cacheRequest> l1_req (new cacheRequest(remote_req->maddr,
+            std::shared_ptr<cacheRequest> l1_req (new cacheRequest(remote_req->maddr,
                                                               (is_read)? CACHE_REQ_READ : CACHE_REQ_WRITE,
                                                               remote_req->word_count,
                                                               (is_read)? shared_array<uint32_t>() : remote_req->data));
@@ -3525,21 +3523,21 @@ void sharedSharedLCC::schedule_requests() {
             l1_req->set_claim(false);
             l1_req->set_evict(false);
             l1_req->set_aux_info_for_coherence(
-                shared_ptr<auxInfoForCoherence>(new auxInfoForCoherence(m_id, remote_req->sender, is_read, m_cfg))
+                std::shared_ptr<auxInfoForCoherence>(new auxInfoForCoherence(m_id, remote_req->sender, is_read, m_cfg))
             );
 
-            shared_ptr<tableEntry> new_entry(new tableEntry);
-            new_entry->core_req = shared_ptr<memoryRequest>();
-            new_entry->cat_req = shared_ptr<catRequest>();
+            std::shared_ptr<tableEntry> new_entry(new tableEntry);
+            new_entry->core_req = std::shared_ptr<memoryRequest>();
+            new_entry->cat_req = std::shared_ptr<catRequest>();
             new_entry->l1_req = l1_req; /* valid */
-            new_entry->l2_req = shared_ptr<cacheRequest>();
+            new_entry->l2_req = std::shared_ptr<cacheRequest>();
             new_entry->remote_req = remote_req; /* valid */
-            new_entry->remote_rep = shared_ptr<coherenceMsg>();
-            new_entry->bypass_remote_req = shared_ptr<coherenceMsg>();
-            new_entry->bypass_core_req = shared_ptr<memoryRequest>();
-            new_entry->remote_checkin = shared_ptr<coherenceMsg>();
-            new_entry->dramctrl_req = shared_ptr<dramctrlMsg>();
-            new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
+            new_entry->remote_rep = std::shared_ptr<coherenceMsg>();
+            new_entry->bypass_remote_req = std::shared_ptr<coherenceMsg>();
+            new_entry->bypass_core_req = std::shared_ptr<memoryRequest>();
+            new_entry->remote_checkin = std::shared_ptr<coherenceMsg>();
+            new_entry->dramctrl_req = std::shared_ptr<dramctrlMsg>();
+            new_entry->dramctrl_rep = std::shared_ptr<dramctrlMsg>();
             new_entry->per_mem_instr_stats = per_mem_instr_stats; /* valid */
 
             new_entry->can_bypass_read_req = false;
@@ -3589,8 +3587,8 @@ void sharedSharedLCC::schedule_requests() {
 
         } else if (req_from == FROM_CHANNEL_REMOTE_REP) {
             /* a checkin */
-            shared_ptr<coherenceMsg> remote_checkin = 
-                static_pointer_cast<coherenceMsg>(m_new_work_table_entry_schedule_q.front().get<1>());
+                std::shared_ptr<coherenceMsg> remote_checkin = 
+                static_pointer_cast<coherenceMsg>(get<1>(m_new_work_table_entry_schedule_q.front()));
             maddr_t start_maddr = get_start_maddr_in_line(remote_checkin->maddr);
 
             bool no_space = (m_work_table_vacancy_shared == 0) && (m_work_table_vacancy_receive_checkin_exclusive == 0);
@@ -3614,10 +3612,10 @@ void sharedSharedLCC::schedule_requests() {
             } else {
 
                 mh_assert(m_handler_for_remote_checkin);
-                (*m_handler_for_remote_checkin)(remote_checkin->coherence_info, shared_ptr<auxInfoForCoherence>(), system_time);
+                (*m_handler_for_remote_checkin)(remote_checkin->coherence_info, std::shared_ptr<auxInfoForCoherence>(), system_time);
                 /* null ptr indicates there is no waiting request for this remote checkin */
 
-                shared_ptr<cacheRequest> l1_req (new cacheRequest(remote_checkin->maddr, /* always be a start_maddr */
+                std::shared_ptr<cacheRequest> l1_req (new cacheRequest(remote_checkin->maddr, /* always be a start_maddr */
                                                                   CACHE_REQ_UPDATE,
                                                                   (remote_checkin->data)?m_cfg.words_per_cache_line : 0,
                                                                   (remote_checkin->data)?remote_checkin->data:shared_array<uint32_t>(),
@@ -3628,20 +3626,20 @@ void sharedSharedLCC::schedule_requests() {
                 l1_req->set_claim(false);
                 l1_req->set_evict(false);
 
-                shared_ptr<tableEntry> new_entry(new tableEntry);
-                new_entry->core_req = shared_ptr<memoryRequest>();
-                new_entry->cat_req = shared_ptr<catRequest>();
+                std::shared_ptr<tableEntry> new_entry(new tableEntry);
+                new_entry->core_req = std::shared_ptr<memoryRequest>();
+                new_entry->cat_req = std::shared_ptr<catRequest>();
                 new_entry->l1_req = l1_req; /* valid */
-                new_entry->l2_req = shared_ptr<cacheRequest>();
-                new_entry->remote_req = shared_ptr<coherenceMsg>(); 
-                new_entry->remote_req = shared_ptr<coherenceMsg>();
-                new_entry->bypass_remote_req = shared_ptr<coherenceMsg>();
-                new_entry->bypass_core_req = shared_ptr<memoryRequest>();
-                new_entry->remote_rep = shared_ptr<coherenceMsg>();
+                new_entry->l2_req = std::shared_ptr<cacheRequest>();
+                new_entry->remote_req = std::shared_ptr<coherenceMsg>(); 
+                new_entry->remote_req = std::shared_ptr<coherenceMsg>();
+                new_entry->bypass_remote_req = std::shared_ptr<coherenceMsg>();
+                new_entry->bypass_core_req = std::shared_ptr<memoryRequest>();
+                new_entry->remote_rep = std::shared_ptr<coherenceMsg>();
                 new_entry->remote_checkin = remote_checkin; /* valid */
-                new_entry->dramctrl_req = shared_ptr<dramctrlMsg>();
-                new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
-                new_entry->per_mem_instr_stats = shared_ptr<sharedSharedLCCStatsPerMemInstr>();
+                new_entry->dramctrl_req = std::shared_ptr<dramctrlMsg>();
+                new_entry->dramctrl_rep = std::shared_ptr<dramctrlMsg>();
+                new_entry->per_mem_instr_stats = std::shared_ptr<sharedSharedLCCStatsPerMemInstr>();
 
                 new_entry->can_bypass_read_req = false;
 
@@ -3677,13 +3675,13 @@ void sharedSharedLCC::schedule_requests() {
             }
 
         } else {
-            shared_ptr<memoryRequest> core_req = static_pointer_cast<memoryRequest>(m_new_work_table_entry_schedule_q.front().get<1>());
+                std::shared_ptr<memoryRequest> core_req = static_pointer_cast<memoryRequest>(get<1>(m_new_work_table_entry_schedule_q.front()));
             maddr_t start_maddr = get_start_maddr_in_line(core_req->maddr());
-            shared_ptr<sharedSharedLCCStatsPerMemInstr> per_mem_instr_stats = 
+            std::shared_ptr<sharedSharedLCCStatsPerMemInstr> per_mem_instr_stats = 
                 (core_req->per_mem_instr_runtime_info())? 
                     static_pointer_cast<sharedSharedLCCStatsPerMemInstr>(*(core_req->per_mem_instr_runtime_info()))
                 :
-                    shared_ptr<sharedSharedLCCStatsPerMemInstr>();
+                    std::shared_ptr<sharedSharedLCCStatsPerMemInstr>();
 
             bool has_space = (m_work_table_vacancy_shared > 0) || (core_req->is_read() && m_work_table_vacancy_read_exclusive > 0);
             bool use_exclusive = core_req->is_read() && m_work_table_vacancy_read_exclusive > 0;
@@ -3720,10 +3718,10 @@ void sharedSharedLCC::schedule_requests() {
                 }
             }
 
-            shared_ptr<catRequest> cat_req(new catRequest(core_req->maddr(), m_id));
+            std::shared_ptr<catRequest> cat_req(new catRequest(core_req->maddr(), m_id));
             cat_req->set_serialization_begin_time(system_time);
 
-            shared_ptr<cacheRequest> l1_req(new cacheRequest(core_req->maddr(),
+            std::shared_ptr<cacheRequest> l1_req(new cacheRequest(core_req->maddr(),
                                                              core_req->is_read()? CACHE_REQ_READ : CACHE_REQ_WRITE,
                                                              core_req->word_count(),
                                                              core_req->is_read()? shared_array<uint32_t>() : core_req->data()));
@@ -3732,21 +3730,21 @@ void sharedSharedLCC::schedule_requests() {
             l1_req->set_claim(false);
             l1_req->set_evict(false);
             l1_req->set_aux_info_for_coherence(
-                shared_ptr<auxInfoForCoherence>(new auxInfoForCoherence(m_id, m_id, core_req->is_read(), m_cfg))
+                std::shared_ptr<auxInfoForCoherence>(new auxInfoForCoherence(m_id, m_id, core_req->is_read(), m_cfg))
             );
 
-            shared_ptr<tableEntry> new_entry(new tableEntry);
+            std::shared_ptr<tableEntry> new_entry(new tableEntry);
             new_entry->core_req = core_req; /* valid */
             new_entry->cat_req = cat_req; /* valid */
             new_entry->l1_req = l1_req; /* valid */
-            new_entry->l2_req = shared_ptr<cacheRequest>();
-            new_entry->remote_req = shared_ptr<coherenceMsg>();
-            new_entry->remote_rep = shared_ptr<coherenceMsg>();
-            new_entry->bypass_remote_req = shared_ptr<coherenceMsg>();
-            new_entry->bypass_core_req = shared_ptr<memoryRequest>();
-            new_entry->remote_checkin = shared_ptr<coherenceMsg>();
-            new_entry->dramctrl_req = shared_ptr<dramctrlMsg>();
-            new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
+            new_entry->l2_req = std::shared_ptr<cacheRequest>();
+            new_entry->remote_req = std::shared_ptr<coherenceMsg>();
+            new_entry->remote_rep = std::shared_ptr<coherenceMsg>();
+            new_entry->bypass_remote_req = std::shared_ptr<coherenceMsg>();
+            new_entry->bypass_core_req = std::shared_ptr<memoryRequest>();
+            new_entry->remote_checkin = std::shared_ptr<coherenceMsg>();
+            new_entry->dramctrl_req = std::shared_ptr<dramctrlMsg>();
+            new_entry->dramctrl_rep = std::shared_ptr<dramctrlMsg>();
             new_entry->per_mem_instr_stats = per_mem_instr_stats; /* valid */
 
             new_entry->can_bypass_read_req = false;
@@ -3787,13 +3785,13 @@ void sharedSharedLCC::schedule_requests() {
     
     random_shuffle(m_dramctrl_req_schedule_q.begin(), m_dramctrl_req_schedule_q.end(), rr_fn);
     while (m_dramctrl_req_schedule_q.size()) {
-        bool is_remote = m_dramctrl_req_schedule_q.front().get<0>();
-        shared_ptr<tableEntry> entry = shared_ptr<tableEntry>();
-        shared_ptr<dramctrlMsg> dramctrl_msg = shared_ptr<dramctrlMsg>();
+        bool is_remote = get<0>(m_dramctrl_req_schedule_q.front());
+        std::shared_ptr<tableEntry> entry = std::shared_ptr<tableEntry>();
+        std::shared_ptr<dramctrlMsg> dramctrl_msg = std::shared_ptr<dramctrlMsg>();
         if (is_remote) {
-            dramctrl_msg = static_pointer_cast<dramctrlMsg>(m_dramctrl_req_schedule_q.front().get<1>());
+            dramctrl_msg = static_pointer_cast<dramctrlMsg>(get<1>(m_dramctrl_req_schedule_q.front()));
         } else {
-            entry = static_pointer_cast<tableEntry>(m_dramctrl_req_schedule_q.front().get<1>());
+            entry = static_pointer_cast<tableEntry>(get<1>(m_dramctrl_req_schedule_q.front()));
             dramctrl_msg = entry->dramctrl_req;
             if (m_dramctrl_writeback_status.count(entry->dramctrl_req->maddr) && 
                 m_dramctrl_writeback_status[entry->dramctrl_req->maddr] != entry) 
@@ -3813,9 +3811,9 @@ void sharedSharedLCC::schedule_requests() {
                     continue;
                 }
                 if (dramctrl_msg->dram_req->is_read()) {
-                    shared_ptr<dramctrlTableEntry> new_entry(new dramctrlTableEntry);
+                        std::shared_ptr<dramctrlTableEntry> new_entry(new dramctrlTableEntry);
                     new_entry->dramctrl_req = dramctrl_msg;
-                    new_entry->dramctrl_rep = shared_ptr<dramctrlMsg>();
+                    new_entry->dramctrl_rep = std::shared_ptr<dramctrlMsg>();
                     new_entry->per_mem_instr_stats = dramctrl_msg->per_mem_instr_stats;
                     new_entry->operation_begin_time= system_time;
 
@@ -3852,7 +3850,7 @@ void sharedSharedLCC::schedule_requests() {
         } else {
             if (m_core_send_queues[MSG_DRAMCTRL_REQ]->available()) {
 
-                shared_ptr<message_t> msg(new message_t);
+                    std::shared_ptr<message_t> msg(new message_t);
                 msg->src = m_id;
                 msg->dst = m_dramctrl_location;
                 msg->type = MSG_DRAMCTRL_REQ;
@@ -3881,8 +3879,8 @@ void sharedSharedLCC::schedule_requests() {
 
     random_shuffle(m_cat_req_schedule_q.begin(), m_cat_req_schedule_q.end(), rr_fn);
     while (m_cat->available() && m_cat_req_schedule_q.size()) {
-        shared_ptr<tableEntry> entry = m_cat_req_schedule_q.front();
-        shared_ptr<catRequest> cat_req = entry->cat_req;
+            std::shared_ptr<tableEntry> entry = m_cat_req_schedule_q.front();
+            std::shared_ptr<catRequest> cat_req = entry->cat_req;
 
         if (cat_req->serialization_begin_time() == UINT64_MAX) {
             cat_req->set_operation_begin_time(UINT64_MAX);
@@ -3909,8 +3907,8 @@ void sharedSharedLCC::schedule_requests() {
 
     random_shuffle(m_l1_read_req_schedule_q.begin(), m_l1_read_req_schedule_q.end(), rr_fn);
     while (m_l1->read_port_available() && m_l1_read_req_schedule_q.size()) {
-        shared_ptr<tableEntry>& entry = m_l1_read_req_schedule_q.front();
-        shared_ptr<cacheRequest>& l1_req = entry->l1_req;
+            std::shared_ptr<tableEntry>& entry = m_l1_read_req_schedule_q.front();
+            std::shared_ptr<cacheRequest>& l1_req = entry->l1_req;
 
         if (l1_req->serialization_begin_time() == UINT64_MAX) {
             l1_req->set_operation_begin_time(UINT64_MAX);
@@ -3935,8 +3933,8 @@ void sharedSharedLCC::schedule_requests() {
 
     random_shuffle(m_l1_write_req_schedule_q.begin(), m_l1_write_req_schedule_q.end(), rr_fn);
     while (m_l1->write_port_available() && m_l1_write_req_schedule_q.size()) {
-        shared_ptr<tableEntry>& entry = m_l1_write_req_schedule_q.front();
-        shared_ptr<cacheRequest>& l1_req = entry->l1_req;
+            std::shared_ptr<tableEntry>& entry = m_l1_write_req_schedule_q.front();
+            std::shared_ptr<cacheRequest>& l1_req = entry->l1_req;
 
         if (l1_req->serialization_begin_time() == UINT64_MAX) {
             l1_req->set_operation_begin_time(UINT64_MAX);
@@ -3965,8 +3963,8 @@ void sharedSharedLCC::schedule_requests() {
 
     random_shuffle(m_l2_read_req_schedule_q.begin(), m_l2_read_req_schedule_q.end(), rr_fn);
     while (m_l2->read_port_available() && m_l2_read_req_schedule_q.size()) {
-        shared_ptr<tableEntry>& entry = m_l2_read_req_schedule_q.front();
-        shared_ptr<cacheRequest>& l2_req = entry->l2_req;
+            std::shared_ptr<tableEntry>& entry = m_l2_read_req_schedule_q.front();
+            std::shared_ptr<cacheRequest>& l2_req = entry->l2_req;
 
         if (m_l2_writeback_status.count(get_start_maddr_in_line(l2_req->maddr())) > 0) {
             m_l2_read_req_schedule_q.erase(m_l2_read_req_schedule_q.begin());
@@ -3996,8 +3994,8 @@ void sharedSharedLCC::schedule_requests() {
 
     random_shuffle(m_l2_write_req_schedule_q.begin(), m_l2_write_req_schedule_q.end(), rr_fn);
     while (m_l2->write_port_available() && m_l2_write_req_schedule_q.size()) {
-        shared_ptr<tableEntry>& entry = m_l2_write_req_schedule_q.front();
-        shared_ptr<cacheRequest>& l2_req = entry->l2_req;
+            std::shared_ptr<tableEntry>& entry = m_l2_write_req_schedule_q.front();
+            std::shared_ptr<cacheRequest>& l2_req = entry->l2_req;
 
         if (m_l2_writeback_status.count(get_start_maddr_in_line(l2_req->maddr())) > 0 &&
             m_l2_writeback_status[get_start_maddr_in_line(l2_req->maddr())] != entry)
@@ -4034,15 +4032,15 @@ void sharedSharedLCC::schedule_requests() {
 
     random_shuffle(m_remote_req_schedule_q.begin(), m_remote_req_schedule_q.end(), rr_fn);
     while (m_remote_req_schedule_q.size()) {
-        shared_ptr<tableEntry>& entry = m_remote_req_schedule_q.front();
-        shared_ptr<coherenceMsg>& remote_req = entry->remote_req;
+            std::shared_ptr<tableEntry>& entry = m_remote_req_schedule_q.front();
+            std::shared_ptr<coherenceMsg>& remote_req = entry->remote_req;
 
         sharedSharedLCCMsgType_t msg_type 
             = (m_cfg.use_separate_vc_for_writes && remote_req->type == REMOTE_WRITE_REQ) ? MSG_REMOTE_WRITE_REQ : MSG_REMOTE_REQ;
 
         if (m_core_send_queues[msg_type]->available()) {
 
-            shared_ptr<message_t> msg(new message_t);
+                std::shared_ptr<message_t> msg(new message_t);
             msg->src = m_id;
             msg->dst = remote_req->receiver;
             msg->type = msg_type;
@@ -4074,12 +4072,12 @@ void sharedSharedLCC::schedule_requests() {
     random_shuffle(m_remote_rep_and_checkin_schedule_q.begin(), m_remote_rep_and_checkin_schedule_q.end(), rr_fn);
     while (m_remote_rep_and_checkin_schedule_q.size()) {
         bool is_remote_rep = get<0>(m_remote_rep_and_checkin_schedule_q.front());
-        shared_ptr<tableEntry>& entry = get<1>(m_remote_rep_and_checkin_schedule_q.front());
-        shared_ptr<coherenceMsg>& msg = (is_remote_rep)? entry->remote_rep : entry->remote_checkin;
+        std::shared_ptr<tableEntry>& entry = get<1>(m_remote_rep_and_checkin_schedule_q.front());
+        std::shared_ptr<coherenceMsg>& msg = (is_remote_rep)? entry->remote_rep : entry->remote_checkin;
 
         if (m_core_send_queues[MSG_REMOTE_REP]->available()) {
 
-            shared_ptr<message_t> netmsg(new message_t);
+                std::shared_ptr<message_t> netmsg(new message_t);
             netmsg->src = m_id;
             netmsg->dst = msg->receiver;
             netmsg->type = MSG_REMOTE_REP;
@@ -4111,9 +4109,9 @@ void sharedSharedLCC::schedule_requests() {
 
     random_shuffle(m_dramctrl_rep_schedule_q.begin(), m_dramctrl_rep_schedule_q.end(), rr_fn);
     while (m_dramctrl_rep_schedule_q.size()) {
-        shared_ptr<dramctrlTableEntry>& entry = m_dramctrl_rep_schedule_q.front();
-        shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
-        shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
+            std::shared_ptr<dramctrlTableEntry>& entry = m_dramctrl_rep_schedule_q.front();
+            std::shared_ptr<dramctrlMsg>& dramctrl_req = entry->dramctrl_req;
+            std::shared_ptr<dramctrlMsg>& dramctrl_rep = entry->dramctrl_rep;
 
         if (dramctrl_req->sender == m_id) {
             mh_assert(m_work_table.count(dramctrl_req->maddr));
@@ -4124,7 +4122,7 @@ void sharedSharedLCC::schedule_requests() {
 
         } else if (m_core_send_queues[MSG_DRAMCTRL_REP]->available()) {
 
-            shared_ptr<message_t> msg(new message_t);
+                std::shared_ptr<message_t> msg(new message_t);
             msg->src = m_id;
             msg->dst = dramctrl_req->sender;
             msg->type = MSG_DRAMCTRL_REP;

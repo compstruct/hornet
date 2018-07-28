@@ -7,11 +7,11 @@
 #include "arbiter.hpp"
 
 arbiter::arbiter(const uint64_t &time,
-                 shared_ptr<node> src, shared_ptr<node> dst,
+                 std::shared_ptr<node> src, std::shared_ptr<node> dst,
                  arbitration_t new_sch, unsigned new_min_bw,
                  unsigned new_period, unsigned new_delay,
-                 shared_ptr<tile_statistics> new_stats,
-                 logger &l) throw(err)
+                 std::shared_ptr<tile_statistics> new_stats,
+                 logger &l)
     : id(src->get_id(), dst->get_id()),
       system_time(time), scheme(new_sch), min_bw(new_min_bw),
       period(new_period), delay(new_delay), next_arb(time), arb_queue(),
@@ -39,9 +39,9 @@ arbiter::arbiter(const uint64_t &time,
     }
 }
 
-const link_id &arbiter::get_id() const throw() { return id; }
+const link_id &arbiter::get_id() const { return id; }
 
-void arbiter::tick_positive_edge() throw(err) {
+void arbiter::tick_positive_edge() {
     if (next_arb > system_time) {
         LOG(log,12) << "[arbiter " << hex << setfill('0')
                     << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
@@ -138,16 +138,16 @@ void arbiter::tick_positive_edge() throw(err) {
             last_queued_src_to_dst_bw = new_src_to_dst_bw;
         }
     }
-    if (!arb_queue.empty() && arb_queue.front().get<0>() <= system_time) {
+    if (!arb_queue.empty() && get<0>(arb_queue.front()) <= system_time) {
         unsigned cur_src_to_dst_bw = src_to_dst->get_bandwidth();
-        unsigned new_src_to_dst_bw = arb_queue.front().get<1>();
-        unsigned new_dst_to_src_bw = arb_queue.front().get<2>();
+        unsigned new_src_to_dst_bw = get<1>(arb_queue.front());
+        unsigned new_dst_to_src_bw = get<2>(arb_queue.front());
         unsigned min_sw_link = min(cur_src_to_dst_bw, new_src_to_dst_bw);
         unsigned num_sw_links = labs(cur_src_to_dst_bw - new_src_to_dst_bw);
         LOG(log,2) << "[arbiter " << hex << setfill('0')
             << src_to_dst->get_id() << "<->" << dst_to_src->get_id()
-            << "] setting bandwidths ->" << dec << arb_queue.front().get<1>()
-            << " and <-" << arb_queue.front().get<2>() << endl;
+            << "] setting bandwidths ->" << dec << get<1>(arb_queue.front())
+            << " and <-" << get<2>(arb_queue.front()) << endl;
         src_to_dst->set_bandwidth(new_src_to_dst_bw);
         dst_to_src->set_bandwidth(new_dst_to_src_bw);
         arb_queue.pop();
@@ -156,4 +156,4 @@ void arbiter::tick_positive_edge() throw(err) {
     }
 }
 
-void arbiter::tick_negative_edge() throw(err) { }
+void arbiter::tick_negative_edge() { }

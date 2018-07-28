@@ -13,10 +13,10 @@
 
 using namespace std;
 
-cpu::cpu(const pe_id &new_id, const uint64_t &new_time, shared_ptr<mem> new_ram,
+cpu::cpu(const pe_id &new_id, const uint64_t &new_time, std::shared_ptr<mem> new_ram,
          uint32_t entry_point, uint32_t stack_ptr,
-         shared_ptr<tile_statistics> new_stats,
-         logger &l) throw(err)
+         std::shared_ptr<tile_statistics> new_stats,
+         logger &l)
     : pe(new_id), running(true), time(new_time), pc(entry_point), ram(new_ram),
       net(), jump_active(false), interrupts_enabled(false), stdout_buffer(),
       stats(new_stats), log(l) {
@@ -28,13 +28,13 @@ cpu::cpu(const pe_id &new_id, const uint64_t &new_time, shared_ptr<mem> new_ram,
                << setw(8) << stack_ptr << endl;
 }
 
-cpu::~cpu() throw() { }
+cpu::~cpu() { }
 
-void cpu::connect(shared_ptr<bridge> net_bridge) throw() { net = net_bridge; }
+void cpu::connect(std::shared_ptr<bridge> net_bridge) { net = net_bridge; }
 
-void cpu::set_stop_darsim() throw(err) { }
+void cpu::set_stop_darsim() { }
 
-void cpu::tick_positive_edge() throw(err) {
+void cpu::tick_positive_edge() {
     if (running) {
         assert(ram);
         execute();
@@ -48,19 +48,19 @@ void cpu::tick_positive_edge() throw(err) {
     }
 }
 
-void cpu::tick_negative_edge() throw(err) { }
+void cpu::tick_negative_edge() { }
 
-void cpu::add_packet(uint64_t time, const flow_id &flow, uint32_t len) throw(err) { }
+void cpu::add_packet(uint64_t time, const flow_id &flow, uint32_t len) { }
 
-bool cpu::work_queued() throw(err) {
+bool cpu::work_queued() {
     return running;
 }
 
-bool cpu::is_ready_to_offer() throw(err) {
+bool cpu::is_ready_to_offer() {
     return running;
 }
 
-uint64_t cpu::next_pkt_time() throw(err) {
+uint64_t cpu::next_pkt_time() {
     if (running) {
         return time;
     } else {
@@ -68,11 +68,11 @@ uint64_t cpu::next_pkt_time() throw(err) {
     }
 }
 
-bool cpu::is_drained() const throw() {
+bool cpu::is_drained() const {
     return !running;
 }
 
-void cpu::flush_stdout() throw() {
+void cpu::flush_stdout() {
     if (!stdout_buffer.str().empty()) {
         LOG(log,0) << "[cpu " << get_id() << " out] " << stdout_buffer.str()
                    << flush;
@@ -80,7 +80,7 @@ void cpu::flush_stdout() throw() {
     }
 }
 
-void cpu::syscall(uint32_t call_no) throw(err) {
+void cpu::syscall(uint32_t call_no) {
     switch (call_no) {
     case SYSCALL_PRINT_INT:
         stdout_buffer << dec << (int32_t) get(gpr(4)); break;
@@ -129,7 +129,7 @@ void cpu::syscall(uint32_t call_no) throw(err) {
     }
 }
 
-static void unimplemented_instr(instr i, uint32_t addr) throw(err_tbd) {
+static void unimplemented_instr(instr i, uint32_t addr) {
     ostringstream oss;
     oss << "[0x" << hex << setfill('0') << setw(8) << addr << "] " << i;
     throw err_tbd(oss.str());
@@ -168,7 +168,7 @@ inline uint32_t check_align(uint32_t addr, uint32_t mask) {
 #define mem_addrh() (check_align(mem_addr(), 0x1))
 #define mem_addrw() (check_align(mem_addr(), 0x3))
 
-void cpu::execute() throw(err) {
+void cpu::execute() {
     assert(ram);
     instr i = instr(ram->load<uint32_t>(pc));
     LOG(log,5) << "[cpu " << get_id() << "] "

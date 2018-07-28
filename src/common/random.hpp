@@ -16,15 +16,15 @@ private:
    boost::uniform_01<boost::mt19937> gen;
 
 public:
-   random_gen(const uint32_t id, const uint32_t seed) throw();
+   random_gen(const uint32_t id, const uint32_t seed);
    
    // return a natural number selected u.a.r. from [0..max)
-   int random_range(int max) throw();
+   int random_range(int max);
    
    // return a real number selected u.a.r. from [0..max)
-   double random_range_double(double max) throw();
+   double random_range_double(double max);
 
-   uint32_t get_id() const throw();
+   uint32_t get_id() const;
 private:
    uint32_t id;
 };

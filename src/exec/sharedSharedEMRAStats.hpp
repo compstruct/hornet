@@ -15,7 +15,7 @@ public:
     uint64_t total_cost();
     void add(const sharedSharedEMRAStatsPerMemInstr& other);
 
-    shared_ptr<sharedSharedEMRAStatsPerMemInstr> get_tentative_data(int index);
+    std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> get_tentative_data(int index);
     int get_max_tentative_data_index();
     inline void clear_tentative_data() { m_tentative_data.clear(); }
     void discard_tentative_data(int index);
@@ -105,7 +105,7 @@ private:
     uint64_t m_remote_l2_cost_for_update;
     uint64_t m_remote_l2_cost_for_writeback;
 
-    map<int, shared_ptr<sharedSharedEMRAStatsPerMemInstr> > m_tentative_data;
+    map<int, std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> > m_tentative_data;
     
 };
 
@@ -161,7 +161,7 @@ public:
 
     void add(const sharedSharedEMRAStatsPerTile& other);
     void commit_per_mem_instr_stats(const sharedSharedEMRAStatsPerMemInstr& data);
-    inline void commit_per_mem_instr_stats(shared_ptr<sharedSharedEMRAStatsPerMemInstr> data) { commit_per_mem_instr_stats(*data); }
+    inline void commit_per_mem_instr_stats(std::shared_ptr<sharedSharedEMRAStatsPerMemInstr> data) { commit_per_mem_instr_stats(*data); }
 
     friend class sharedSharedEMRAStats;
 

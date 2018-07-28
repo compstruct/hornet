@@ -123,12 +123,12 @@ bool sharedSharedLCCStatsPerMemInstr::add_new_tentative_data(int index) {
     if (m_tentative_data.count(index)) {
         return false;
     }
-    shared_ptr<sharedSharedLCCStatsPerMemInstr> new_tentative_set(new sharedSharedLCCStatsPerMemInstr(m_is_read));
+    std::shared_ptr<sharedSharedLCCStatsPerMemInstr> new_tentative_set(new sharedSharedLCCStatsPerMemInstr(m_is_read));
     m_tentative_data[index] = new_tentative_set;
     return true;
 }
 
-shared_ptr<sharedSharedLCCStatsPerMemInstr> sharedSharedLCCStatsPerMemInstr::get_tentative_data(int index) {
+std::shared_ptr<sharedSharedLCCStatsPerMemInstr> sharedSharedLCCStatsPerMemInstr::get_tentative_data(int index) {
     if (!m_tentative_data.count(index)) {
         add_new_tentative_data(index);
     }
@@ -138,10 +138,10 @@ shared_ptr<sharedSharedLCCStatsPerMemInstr> sharedSharedLCCStatsPerMemInstr::get
 int sharedSharedLCCStatsPerMemInstr::get_max_tentative_data_index() {
     mh_assert(m_tentative_data.size());
     uint64_t value = 0;
-    map<int, shared_ptr<sharedSharedLCCStatsPerMemInstr> >::iterator it;
+    map<int, std::shared_ptr<sharedSharedLCCStatsPerMemInstr> >::iterator it;
     int max = 0;
     for (it = m_tentative_data.begin(); it != m_tentative_data.end(); ++it) {
-        shared_ptr<sharedSharedLCCStatsPerMemInstr> cur = it->second;
+            std::shared_ptr<sharedSharedLCCStatsPerMemInstr> cur = it->second;
         if (cur->total_cost() > value) {
             value = cur->total_cost();
             max = it->first;
@@ -175,10 +175,10 @@ void sharedSharedLCCStatsPerMemInstr::commit_max_tentative_data() {
 
 void sharedSharedLCCStatsPerMemInstr::commit_min_tentative_data() {
     uint64_t value = UINT64_MAX;
-    map<int, shared_ptr<sharedSharedLCCStatsPerMemInstr> >::iterator it;
-    shared_ptr<sharedSharedLCCStatsPerMemInstr> min = shared_ptr<sharedSharedLCCStatsPerMemInstr>();
+    map<int, std::shared_ptr<sharedSharedLCCStatsPerMemInstr> >::iterator it;
+    std::shared_ptr<sharedSharedLCCStatsPerMemInstr> min = std::shared_ptr<sharedSharedLCCStatsPerMemInstr>();
     for (it = m_tentative_data.begin(); it != m_tentative_data.end(); ++it) {
-        shared_ptr<sharedSharedLCCStatsPerMemInstr> cur = it->second;
+            std::shared_ptr<sharedSharedLCCStatsPerMemInstr> cur = it->second;
         if (cur->total_cost() < value) {
             value = cur->total_cost();
             min = cur;
@@ -390,7 +390,7 @@ sharedSharedLCCStats::~sharedSharedLCCStats() {}
 
 void sharedSharedLCCStats::print_stats(ostream &out) {
 
-    char str[4096];
+    char str[8192];
     sharedSharedLCCStatsPerTile total_tile_info(0, system_time);
 
     memStats::print_stats(out);
@@ -408,7 +408,7 @@ void sharedSharedLCCStats::print_stats(ostream &out) {
     for (it = m_per_tile_stats.begin(); it != m_per_tile_stats.end(); ++it) {
         ++num_tiles;
         uint32_t id = it->first;
-        shared_ptr<sharedSharedLCCStatsPerTile> st = static_pointer_cast<sharedSharedLCCStatsPerTile>(it->second);
+        std::shared_ptr<sharedSharedLCCStatsPerTile> st = static_pointer_cast<sharedSharedLCCStatsPerTile>(it->second);
 
         sprintf(str, "[S1S2LCC:Core %d ] "
                 "%ld %ld %ld %ld %ld %ld %ld %ld %ld %ld "

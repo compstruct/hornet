@@ -132,12 +132,12 @@ bool privateSharedPTIStatsPerMemInstr::add_new_tentative_data(int index) {
     if (m_tentative_data.count(index)) {
         return false;
     }
-    shared_ptr<privateSharedPTIStatsPerMemInstr> new_tentative_set(new privateSharedPTIStatsPerMemInstr(m_is_read));
+    std::shared_ptr<privateSharedPTIStatsPerMemInstr> new_tentative_set(new privateSharedPTIStatsPerMemInstr(m_is_read));
     m_tentative_data[index] = new_tentative_set;
     return true;
 }
 
-shared_ptr<privateSharedPTIStatsPerMemInstr> privateSharedPTIStatsPerMemInstr::get_tentative_data(int index) {
+std::shared_ptr<privateSharedPTIStatsPerMemInstr> privateSharedPTIStatsPerMemInstr::get_tentative_data(int index) {
     if (!m_tentative_data.count(index)) {
         add_new_tentative_data(index);
     }
@@ -147,10 +147,10 @@ shared_ptr<privateSharedPTIStatsPerMemInstr> privateSharedPTIStatsPerMemInstr::g
 int privateSharedPTIStatsPerMemInstr::get_max_tentative_data_index() {
     mh_assert(m_tentative_data.size());
     uint64_t value = 0;
-    map<int, shared_ptr<privateSharedPTIStatsPerMemInstr> >::iterator it;
+    map<int, std::shared_ptr<privateSharedPTIStatsPerMemInstr> >::iterator it;
     int max = 0;
     for (it = m_tentative_data.begin(); it != m_tentative_data.end(); ++it) {
-        shared_ptr<privateSharedPTIStatsPerMemInstr> cur = it->second;
+            std::shared_ptr<privateSharedPTIStatsPerMemInstr> cur = it->second;
         if (cur->total_cost() > value) {
             value = cur->total_cost();
             max = it->first;
@@ -178,10 +178,10 @@ void privateSharedPTIStatsPerMemInstr::commit_max_tentative_data() {
 
 void privateSharedPTIStatsPerMemInstr::commit_min_tentative_data() {
     uint64_t value = UINT64_MAX;
-    map<int, shared_ptr<privateSharedPTIStatsPerMemInstr> >::iterator it;
-    shared_ptr<privateSharedPTIStatsPerMemInstr> min = shared_ptr<privateSharedPTIStatsPerMemInstr>();
+    map<int, std::shared_ptr<privateSharedPTIStatsPerMemInstr> >::iterator it;
+    std::shared_ptr<privateSharedPTIStatsPerMemInstr> min = std::shared_ptr<privateSharedPTIStatsPerMemInstr>();
     for (it = m_tentative_data.begin(); it != m_tentative_data.end(); ++it) {
-        shared_ptr<privateSharedPTIStatsPerMemInstr> cur = it->second;
+            std::shared_ptr<privateSharedPTIStatsPerMemInstr> cur = it->second;
         if (cur->total_cost() < value) {
             value = cur->total_cost();
             min = cur;
@@ -358,7 +358,7 @@ void privateSharedPTIStats::print_stats(ostream &out) {
     perTileStats_t::iterator it;
 
     for (it = m_per_tile_stats.begin(); it != m_per_tile_stats.end(); ++it) {
-        shared_ptr<privateSharedPTIStatsPerTile> st = static_pointer_cast<privateSharedPTIStatsPerTile>(it->second);
+            std::shared_ptr<privateSharedPTIStatsPerTile> st = static_pointer_cast<privateSharedPTIStatsPerTile>(it->second);
         t.add(*st);
     }
 
@@ -597,7 +597,7 @@ void privateSharedPTIStats::print_stats(ostream &out) {
     out << "[P1S2PTI EXEC DUMP]" << endl;
     for (it = m_per_tile_stats.begin(); it != m_per_tile_stats.end(); ++it) {
         uint32_t id = it->first;
-        shared_ptr<privateSharedPTIStatsPerTile> st = static_pointer_cast<privateSharedPTIStatsPerTile>(it->second);
+        std::shared_ptr<privateSharedPTIStatsPerTile> st = static_pointer_cast<privateSharedPTIStatsPerTile>(it->second);
         privateSharedPTIStatsPerMemInstr &x = st->m_total_per_mem_instr_info;
         out << "---- " << id << " counter " << endl;
         out << st->m_num_l1_read_instr << " ";

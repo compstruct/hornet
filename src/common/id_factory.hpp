@@ -13,9 +13,9 @@ template<class T>
 class id_factory {
 public:
     // template must leave a range of LSBs (~templ_mask) open for the actual ID
-    explicit id_factory(const T &templ, const T &templ_mask) throw();
-    T get_first_id() throw();
-    T get_fresh_id() throw();
+    explicit id_factory(const T &templ, const T &templ_mask);
+    T get_first_id();
+    T get_fresh_id();
 private:
     T next_id;
     const T templ;
@@ -27,18 +27,18 @@ private:
 
 template<class T>
 inline id_factory<T>::id_factory(const T &new_templ,
-                                 const T &new_templ_mask) throw()
+                                 const T &new_templ_mask)
     : next_id(0), templ(new_templ), templ_mask(new_templ_mask) {
     assert((new_templ & new_templ_mask) == new_templ);
 }
 
 template<class T>
-inline T id_factory<T>::get_first_id() throw() {
+inline T id_factory<T>::get_first_id() {
     return templ;
 }
 
 template<class T>
-inline T id_factory<T>::get_fresh_id() throw() {
+inline T id_factory<T>::get_fresh_id() {
     assert((next_id & ~templ_mask) == next_id);
     T id = templ | next_id;
     ++next_id;

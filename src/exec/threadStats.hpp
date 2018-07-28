@@ -59,12 +59,12 @@ public:
     threadStats(const uint64_t &system_time);
     virtual ~threadStats();
 
-    void add_per_thread_stats(shared_ptr<threadStatsPerThread> stats);
+    void add_per_thread_stats(std::shared_ptr<threadStatsPerThread> stats);
 
 protected:
     virtual void print_stats(ostream &out);
 
-    typedef map<uint32_t/*thread id*/, shared_ptr<threadStatsPerThread> > perThreadStats_t;
+    typedef map<uint32_t/*thread id*/, std::shared_ptr<threadStatsPerThread> > perThreadStats_t;
 
     perThreadStats_t m_per_thread_stats;
 

@@ -12,8 +12,8 @@ using namespace std;
 
 class err {
 protected:
-    err() throw();
-    virtual ~err() throw();
+    err();
+    virtual ~err();
     friend ostream &operator<<(ostream &, const err &);
 private:
     virtual void show_to(ostream &out) const = 0;
@@ -21,9 +21,9 @@ private:
 
 class err_panic : public err {
 public:
-    explicit err_panic(const string &message) throw();
-    explicit err_panic(const char *message) throw();
-    virtual ~err_panic() throw();
+    explicit err_panic(const string &message);
+    explicit err_panic(const char *message);
+    virtual ~err_panic();
 private:
     virtual void show_to(ostream &out) const;
 protected:
@@ -32,37 +32,37 @@ protected:
 
 class err_out_of_mem : public err_panic {
 public:
-    explicit err_out_of_mem() throw();
-    virtual ~err_out_of_mem() throw();
+    explicit err_out_of_mem();
+    virtual ~err_out_of_mem();
 };
 
 class err_thread_spawn : public err_panic {
 public:
-    explicit err_thread_spawn(const string &msg) throw();
-    virtual ~err_thread_spawn() throw();
+    explicit err_thread_spawn(const string &msg);
+    virtual ~err_thread_spawn();
 };
 
 class err_tbd : public err_panic {
 public:
-    explicit err_tbd(const string &message) throw();
-    explicit err_tbd(const char *message) throw();
-    virtual ~err_tbd() throw();
+    explicit err_tbd(const string &message);
+    explicit err_tbd(const char *message);
+    virtual ~err_tbd();
 private:
     virtual void show_to(ostream &out) const;
 };
 
 class err_bad_mem_img : public err {
 public:
-    explicit err_bad_mem_img() throw();
-    virtual ~err_bad_mem_img() throw();
+    explicit err_bad_mem_img();
+    virtual ~err_bad_mem_img();
 private:
     virtual void show_to(ostream &out) const;
 };
 
 class err_bad_reg : public err {
 public:
-    explicit err_bad_reg(const unsigned register_number) throw();
-    virtual ~err_bad_reg() throw();
+    explicit err_bad_reg(const unsigned register_number);
+    virtual ~err_bad_reg();
 private:
     virtual void show_to(ostream &out) const;
 private:
@@ -72,16 +72,16 @@ private:
 // an exception while executing user program
 class err_runtime_exc : public err {
 protected:
-    err_runtime_exc() throw();
-    virtual ~err_runtime_exc() throw();
+    err_runtime_exc();
+    virtual ~err_runtime_exc();
 private:
     virtual void show_to(ostream &out) const = 0;
 };
 
 class exc_bad_instr : public err_runtime_exc {
 public:
-    explicit exc_bad_instr(const uint32_t instr_encoding) throw();
-    virtual ~exc_bad_instr() throw();
+    explicit exc_bad_instr(const uint32_t instr_encoding);
+    virtual ~exc_bad_instr();
 private:
     virtual void show_to(ostream &out) const;
     const uint32_t encoding;
@@ -89,8 +89,8 @@ private:
 
 class exc_reserved_hw_reg : public err {
 public:
-    explicit exc_reserved_hw_reg(const unsigned register_number) throw();
-    virtual ~exc_reserved_hw_reg() throw();
+    explicit exc_reserved_hw_reg(const unsigned register_number);
+    virtual ~exc_reserved_hw_reg();
 private:
     virtual void show_to(ostream &out) const;
 private:
@@ -100,8 +100,8 @@ private:
 class exc_bus_err : public err_runtime_exc {
 public:
     explicit exc_bus_err(const uint32_t id, const uint32_t addr,
-                         const uint32_t start, const uint32_t size) throw();
-    virtual ~exc_bus_err() throw();
+                         const uint32_t start, const uint32_t size);
+    virtual ~exc_bus_err();
 private:
     virtual void show_to(ostream &out) const;
 private:
@@ -113,24 +113,24 @@ private:
 
 class exc_int_overflow : public err_runtime_exc {
 public:
-    explicit exc_int_overflow() throw();
-    virtual ~exc_int_overflow() throw();
+    explicit exc_int_overflow();
+    virtual ~exc_int_overflow();
 private:
     virtual void show_to(ostream &out) const;
 };
 
 class exc_addr_align : public err_runtime_exc {
 public:
-    explicit exc_addr_align() throw();
-    virtual ~exc_addr_align() throw();
+    explicit exc_addr_align();
+    virtual ~exc_addr_align();
 private:
     virtual void show_to(ostream &out) const;
 };
 
 class exc_bad_syscall : public err_runtime_exc {
 public:
-    explicit exc_bad_syscall(uint32_t syscall_no) throw();
-    virtual ~exc_bad_syscall() throw();
+    explicit exc_bad_syscall(uint32_t syscall_no);
+    virtual ~exc_bad_syscall();
     const uint32_t syscall_no;
 private:
     virtual void show_to(ostream &out) const;
@@ -138,8 +138,8 @@ private:
 
 class exc_syscall_exit : public err_runtime_exc {
 public:
-    explicit exc_syscall_exit(uint32_t exit_code) throw();
-    virtual ~exc_syscall_exit() throw();
+    explicit exc_syscall_exit(uint32_t exit_code);
+    virtual ~exc_syscall_exit();
     const uint32_t exit_code;
 private:
     virtual void show_to(ostream &out) const;
@@ -147,8 +147,8 @@ private:
 
 class exc_no_network : public err_runtime_exc {
 public:
-    explicit exc_no_network(uint32_t cpu) throw();
-    virtual ~exc_no_network() throw();
+    explicit exc_no_network(uint32_t cpu);
+    virtual ~exc_no_network();
 private:
     virtual void show_to(ostream &out) const;
 private:
@@ -158,8 +158,8 @@ private:
 class exc_new_flow_mid_dma : public err_runtime_exc {
 public:
     explicit exc_new_flow_mid_dma(uint32_t flow, uint32_t node,
-                                  uint32_t dma) throw();
-    virtual ~exc_new_flow_mid_dma() throw();
+                                  uint32_t dma);
+    virtual ~exc_new_flow_mid_dma();
 private:
     const uint32_t flow;
     const uint32_t node;
@@ -169,8 +169,8 @@ private:
 
 class exc_bad_queue : public err_runtime_exc {
 public:
-    explicit exc_bad_queue(uint32_t node, uint32_t queue) throw();
-    virtual ~exc_bad_queue() throw();
+    explicit exc_bad_queue(uint32_t node, uint32_t queue);
+    virtual ~exc_bad_queue();
 private:
     const uint32_t node;
     const uint32_t queue;
@@ -179,8 +179,8 @@ private:
 
 class err_empty_queue : public err {
 public:
-    explicit err_empty_queue(uint32_t node, uint32_t queue) throw();
-    virtual ~err_empty_queue() throw();
+    explicit err_empty_queue(uint32_t node, uint32_t queue);
+    virtual ~err_empty_queue();
 private:
     const uint32_t node;
     const uint32_t queue;
@@ -189,8 +189,8 @@ private:
 
 class err_too_many_bridge_queues : public err {
 public:
-    explicit err_too_many_bridge_queues(uint32_t node, uint32_t num) throw();
-    virtual ~err_too_many_bridge_queues() throw();
+    explicit err_too_many_bridge_queues(uint32_t node, uint32_t num);
+    virtual ~err_too_many_bridge_queues();
 private:
     const uint32_t node;
     const uint32_t num;
@@ -199,8 +199,8 @@ private:
 
 class err_claimed_queue : public err {
 public:
-    explicit err_claimed_queue(uint32_t node, uint32_t queue) throw();
-    virtual ~err_claimed_queue() throw();
+    explicit err_claimed_queue(uint32_t node, uint32_t queue);
+    virtual ~err_claimed_queue();
 private:
     const uint32_t node;
     const uint32_t queue;
@@ -210,8 +210,8 @@ private:
 
 class err_duplicate_queue : public err {
 public:
-    explicit err_duplicate_queue(uint32_t node, uint32_t queue) throw();
-    virtual ~err_duplicate_queue() throw();
+    explicit err_duplicate_queue(uint32_t node, uint32_t queue);
+    virtual ~err_duplicate_queue();
 private:
     const uint32_t node;
     const uint32_t queue;
@@ -221,8 +221,8 @@ private:
 class err_duplicate_link_queue : public err {
 public:
     explicit err_duplicate_link_queue(uint32_t node, uint32_t target,
-                                      uint32_t queue) throw();
-    virtual ~err_duplicate_link_queue() throw();
+                                      uint32_t queue);
+    virtual ~err_duplicate_link_queue();
 private:
     const uint32_t node;
     const uint32_t target; // target node
@@ -232,8 +232,8 @@ private:
 
 class err_duplicate_bridge_queue : public err {
 public:
-    explicit err_duplicate_bridge_queue(uint32_t node, uint32_t queue) throw();
-    virtual ~err_duplicate_bridge_queue() throw();
+    explicit err_duplicate_bridge_queue(uint32_t node, uint32_t queue);
+    virtual ~err_duplicate_bridge_queue();
 private:
     const uint32_t node;
     const uint32_t queue;
@@ -242,8 +242,8 @@ private:
 
 class err_duplicate_ingress : public err {
 public:
-    explicit err_duplicate_ingress(uint32_t node, uint32_t src) throw();
-    virtual ~err_duplicate_ingress() throw();
+    explicit err_duplicate_ingress(uint32_t node, uint32_t src);
+    virtual ~err_duplicate_ingress();
 private:
     const uint32_t node;
     const uint32_t src;
@@ -252,8 +252,8 @@ private:
 
 class err_duplicate_egress : public err {
 public:
-    explicit err_duplicate_egress(uint32_t node, uint32_t dst) throw();
-    virtual ~err_duplicate_egress() throw();
+    explicit err_duplicate_egress(uint32_t node, uint32_t dst);
+    virtual ~err_duplicate_egress();
 private:
     const uint32_t node;
     const uint32_t dst;
@@ -263,8 +263,8 @@ private:
 class err_bad_next_hop : public err {
 public:
     explicit err_bad_next_hop(uint32_t node, uint32_t flow,
-                              uint32_t next_node) throw();
-    virtual ~err_bad_next_hop() throw();
+                              uint32_t next_node);
+    virtual ~err_bad_next_hop();
 private:
     const uint32_t node;
     const uint32_t flow;
@@ -276,8 +276,8 @@ class err_bad_next_hop_queue : public err {
 public:
     explicit err_bad_next_hop_queue(uint32_t node, uint32_t flow,
                                     uint32_t next_node, uint32_t next_queue)
-        throw();
-    virtual ~err_bad_next_hop_queue() throw();
+       ;
+    virtual ~err_bad_next_hop_queue();
 private:
     const uint32_t node;
     const uint32_t flow;
@@ -288,8 +288,8 @@ private:
 
 class err_bad_neighbor : public err {
 public:
-    explicit err_bad_neighbor(uint32_t node, uint32_t neighbor_node) throw();
-    virtual ~err_bad_neighbor() throw();
+    explicit err_bad_neighbor(uint32_t node, uint32_t neighbor_node);
+    virtual ~err_bad_neighbor();
 private:
     const uint32_t node;
     const uint32_t neighbor;
@@ -298,8 +298,8 @@ private:
 
 class exc_bad_flow : public err_runtime_exc {
 public:
-    explicit exc_bad_flow(uint32_t node, uint32_t flow) throw();
-    virtual ~exc_bad_flow() throw();
+    explicit exc_bad_flow(uint32_t node, uint32_t flow);
+    virtual ~exc_bad_flow();
 private:
     const uint32_t node;
     const uint32_t flow;
@@ -309,8 +309,8 @@ private:
 class exc_bad_flow_from : public err_runtime_exc {
 public:
     explicit exc_bad_flow_from(uint32_t node, uint32_t src_node,
-                               uint32_t flow) throw();
-    virtual ~exc_bad_flow_from() throw();
+                               uint32_t flow);
+    virtual ~exc_bad_flow_from();
 private:
     const uint32_t node;
     const uint32_t src_node;
@@ -320,16 +320,16 @@ private:
 
 class err_route_not_static : public err {
 public:
-    explicit err_route_not_static() throw();
-    virtual ~err_route_not_static() throw();
+    explicit err_route_not_static();
+    virtual ~err_route_not_static();
 private:
     virtual void show_to(ostream &out) const;
 };
 
 class err_route_not_terminated : public err {
 public:
-    explicit err_route_not_terminated(uint32_t flow, uint32_t node) throw();
-    virtual ~err_route_not_terminated() throw();
+    explicit err_route_not_terminated(uint32_t flow, uint32_t node);
+    virtual ~err_route_not_terminated();
 private:
     const uint32_t flow;
     const uint32_t node;
@@ -339,8 +339,8 @@ private:
 
 class err_duplicate_flow : public err {
 public:
-    explicit err_duplicate_flow(uint32_t node, uint32_t flow) throw();
-    virtual ~err_duplicate_flow() throw();
+    explicit err_duplicate_flow(uint32_t node, uint32_t flow);
+    virtual ~err_duplicate_flow();
 private:
     const uint32_t node;
     const uint32_t flow;
@@ -350,8 +350,8 @@ private:
 class err_duplicate_flow_rename : public err {
 public:
     explicit err_duplicate_flow_rename(uint32_t to, uint32_t from1,
-                                       uint32_t from2) throw();
-    virtual ~err_duplicate_flow_rename() throw();
+                                       uint32_t from2);
+    virtual ~err_duplicate_flow_rename();
 private:
     const uint32_t to;    // renamed flow (target)
     const uint32_t from1; // first original flow ID
@@ -361,8 +361,8 @@ private:
 
 class exc_bad_transmission : public err_runtime_exc {
 public:
-    explicit exc_bad_transmission(uint32_t node, uint32_t xmit_id) throw();
-    virtual ~exc_bad_transmission() throw();
+    explicit exc_bad_transmission(uint32_t node, uint32_t xmit_id);
+    virtual ~exc_bad_transmission();
 private:
     const uint32_t node;
     const uint32_t xmit_id;
@@ -371,8 +371,8 @@ private:
 
 class exc_dma_busy : public err_runtime_exc {
 public:
-    explicit exc_dma_busy(uint32_t node, uint32_t dma) throw();
-    virtual ~exc_dma_busy() throw();
+    explicit exc_dma_busy(uint32_t node, uint32_t dma);
+    virtual ~exc_dma_busy();
 private:
     const uint32_t node;
     const uint32_t dma;
@@ -381,8 +381,8 @@ private:
 
 class err_bad_arb_scheme : public err {
 public:
-    explicit err_bad_arb_scheme(uint32_t scheme) throw();
-    virtual ~err_bad_arb_scheme() throw();
+    explicit err_bad_arb_scheme(uint32_t scheme);
+    virtual ~err_bad_arb_scheme();
 private:
     const uint32_t arb_scheme;
     virtual void show_to(ostream &out) const;
@@ -391,8 +391,8 @@ private:
 class err_bad_arb_min_bw : public err {
 public:
     explicit err_bad_arb_min_bw(uint32_t src, uint32_t dst, uint32_t s2d_bw,
-                                uint32_t d2s_bw, uint32_t min_bw) throw();
-    virtual ~err_bad_arb_min_bw() throw();
+                                uint32_t d2s_bw, uint32_t min_bw);
+    virtual ~err_bad_arb_min_bw();
 private:
     const uint32_t src;
     const uint32_t dst;
@@ -405,10 +405,10 @@ private:
 class err_parse : public err {
 public:
     err_parse(const string &file,
-              const string &msg = string("parse error")) throw();
+              const string &msg = string("parse error"));
     err_parse(const string &file, unsigned line,
-              const string &msg = string("parse error")) throw();
-    virtual ~err_parse() throw();
+              const string &msg = string("parse error"));
+    virtual ~err_parse();
 private:
     const string file;
     const unsigned line;
@@ -418,9 +418,9 @@ private:
 
 class err_bad_shmem_cfg : public err {
 public:
-    explicit err_bad_shmem_cfg(const string &message) throw();
-    explicit err_bad_shmem_cfg(const char *message) throw();
-    virtual ~err_bad_shmem_cfg() throw();
+    explicit err_bad_shmem_cfg(const string &message);
+    explicit err_bad_shmem_cfg(const char *message);
+    virtual ~err_bad_shmem_cfg();
 private:
     virtual void show_to(ostream &out) const;
 protected:

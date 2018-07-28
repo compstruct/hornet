@@ -7,15 +7,15 @@
 set_bridge_channel_alloc::set_bridge_channel_alloc(node_id n, bool one_q_per_f,
                                                    bool one_f_per_q,
                                                    logger &l,
-                                                   shared_ptr<random_gen> r) throw()
+                                                   std::shared_ptr<random_gen> r)
     : bridge_channel_alloc(n, one_q_per_f, one_f_per_q, l), queues(),
       routes(), ran(r) { }
 
-set_bridge_channel_alloc::~set_bridge_channel_alloc() throw() { }
+set_bridge_channel_alloc::~set_bridge_channel_alloc() { }
 
-void set_bridge_channel_alloc::add_queue(shared_ptr<virtual_queue> q)
-    throw(err) {
-    virtual_queue_id qid = q->get_id().get<1>();
+void set_bridge_channel_alloc::add_queue(std::shared_ptr<virtual_queue> q)
+    {
+    virtual_queue_id qid = get<1>(q->get_id());
     if (queues.find(qid) != queues.end())
         throw err_duplicate_queue(get_id().get_numeric_id(),
                                   qid.get_numeric_id());
@@ -24,14 +24,15 @@ void set_bridge_channel_alloc::add_queue(shared_ptr<virtual_queue> q)
 
 void
 set_bridge_channel_alloc::
-add_route(const flow_id &f, const vector<tuple<virtual_queue_id,double> > &qids)
-    throw(err) {
+add_route(const flow_id &f, const vector<std::tuple<virtual_queue_id,double> > &qids)
+    {
     if (routes.find(f) != routes.end())
         throw err_duplicate_flow(get_id().get_numeric_id(), f.get_numeric_id());    
     if (!qids.empty()) { // add only specified queues with given propensities
-        for (vector<tuple<virtual_queue_id,double> >::const_iterator idi =
+        for (vector<std::tuple<virtual_queue_id,double> >::const_iterator idi =
                  qids.begin(); idi != qids.end(); ++idi) {
-            virtual_queue_id vqid; double prop; tie(vqid,prop) = *idi;
+            virtual_queue_id vqid = get<0>(*idi);
+            double prop = get<1>(*idi);
             assert(prop > 0);
             queues_t::iterator qi = queues.find(vqid);
             if (qi == queues.end())
@@ -50,7 +51,7 @@ add_route(const flow_id &f, const vector<tuple<virtual_queue_id,double> > &qids)
     }
 }
 
-virtual_queue_id set_bridge_channel_alloc::request(flow_id f) throw(err) {
+virtual_queue_id set_bridge_channel_alloc::request(flow_id f) {
     //printf("Requesting flow: %x\n", f.get_numeric_id());
     if (routes.find(f) == routes.end())
         throw exc_bad_flow(get_id().get_numeric_id(), f.get_numeric_id());
@@ -58,7 +59,8 @@ virtual_queue_id set_bridge_channel_alloc::request(flow_id f) throw(err) {
     route_queues_t free_qs;
     double prop_sum = 0.0;
     for (route_queues_t::const_iterator qi = qs.begin(); qi != qs.end(); ++qi) {
-        shared_ptr<virtual_queue> q; double prop; tie(q,prop) = *qi;
+        std::shared_ptr<virtual_queue> q = get<0>(*qi);
+        double prop = get<1>(*qi);
         if (q->back_is_empty()) {
             if (!is_claimed(q->get_id()) && !q->back_is_mid_packet()) {
                 prop_sum += prop;
@@ -85,9 +87,10 @@ virtual_queue_id set_bridge_channel_alloc::request(flow_id f) throw(err) {
         double r = ran->random_range_double(prop_sum);
         for (route_queues_t::const_iterator oqi = free_qs.begin();
              oqi != free_qs.end(); ++oqi) {
-            shared_ptr<virtual_queue> oq; double prop; tie(oq,prop) = *oqi;
+            std::shared_ptr<virtual_queue> oq = get<0>(*oqi);
+            double prop = get<1>(*oqi);
             if (r < prop) {
-                vqid = oq->get_id().get<1>();
+                vqid = get<1>(oq->get_id());
                 break;
             }
         }

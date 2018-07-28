@@ -7,7 +7,7 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include "logger.hpp"
 #include "reg.hpp"
 #include "mem.hpp"
@@ -44,48 +44,48 @@ using namespace boost;
         alignment---see OptionType in blackscholes.OptionData_
 */
 
-class mcpu : public core {
+class mcpu : public common_core {
 public:
     explicit mcpu(  const pe_id                         &id, 
                     const uint64_t                      &time, 
                     uint32_t                            pc, 
                     uint32_t                            stack_pointer,
-                    shared_ptr<id_factory<packet_id> >  pif,
-                    shared_ptr<tile_statistics>         stats,
+                    std::shared_ptr<id_factory<packet_id> >  pif,
+                    std::shared_ptr<tile_statistics>         stats,
                     logger                              &log,
-                    shared_ptr<random_gen>              r,
-                    shared_ptr<memory>                  instruction_memory,
-                    shared_ptr<memory>                  data_memory,
-                    shared_ptr<dram>                    backingDRAM_data,
+                    std::shared_ptr<random_gen>              r,
+                    std::shared_ptr<memory>                  instruction_memory,
+                    std::shared_ptr<memory>                  data_memory,
+                    std::shared_ptr<dram>                    backingDRAM_data,
                     uint32_t                            msg_queue_size, 
                     uint32_t                            bytes_per_flit) 
-                    throw(err);
-    virtual ~mcpu() throw();
+                   ;
+    virtual ~mcpu();
 
 /* core interface ----------------------------------------------------------- */
 
     virtual void execute();
     virtual void update_from_memory_requests();
-    virtual uint64_t next_pkt_time() throw(err);
-    virtual bool is_drained() const throw();
+    virtual uint64_t next_pkt_time();
+    virtual bool is_drained() const;
 
-    virtual void tick_positive_edge_memory() throw(err);
-    virtual void tick_negative_edge_memory() throw(err);
+    virtual void tick_positive_edge_memory();
+    virtual void tick_negative_edge_memory();
 
 /* mips scalar -------------------------------------------------------------- */
 
 private:
-    uint32_t get(const gpr &r) const throw();
-    uint32_t get_s(const fpr &r) const throw();
-    uint64_t get_d(const fpr &r) const throw();        
-    uint32_t get(const hwr &r) const throw(exc_reserved_hw_reg);
-    bool get_cp1_cf(const cfr &r) const throw();
-    void set(const gpr &r, uint32_t val) throw();
-    void set_s(const fpr &r, uint32_t v) throw();
-    void set_d(const fpr &r, uint64_t v) throw();
-    void set_cp1_cf(const cfr &r, bool value) throw();
-    void set_hi_lo(uint64_t val) throw();
-    void execute(shared_ptr<instr> i) throw(err);
+    uint32_t get(const gpr &r) const;
+    uint32_t get_s(const fpr &r) const;
+    uint64_t get_d(const fpr &r) const;        
+    uint32_t get(const hwr &r) const;
+    bool get_cp1_cf(const cfr &r) const;
+    void set(const gpr &r, uint32_t val);
+    void set_s(const fpr &r, uint32_t v);
+    void set_d(const fpr &r, uint64_t v);
+    void set_cp1_cf(const cfr &r, bool value);
+    void set_hi_lo(uint64_t val);
+    void execute(std::shared_ptr<instr> i);
 
 private:
     bool running;
@@ -97,7 +97,7 @@ private:
     uint32_t fprs[32];
     bool fpcfs[8]; // condition flags, coprocessor 1
     uint64_t hi_lo;
-    shared_ptr<bridge> net;
+    std::shared_ptr<bridge> net;
     bool jump_active;
     bool interrupts_enabled;
     unsigned jump_time;
@@ -105,19 +105,19 @@ private:
     ostringstream stdout_buffer;
 
 private:
-    void syscall(uint32_t syscall_no) throw(err);
-    void trap() throw(err);
-    void flush_stdout() throw();
+    void syscall(uint32_t syscall_no);
+    void trap();
+    void flush_stdout();
 
 /* memory hierarchy --------------------------------------------------------- */
 
 private: // instruction memory hierarchy
-    shared_ptr<memory> i_memory;
+    std::shared_ptr<memory> i_memory;
 
 private: // instruction/data interface
     
-    shared_ptr<memoryRequest> pending_request_instruction;
-    shared_ptr<memoryRequest> pending_request_data;
+    std::shared_ptr<memoryRequest> pending_request_instruction;
+    std::shared_ptr<memoryRequest> pending_request_data;
 
     uint32_t pending_request_byte_count;
     bool pending_request_read_gpr;
@@ -136,7 +136,7 @@ private: // instruction/data interface
     */
 
     // instruction fetch/complete interface
-    shared_ptr<instr> instruction_fetch_complete(uint32_t pc);
+    std::shared_ptr<instr> instruction_fetch_complete(uint32_t pc);
 
     // data {read,write}{fetch,complete} interface
     void data_complete();
@@ -147,7 +147,7 @@ private: // instruction/data interface
                 pending_request_memory_write; 
     }
     inline void close_memory_op() {
-        pending_request_data = shared_ptr<memoryRequest>(); // NULLIFY
+        pending_request_data = std::shared_ptr<memoryRequest>(); // NULLIFY
         pending_request_read_gpr = false;
         pending_request_read_fpr = false;
         pending_request_memory_write = false;
@@ -155,22 +155,22 @@ private: // instruction/data interface
     void data_fetch_to_gpr( const gpr dst,
                             const uint32_t &addr, 
                             const uint32_t &bytes,
-                            bool sign_extend) throw(err);
+                            bool sign_extend);
     void data_fetch_to_fpr( const fpr dst,
                             const uint32_t &addr, 
-                            const uint32_t &bytes) throw(err);
+                            const uint32_t &bytes);
     void data_fetch_read(   const uint32_t &addr, 
                             const uint32_t &bytes,
-                            bool sign_extend) throw(err);
+                            bool sign_extend);
     void data_fetch_write(  const uint32_t &addr, 
                             const uint64_t &val, 
-                            const uint32_t &bytes) throw(err);
+                            const uint32_t &bytes);
 
 protected: // memory hierarchy processing & inherited members
-    inline shared_ptr<memory> nearest_memory_instruction() {
+    inline std::shared_ptr<memory> nearest_memory_instruction() {
         return i_memory;
     }
-    inline shared_ptr<memory> nearest_memory_data() {
+    inline std::shared_ptr<memory> nearest_memory_data() {
         return m_memory;
     }
     virtual maddr_t form_maddr(uint64_t);
@@ -181,7 +181,7 @@ protected: // memory hierarchy processing & inherited members
 private:
     const static int MAX_BUFFER_SIZE = 256; // used by syscalls
 
-    shared_ptr<dram> backingDRAM;
+    std::shared_ptr<dram> backingDRAM;
 
     int fid_key;
     FILE * fid_value;
@@ -191,13 +191,13 @@ private:
 /* MIPS                                                                       */
 /* -------------------------------------------------------------------------- */
 
-inline uint32_t mcpu::get(const gpr &r) const throw() {
+inline uint32_t mcpu::get(const gpr &r) const {
     return r.get_no() == 0 ? 0 : gprs[r.get_no()];
 }
-inline uint32_t mcpu::get_s(const fpr &r) const throw() {
+inline uint32_t mcpu::get_s(const fpr &r) const {
     return fprs[r.get_no()];
 }
-inline uint64_t mcpu::get_d(const fpr &r) const throw() {
+inline uint64_t mcpu::get_d(const fpr &r) const {
     assert(r.get_no() % 2 == 0);
     uint64_t b = 0x00000000ffffffffULL & fprs[r.get_no()];
     uint64_t t = (((uint64_t) fprs[r.get_no()+1]) << 32);
@@ -207,7 +207,7 @@ inline uint64_t mcpu::get_d(const fpr &r) const throw() {
     //        (long long unsigned int) ret, r.get_no(), r.get_no()+1);
     return ret;
 }
-inline uint32_t mcpu::get(const hwr &r) const throw(exc_reserved_hw_reg) {
+inline uint32_t mcpu::get(const hwr &r) const {
     switch (r.get_no()) {
     case 0: return get_id().get_numeric_id();
     case 1: return 0;
@@ -219,23 +219,23 @@ inline uint32_t mcpu::get(const hwr &r) const throw(exc_reserved_hw_reg) {
     default: throw exc_reserved_hw_reg(r.get_no());
     }
 }
-inline bool mcpu::get_cp1_cf(const cfr &r) const throw() {
+inline bool mcpu::get_cp1_cf(const cfr &r) const {
     return fpcfs[r.get_no()];
 }
 
-inline void mcpu::set(const gpr &r, uint32_t v) throw() {
+inline void mcpu::set(const gpr &r, uint32_t v) {
     if (r.get_no() != 0) {
         //cout << "[mcpu " << get_id() << "]     " << r << " <- "
         //    << hex << setfill('0') << setw(8) << v << endl;
         gprs[r.get_no()] = v;
     }
 }
-inline void mcpu::set_s(const fpr &r, uint32_t v) throw() {
+inline void mcpu::set_s(const fpr &r, uint32_t v) {
     LOG(log,5) << "[mcpu.fp " << get_id() << "]     " << r << " <- "
         << hex << setfill('0') << setw(8) << v << endl;
     fprs[r.get_no()] = v;
 }
-inline void mcpu::set_d(const fpr &r, uint64_t v) throw() {
+inline void mcpu::set_d(const fpr &r, uint64_t v) {
     assert(r.get_no() % 2 == 0);
     uint32_t b = (uint32_t) v;
     uint32_t t = (uint32_t) (v >> 32);
@@ -245,12 +245,12 @@ inline void mcpu::set_d(const fpr &r, uint64_t v) throw() {
     //    printf( "[mcpu %d] Set: f[%d]=%x,f[%d]=%x\n",  get_id().get_numeric_id(), 
     //        r.get_no(), b, r.get_no()+1, t);
 }
-inline void mcpu::set_hi_lo(uint64_t v) throw() {
+inline void mcpu::set_hi_lo(uint64_t v) {
     LOG(log,5) << "[mcpu " << get_id() << "]     hi,lo <- "
         << hex << setfill('0') << setw(16) << v << endl;
     hi_lo = v;
 }
-inline void mcpu::set_cp1_cf(const cfr &r, bool value) throw() {
+inline void mcpu::set_cp1_cf(const cfr &r, bool value) {
     fpcfs[r.get_no()] = value;
 }
 

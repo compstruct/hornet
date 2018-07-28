@@ -16,31 +16,31 @@
 
 class crossbar {
 public:
-    crossbar(node_id parent, shared_ptr<tile_statistics> stats,
-             shared_ptr<vcd_writer> vcd, logger &log,
-             shared_ptr<random_gen> ran) throw();
-    void add_ingress(node_id src, shared_ptr<ingress> ingress) throw(err);
-    void add_egress(node_id dst, shared_ptr<egress> egress) throw(err);
-    void tick_positive_edge() throw(err);
-    void tick_negative_edge() throw(err);
+    crossbar(node_id parent, std::shared_ptr<tile_statistics> stats,
+             std::shared_ptr<vcd_writer> vcd, logger &log,
+             std::shared_ptr<random_gen> ran);
+    void add_ingress(node_id src, std::shared_ptr<ingress> ingress);
+    void add_egress(node_id dst, std::shared_ptr<egress> egress);
+    void tick_positive_edge();
+    void tick_negative_edge();
 private:
-    const node_id &get_id() throw();
-    void rebuild_queues() throw();
+    const node_id &get_id();
+    void rebuild_queues();
 private:
     const node_id id;
 
-    typedef map<node_id, shared_ptr<ingress> > ingresses_t;
-    typedef map<node_id, shared_ptr<egress> > egresses_t;
+    typedef map<node_id, std::shared_ptr<ingress> > ingresses_t;
+    typedef map<node_id, std::shared_ptr<egress> > egresses_t;
     ingresses_t ingresses;
     egresses_t egresses;
-    typedef vector<tuple<node_id, shared_ptr<virtual_queue> > > nvqs_t;
+    typedef vector<std::tuple<node_id, std::shared_ptr<virtual_queue> > > nvqs_t;
     nvqs_t ingress_qs;
-    typedef vector<shared_ptr<virtual_queue> > vqs_t;
+    typedef vector<std::shared_ptr<virtual_queue> > vqs_t;
     vqs_t egress_qs;
-    shared_ptr<tile_statistics> stats;
-    shared_ptr<vcd_writer> vcd;
+    std::shared_ptr<tile_statistics> stats;
+    std::shared_ptr<vcd_writer> vcd;
     logger &log;
-    shared_ptr<random_gen> ran;
+    std::shared_ptr<random_gen> ran;
     typedef struct {
         char v_xbar_demand;
         char v_xbar_use;
@@ -48,7 +48,7 @@ private:
     vcd_hooks_t vcd_hooks;
 };
 
-inline const node_id &crossbar::get_id() throw() { return id; }
+inline const node_id &crossbar::get_id() { return id; }
 
 #endif // __CROSSBAR_HPP__
 

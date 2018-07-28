@@ -10,7 +10,7 @@
 template<class V> unsigned num_bits() { return sizeof(V) << 3; }
 
 template <class V>
-inline V bits(V arg, unsigned hi, unsigned lo) throw() {
+inline V bits(V arg, unsigned hi, unsigned lo) {
     assert(hi < num_bits<V>());
     assert(lo <= 31);
     assert(lo <= hi);
@@ -24,7 +24,7 @@ inline V combine(V templ, V arg, V mask) {
 
 template <class V>
 inline V splice(V templ, V arg, unsigned hi, unsigned lo)
-    throw () {
+    {
     V mask = ((((V) 2) << (hi - lo)) - 1) << lo;
     assert(((arg << lo) & ~mask) == 0);
     return combine(templ, arg << lo, mask);

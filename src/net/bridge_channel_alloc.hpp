@@ -16,16 +16,16 @@ using namespace std;
 
 class bridge_channel_alloc {
 public:
-    virtual ~bridge_channel_alloc() throw();
+    virtual ~bridge_channel_alloc();
     // returns a vqid q s.t. !q.is_valid() if it's being claimed
-    virtual virtual_queue_id request(flow_id flow) throw(err) = 0;
-    virtual void claim(const virtual_queue_node_id &q) throw(err);
-    virtual void release(const virtual_queue_node_id &q) throw(err);
-    virtual bool is_claimed(const virtual_queue_node_id &q) throw(err);
-    const node_id &get_id() const throw();
+    virtual virtual_queue_id request(flow_id flow) = 0;
+    virtual void claim(const virtual_queue_node_id &q);
+    virtual void release(const virtual_queue_node_id &q);
+    virtual bool is_claimed(const virtual_queue_node_id &q);
+    const node_id &get_id() const;
 protected:
     bridge_channel_alloc(node_id src, bool one_queue_per_flow,
-                         bool one_flow_per_queue, logger &log) throw();
+                         bool one_flow_per_queue, logger &log);
 protected:
     const node_id id;
     bool one_queue_per_flow;
@@ -36,7 +36,7 @@ protected:
     logger &log;
 };
 
-inline const node_id &bridge_channel_alloc::get_id() const throw() {
+inline const node_id &bridge_channel_alloc::get_id() const {
     return id;
 }
 
