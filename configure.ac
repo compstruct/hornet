@@ -32,7 +32,7 @@ AC_ARG_ENABLE([testsuite],
                esac], [enable_testsuite=true])
 AM_CONDITIONAL([ENABLE_TESTSUITE], [test x$enable_testsuite = xtrue])
 if test x$enable_testsuite = xtrue; then
-FANCY_PATH_PROG([QMTEST], [QMTest test infrastructure], [qmtest])
+FANCY_PATH_PROG([QMTEST], [QMTest test infrastructure], [qmtest], [qmtest])
 fi
 AC_ARG_ENABLE([docs],
               AC_HELP_STRING([--enable-docs],
@@ -48,8 +48,8 @@ AC_ARG_ENABLE([docs],
                esac], [enable_docs=false])
 AM_CONDITIONAL([ENABLE_DOCS], [test x$enable_docs = xtrue])
 if test x$enable_docs = xtrue; then
-FANCY_PATH_PROG([DBLATEX], [DBLaTeX DocBook processor], [dblatex])
-FANCY_PATH_PROG([XMLTO], [XMLto DocBook processor], [xmlto])
+FANCY_PATH_PROG([DBLATEX], [DBLaTeX DocBook processor], [dblatex], [dblatex])
+FANCY_PATH_PROG([XMLTO], [XMLto DocBook processor], [xmlto], [xmlto])
 fi
 AC_ARG_ENABLE([mips-rts],
               AC_HELP_STRING([--enable-mips-rts],
