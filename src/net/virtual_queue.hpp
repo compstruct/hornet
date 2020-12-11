@@ -133,8 +133,8 @@ private:
     std::shared_ptr<vcd_writer> vcd;
     logger &log;
 
-    mutable recursive_mutex front_mutex;
-    mutable recursive_mutex back_mutex;
+    mutable boost::recursive_mutex front_mutex;
+    mutable boost::recursive_mutex back_mutex;
 
 private:
     friend ostream &operator<<(ostream &, const virtual_queue &);

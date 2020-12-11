@@ -15,7 +15,7 @@ SynchedCATModel::SynchedCATModel() : m_semaphore(0) {}
 SynchedCATModel::~SynchedCATModel() {}
 
 bool SynchedCATModel::lock() {
-    unique_lock<recursive_mutex> l(m_mutex);
+    boost::unique_lock<boost::recursive_mutex> l(m_mutex);
     if (m_semaphore == 0) {
         ++m_semaphore;
         return true;
@@ -25,7 +25,7 @@ bool SynchedCATModel::lock() {
 }
 
 void SynchedCATModel::unlock() {
-    unique_lock<recursive_mutex> l(m_mutex);
+    boost::unique_lock<boost::recursive_mutex> l(m_mutex);
     --m_semaphore;
 }
 

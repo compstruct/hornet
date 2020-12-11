@@ -76,7 +76,7 @@ private:
     bool initialized;
     bool finalized;
     std::shared_ptr<ofstream> out;
-    mutable recursive_mutex vcd_mutex;
+    mutable boost::recursive_mutex vcd_mutex;
 };
 
 #endif // __VCD_HPP__

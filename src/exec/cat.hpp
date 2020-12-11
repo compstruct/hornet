@@ -83,7 +83,7 @@ private:
     } map_entry_t;
 
     uint32_t m_semaphore;
-    mutable recursive_mutex m_mutex;
+    mutable boost::recursive_mutex m_mutex;
     map<maddr_t, map_entry_t> m_map;
 
 };

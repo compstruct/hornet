@@ -41,7 +41,7 @@ vcd_writer::vcd_writer(const uint64_t &new_time,
 }
 
 void vcd_writer::finalize() {
-    unique_lock<recursive_mutex> lock(vcd_mutex);
+    boost::unique_lock<boost::recursive_mutex> lock(vcd_mutex);
     assert(!finalized);
     *out << endl;
     // erase definitions for signals that never changed
@@ -68,7 +68,7 @@ void vcd_writer::finalize() {
 }
 
 string vcd_writer::get_fresh_id() {
-    unique_lock<recursive_mutex> lock(vcd_mutex);
+    boost::unique_lock<boost::recursive_mutex> lock(vcd_mutex);
     for (string::reverse_iterator i = last_id.rbegin();
          i != last_id.rend(); ++i) {
         if (*i >= max_vcd_id_char) {
@@ -84,7 +84,7 @@ string vcd_writer::get_fresh_id() {
 
 void vcd_writer::new_signal(const vcd_id_t &id, const vector<string> &path,
                             unsigned width) {
-    unique_lock<recursive_mutex> lock(vcd_mutex);
+    boost::unique_lock<boost::recursive_mutex> lock(vcd_mutex);
     assert(!initialized);
     assert(!finalized);
     assert(id != 0);
@@ -99,7 +99,7 @@ void vcd_writer::new_signal(const vcd_id_t &id, const vector<string> &path,
 }
 
 void vcd_writer::write_val(const string &id, uint64_t val) {
-    unique_lock<recursive_mutex> lock(vcd_mutex);
+    boost::unique_lock<boost::recursive_mutex> lock(vcd_mutex);
     *out << 'b';
     if (val == 0) {
         *out << '0';
@@ -119,13 +119,13 @@ void vcd_writer::write_val(const string &id, uint64_t val) {
 }
 
 void vcd_writer::writeln_val(const string &id, uint64_t val) {
-    unique_lock<recursive_mutex> lock(vcd_mutex);
+    boost::unique_lock<boost::recursive_mutex> lock(vcd_mutex);
     write_val(id, val);
     *out << '\n';
 }
 
 void vcd_writer::add_value(vcd_id_t id, uint64_t val) {
-    unique_lock<recursive_mutex> lock(vcd_mutex);
+    boost::unique_lock<boost::recursive_mutex> lock(vcd_mutex);
     if (is_sleeping()) return;
     assert(ids.find(id) != ids.end());
     assert(last_values.find(id) != last_values.end());
@@ -138,7 +138,7 @@ void vcd_writer::add_value(vcd_id_t id, uint64_t val) {
 }
 
 void vcd_writer::commit() {
-    unique_lock<recursive_mutex> lock(vcd_mutex);
+    boost::unique_lock<boost::recursive_mutex> lock(vcd_mutex);
     if (is_sleeping()) return;
     check_header();
     for (set<vcd_id_t>::iterator di = dirty.begin();
@@ -170,7 +170,7 @@ void vcd_writer::commit() {
 
 void vcd_writer::declare_vars(const vcd_node::nodes_t &nodes,
                               const map<vcd_id_t, string> &ids) {
-    unique_lock<recursive_mutex> lock(vcd_mutex);
+    boost::unique_lock<boost::recursive_mutex> lock(vcd_mutex);
     assert(out);
     for (vcd_node::nodes_t::const_iterator ni = nodes.begin();
          ni != nodes.end(); ++ni) {
@@ -194,7 +194,7 @@ void vcd_writer::declare_vars(const vcd_node::nodes_t &nodes,
 }
 
 void vcd_writer::check_header() {
-    unique_lock<recursive_mutex> lock(vcd_mutex);
+    boost::unique_lock<boost::recursive_mutex> lock(vcd_mutex);
     if (!initialized) {
         assert(out);
         assert(dirty.empty());
@@ -234,7 +234,7 @@ void vcd_writer::check_header() {
 }
 
 void vcd_writer::check_timestamp() {
-    unique_lock<recursive_mutex> lock(vcd_mutex);
+    boost::unique_lock<boost::recursive_mutex> lock(vcd_mutex);
     if (time > last_timestamp) {
         *out << '#' << dec << time << '\n';
         last_timestamp = time;
@@ -242,12 +242,12 @@ void vcd_writer::check_timestamp() {
 }
 
 bool vcd_writer::is_drained() const {
-    unique_lock<recursive_mutex> lock(vcd_mutex);
+    boost::unique_lock<boost::recursive_mutex> lock(vcd_mutex);
     return cur_values.empty() && dirty.empty();
 }
 
 bool vcd_writer::is_sleeping() const {
-    unique_lock<recursive_mutex> lock(vcd_mutex);
+    boost::unique_lock<boost::recursive_mutex> lock(vcd_mutex);
     return time < start_time || (end_time != 0 && time > end_time);
 }
 

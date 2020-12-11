@@ -90,7 +90,7 @@ private:
     memSpaces m_memory;
     auxMemSpaces m_aux_memory;
 
-    mutable recursive_mutex dram_mutex;
+    mutable boost::recursive_mutex dram_mutex;
 
 public:
     void mem_read_instant(uint32_t *, uint32_t, uint32_t, uint32_t, bool);

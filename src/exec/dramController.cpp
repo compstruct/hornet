@@ -108,7 +108,7 @@ void dramController::tick_negative_edge() {
 }
 
 void dramController::dram_access_safe(std::shared_ptr<dramRequest> req) {
-    unique_lock<recursive_mutex> lock(m_dram->dram_mutex);
+    boost::unique_lock<boost::recursive_mutex> lock(m_dram->dram_mutex);
     dram_access(req);
 }
 

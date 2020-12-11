@@ -105,7 +105,7 @@ private:
     /* 1. no thread is added to the pool during simulation */
     /* 2. no thread is removed from the pool during simulation */
     map<uint32_t, std::shared_ptr<memtraceThread> >m_threads;
-    mutable recursive_mutex memtraceThreadPool_mutex;
+    mutable boost::recursive_mutex memtraceThreadPool_mutex;
 };
 
 #endif
